@@ -10,6 +10,18 @@ const collapsed = reactive(new Set<string>());
 const depth = computed(() => props.depth ?? 0);
 const nodes = computed(() => props.nodes ?? buildTree(props.store.view?.files ?? []));
 
+// dirState flat-maps and sorts the whole subtree under a directory. The template calls it
+// twice per dir row (class binding + aria-checked) — memoize it once per node per render
+// instead of walking the subtree on every call.
+const dirStates = computed(() => {
+  const map = new Map<string, "all" | "some" | "none">();
+  for (const node of nodes.value) if (node.type === "dir") map.set(node.path, dirState(node));
+  return map;
+});
+function dirStateFor(node: TreeNode & { type: "dir" }): "all" | "some" | "none" {
+  return dirStates.value.get(node.path) ?? "none";
+}
+
 // Directory paths carry no PR identity, and `store.openPr` reassigns `view` in one step
 // (never through a null in between), so switching PRs within the same repo never unmounts
 // this component. Clear stale collapse state whenever the reviewed PR changes.
@@ -55,13 +67,13 @@ function stateGlyph(state: "all" | "some" | "none"): string {
         <span class="chev">{{ collapsed.has(node.path) ? "▶" : "▼" }}</span>
         <span
           class="cb"
-          :class="{ on: dirState(node) === 'all', part: dirState(node) === 'some' }"
+          :class="{ on: dirStateFor(node) === 'all', part: dirStateFor(node) === 'some' }"
           role="checkbox"
-          :aria-checked="dirState(node) === 'all'"
+          :aria-checked="dirStateFor(node) === 'all'"
           tabindex="0"
           @click.stop="checkDir(node)"
           @keydown.enter.space.stop.prevent="checkDir(node)"
-        >{{ stateGlyph(dirState(node)) }}</span>
+        >{{ stateGlyph(dirStateFor(node)) }}</span>
         <span class="fname">{{ node.name }}</span>
       </div>
       <FileTree
