@@ -637,6 +637,7 @@ Expected: PASS (storage + server suites).
 
 Run: `GANDER_TOKEN=t GANDER_DB=/tmp/g.db pnpm --filter @gander/service dev & sleep 1 && curl -s localhost:8390/healthz && kill %1`
 Expected: `{"ok":true,"version":"0.1.0"}`
+If `--experimental-strip-types` refuses the workspace-TS import of `@gander/shared`, change the dev script to `tsx src/main.ts` (add `tsx` as a devDependency) — same expectation.
 
 - [ ] **Step 6: Commit**
 
@@ -659,8 +660,8 @@ git commit -m "feat(service): Fastify API with bearer auth and review routes"
 - Consumes: `RepoEntry` from `@gander/shared`.
 - Produces:
   - `loadConfig(path?: string): GanderConfig` and `saveConfig(cfg: GanderConfig, path?: string): void` where `interface GanderConfig { serviceUrl: string; serviceToken: string; githubToken?: string; repos: RepoEntry[]; }` (default path `~/.config/gander/config.json`, overridable via `GANDER_CONFIG` env).
-  - `window.gander: GanderApi` — the renderer-facing bridge. In this task every method throws `"not implemented"`; Tasks 7–11 fill them in. `interface GanderApi { listRepos(): Promise<RepoEntry[]>; addRepo(url: string): Promise<RepoEntry>; listPrs(repoId: string): Promise<PrSummary[]>; openPr(repoId: string, prNumber: number): Promise<PrView>; setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>; refreshPr(repoId: string, prNumber: number): Promise<PrView>; }`
-  - IPC channel names: `gander:listRepos`, `gander:addRepo`, `gander:listPrs`, `gander:openPr`, `gander:setChecked`, `gander:refreshPr`.
+  - `window.gander: GanderApi` — the renderer-facing bridge. In this task every method throws `"not implemented"`; Tasks 7–11 fill them in. `interface GanderApi { listRepos(): Promise<RepoEntry[]>; addRepo(url: string): Promise<RepoEntry>; listPrs(repoId: string): Promise<PrSummary[]>; openPr(repoId: string, prNumber: number): Promise<PrView>; setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>; setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>; refreshPr(repoId: string, prNumber: number): Promise<PrView>; }`
+  - IPC channel names: `gander:listRepos`, `gander:addRepo`, `gander:listPrs`, `gander:openPr`, `gander:setChecked`, `gander:setCheckedMany`, `gander:refreshPr`.
 
 - [ ] **Step 1: Create the package and config files**
 
@@ -679,6 +680,7 @@ git commit -m "feat(service): Fastify API with bearer auth and review routes"
     "vue": "^3.5.0"
   },
   "devDependencies": {
+    "@gander/service": "workspace:*",
     "@types/node": "^22.0.0",
     "@vitejs/plugin-vue": "^5.2.0",
     "electron": "^33.0.0",
@@ -783,7 +785,7 @@ export function saveConfig(cfg: GanderConfig, path = defaultPath()): void {
 import { app, BrowserWindow, ipcMain } from "electron";
 import { join } from "node:path";
 
-const CHANNELS = ["listRepos", "addRepo", "listPrs", "openPr", "setChecked", "refreshPr"] as const;
+const CHANNELS = ["listRepos", "addRepo", "listPrs", "openPr", "setChecked", "setCheckedMany", "refreshPr"] as const;
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -816,6 +818,7 @@ contextBridge.exposeInMainWorld("gander", {
   listPrs: invoke("listPrs"),
   openPr: invoke("openPr"),
   setChecked: invoke("setChecked"),
+  setCheckedMany: invoke("setCheckedMany"),
   refreshPr: invoke("refreshPr"),
 });
 ```
@@ -831,6 +834,7 @@ export interface GanderApi {
   listPrs(repoId: string): Promise<PrSummary[]>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
+  setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
 }
 export const api = (window as unknown as { gander: GanderApi }).gander;
@@ -1160,11 +1164,12 @@ describe("listOpenPrs", () => {
 
 describe("resolveGithubToken", () => {
   it("falls back to env when gh is unavailable", async () => {
+    const origPath = process.env.PATH;
     process.env.GANDER_GITHUB_TOKEN = "env-tok";
     process.env.PATH = "/nonexistent"; // makes `gh` unfindable for this test
     try {
       expect(await resolveGithubToken()).toBe("env-tok");
-    } finally { delete process.env.GANDER_GITHUB_TOKEN; process.env.PATH = process.env.PATH; }
+    } finally { delete process.env.GANDER_GITHUB_TOKEN; process.env.PATH = origPath; }
   });
 });
 ```
@@ -1240,7 +1245,8 @@ This is the semantic core: it merges git truth with service state and enforces t
 - Consumes: `GitEngine` (Task 5), `listOpenPrs`/`resolveGithubToken` (Task 6), service routes (Task 3), config (Task 4), shared types.
 - Produces:
   - `createServiceClient(baseUrl: string, token: string): ServiceClient` with `getReview(repoId, prNumber): Promise<ReviewState>` and `putFileState(repoId, prNumber, input: PutFileState): Promise<FileCheckoff>` (network errors throw with the service URL in the message).
-  - `createReviewer(deps: ReviewerDeps): Reviewer` where `interface ReviewerDeps { git: GitEngine; service: ServiceClient; listPrs(repoId: string): Promise<PrSummary[]>; repoUrl(repoId: string): string; machine: string; }` and `interface Reviewer { openPr(repoId: string, prNumber: number): Promise<PrView>; setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>; }` (`refreshPr` = `openPr` re-run; the IPC layer aliases it).
+  - `createReviewer(deps: ReviewerDeps): Reviewer` where `interface ReviewerDeps { git: GitEngine; service: ServiceClient; listPrs(repoId: string): Promise<PrSummary[]>; repoUrl(repoId: string): string; machine: string; }` and `interface Reviewer { openPr(repoId: string, prNumber: number): Promise<PrView>; setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>; setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>; }` (`refreshPr` = `openPr` re-run; the IPC layer aliases it).
+  - **Performance contract:** `openPr` runs the full pipeline (GitHub + fetch + per-file blobs) and caches the resulting `PrView` per `repoId#prNumber`. `setChecked`/`setCheckedMany` never re-run the pipeline — they take hashes and contents from the cached view, send one PUT per path, and patch the cached view in place. Checking off a 10-file directory is 10 PUTs and zero git/GitHub calls. Both throw if the PR was never opened.
   - Un-check rule implemented here: stored `checked=true` but current `headHash`/`baseHash` differ → view shows `checked:false, changedSince:true` AND the un-check is persisted via `putFileState({checked:false})` (snapshot retained server-side).
 
 - [ ] **Step 1: Write the failing pipeline test — real git, real service, fake GitHub**
@@ -1315,6 +1321,18 @@ describe("review pipeline", () => {
 
     const reopened = await reviewer.openPr("acme/atlas", 1);
     expect(reopened.files.find((f) => f.path === "a.rb")!.checked).toBe(true);
+  });
+
+  it("setCheckedMany checks a batch from the cached view and persists it", async () => {
+    await reviewer.openPr("acme/atlas", 1);
+    const view = await reviewer.setCheckedMany("acme/atlas", 1, ["a.rb", "b.rb"], true);
+    expect(view.files.every((f) => f.checked)).toBe(true);
+    const reopened = await reviewer.openPr("acme/atlas", 1);
+    expect(reopened.files.every((f) => f.checked)).toBe(true);
+  });
+
+  it("setChecked throws if the PR was never opened", async () => {
+    await expect(reviewer.setChecked("acme/atlas", 1, "a.rb", true)).rejects.toThrow(/opened before/i);
   });
 
   it("content change after checkoff un-checks with changedSince — and identical content survives history rewrites", async () => {
@@ -1402,12 +1420,16 @@ export interface ReviewerDeps {
 export interface Reviewer {
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
+  setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
 }
 
 const sha256 = (s: string | null): string | null =>
   s === null ? null : createHash("sha256").update(s).digest("hex");
 
 export function createReviewer(deps: ReviewerDeps): Reviewer {
+  const cache = new Map<string, PrView>();
+  const key = (repoId: string, prNumber: number): string => `${repoId}#${prNumber}`;
+
   async function openPr(repoId: string, prNumber: number): Promise<PrView> {
     const pr = (await deps.listPrs(repoId)).find((p) => p.number === prNumber);
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
@@ -1436,27 +1458,38 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       }
       files.push({ path, status, baseContent, headContent, baseHash, headHash, checked: stillValid === true, changedSince: changedSince === true });
     }
-    return { pr, files };
+    const view: PrView = { pr, files };
+    cache.set(key(repoId, prNumber), view);
+    return view;
   }
 
-  return {
-    openPr,
-    async setChecked(repoId, prNumber, path, checked) {
+  async function applyChecked(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView> {
+    const view = cache.get(key(repoId, prNumber));
+    if (!view) throw new Error(`PR #${prNumber} on ${repoId} must be opened before checking files`);
+    for (const path of paths) {
+      const file = view.files.find((f) => f.path === path);
+      if (!file) throw new Error(`${path} is not part of PR #${prNumber}`);
       if (checked) {
-        const view = await openPr(repoId, prNumber);
-        const file = view.files.find((f) => f.path === path);
-        if (!file) throw new Error(`${path} is not part of PR #${prNumber}`);
         await deps.service.putFileState(repoId, prNumber, {
           checked: true, path,
           baseHash: file.baseHash, headHash: file.headHash,
           baseContent: file.baseContent, headContent: file.headContent,
           machine: deps.machine,
         });
+        file.checked = true;
+        file.changedSince = false;
       } else {
         await deps.service.putFileState(repoId, prNumber, { checked: false, path });
+        file.checked = false;
       }
-      return openPr(repoId, prNumber);
-    },
+    }
+    return view;
+  }
+
+  return {
+    openPr,
+    setChecked: (repoId, prNumber, path, checked) => applyChecked(repoId, prNumber, [path], checked),
+    setCheckedMany: (repoId, prNumber, paths, checked) => applyChecked(repoId, prNumber, paths, checked),
   };
 }
 ```
@@ -1508,6 +1541,7 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle("gander:openPr", async (_e, repoId: string, n: number) => reviewer.openPr(repoId, n));
   ipcMain.handle("gander:refreshPr", async (_e, repoId: string, n: number) => reviewer.openPr(repoId, n));
   ipcMain.handle("gander:setChecked", async (_e, repoId: string, n: number, path: string, checked: boolean) => reviewer.setChecked(repoId, n, path, checked));
+  ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean) => reviewer.setCheckedMany(repoId, n, paths, checked));
 }
 
 function createWindow(): void {
@@ -1549,7 +1583,7 @@ git commit -m "feat(app): review pipeline with content-based un-check, wired to 
 - Consumes: `GanderApi` via `api` (Task 4), `PrSummary`/`PrView`/`RepoEntry` from shared.
 - Produces:
   - `createStore(api: GanderApi)` returning a reactive store used by all later renderer tasks:
-    `interface Store { repos: RepoEntry[]; prs: PrSummary[]; currentRepoId: string | null; view: PrView | null; selectedPath: string | null; error: string | null; loadRepos(): Promise<void>; addRepo(url: string): Promise<void>; selectRepo(repoId: string): Promise<void>; openPr(prNumber: number): Promise<void>; refresh(): Promise<void>; setChecked(path: string, checked: boolean): Promise<void>; select(path: string): void; progress(): { done: number; total: number }; }`
+    `interface Store { repos: RepoEntry[]; prs: PrSummary[]; currentRepoId: string | null; view: PrView | null; selectedPath: string | null; error: string | null; loadRepos(): Promise<void>; addRepo(url: string): Promise<void>; selectRepo(repoId: string): Promise<void>; openPr(prNumber: number): Promise<void>; refresh(): Promise<void>; setChecked(path: string, checked: boolean): Promise<void>; setCheckedMany(paths: string[], checked: boolean): Promise<void>; select(path: string): void; progress(): { done: number; total: number }; }`
   - Every store action catches errors into `store.error` (string, shown by the UI) — never swallowed.
   - `theme.css` defines the mockup's palette as CSS custom properties (`--bg: #16181d` etc., copied from `docs/mockups/mockup-v4.html`).
 
@@ -1578,6 +1612,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headSha: "b" }],
     openPr: async () => prView(),
     setChecked: async (_r, _n, path) => prView([path]),
+    setCheckedMany: async (_r, _n, paths) => prView(paths),
     refreshPr: async () => prView(),
     ...overrides,
   };
@@ -1636,6 +1671,7 @@ export interface Store {
   loadRepos(): Promise<void>; addRepo(url: string): Promise<void>;
   selectRepo(repoId: string): Promise<void>; openPr(prNumber: number): Promise<void>;
   refresh(): Promise<void>; setChecked(path: string, checked: boolean): Promise<void>;
+  setCheckedMany(paths: string[], checked: boolean): Promise<void>;
   select(path: string): void; progress(): { done: number; total: number };
 }
 
@@ -1670,6 +1706,12 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         if (!store.currentRepoId || !store.view) throw new Error("no PR open");
         store.view = await api.setChecked(store.currentRepoId, store.view.pr.number, path, checked);
+      });
+    },
+    async setCheckedMany(paths: string[], checked: boolean) {
+      await guard(async () => {
+        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
+        store.view = await api.setCheckedMany(store.currentRepoId, store.view.pr.number, paths, checked);
       });
     },
     select(path: string) { store.selectedPath = path; },
@@ -1777,7 +1819,7 @@ git commit -m "feat(renderer): store, segmented header, repo/PR switchers"
   - `buildTree(files: PrFile[]): TreeNode[]` with `type TreeNode = { type: "dir"; name: string; path: string; children: TreeNode[] } | { type: "file"; file: PrFile }` — sorted (dirs first, then files, both alphabetical), single-child directory chains compacted into one node whose `name` joins segments with `/`.
   - `dirState(node: TreeNode & { type: "dir" }): "all" | "some" | "none"` — over descendant files' `checked`.
   - `filesUnder(node: TreeNode): PrFile[]` — flat descendant files (used for directory checkoff).
-  - `FileTree.vue` props `{ store: Store }`; clicking a file selects it; file checkbox → `store.setChecked(path, !checked)`; directory checkbox → check all descendants if any unchecked, else un-check all (sequential `store.setChecked` calls); yellow ● on `changedSince` files.
+  - `FileTree.vue` props `{ store: Store }`; clicking a file selects it; file checkbox → `store.setChecked(path, !checked)`; directory checkbox → one call: `store.setCheckedMany(filesUnder(node).map(f => f.path), anyUnchecked)` (check all if any unchecked, else un-check all); yellow ● on `changedSince` files.
 
 - [ ] **Step 1: Write the failing tree-logic tests**
 
@@ -1903,7 +1945,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Build the component and mount it**
 
-`packages/app/src/renderer/src/components/FileTree.vue` — recursive template over `buildTree(store.view.files)`: directory rows with chevron (local collapsed-state `Set<string>` keyed by `node.path`), tri-state checkbox rendering `✓`/`–` per `dirState`, click → check/un-check `filesUnder(node)` via sequential `store.setChecked`; file rows with checkbox, name, yellow ● when `changedSince`, status letter (M/A/D/R colored per mockup), click → `store.select(file.path)`; selected row highlighted. Styling copied from mockup v4's `.tnode`, `.cb`, `.chev`, `.st` rules.
+`packages/app/src/renderer/src/components/FileTree.vue` — recursive template over `buildTree(store.view.files)`: directory rows with chevron (local collapsed-state `Set<string>` keyed by `node.path`), tri-state checkbox rendering `✓`/`–` per `dirState`, click → one `store.setCheckedMany(filesUnder(node).map(f => f.path), …)` call; file rows with checkbox, name, yellow ● when `changedSince`, status letter (M/A/D/R colored per mockup), click → `store.select(file.path)`; selected row highlighted. Styling copied from mockup v4's `.tnode`, `.cb`, `.chev`, `.st` rules.
 
 In `App.vue`, replace the `main.body` block:
 
@@ -2185,6 +2227,6 @@ git commit -m "feat(renderer): polling refresh and changed-since banner — M1 c
 
 **Spec coverage (M1 slice):** repo registration (T7/T8), PR listing with draft badge data (T6/T8), app-managed bare clones + real git (T5), PR diff base→head (T5/T7), content-based checkoff with snapshot storage and retained-on-uncheck delta base (T2/T7), tri-state tree (T9), unified Monaco diff + full-file view (T10), polling/focus refresh + loud errors (T8/T11), bearer-auth service bound to localhost by default (T3). Deferred with their plans: questions/MCP/delta view (M2), local viewer + untracked handling (M3), packaging/CI/read cache/PR description panel + keyboard map + drawer (M2/M4).
 
-**Known deviations from the full spec, deliberate for M1:** PR description panel, ⌘K, j/k/space/n keys, and the questions drawer ship with M2 alongside the drawer they belong to; Playwright smoke ships with packaging in M4.
+**Known deviations from the full spec, deliberate for M1:** PR description panel, ⌘K, j/k/space/n keys, and the questions drawer ship with M2 alongside the drawer they belong to; Playwright smoke ships with packaging in M4. TopBar.vue and FileTree.vue are specified as prose plus a copy source rather than full listings: `docs/mockups/mockup-v4.html` is the design of record for their markup and CSS — copy its rules, don't restyle.
 
 **Type consistency:** `PrFile`/`PrView`/`PrSummary`/`FileCheckoff`/`PutFileState` defined once in Task 1 and imported everywhere; IPC channel names fixed in Task 4 and reused in Task 7; `Store` shape fixed in Task 8 and consumed in Tasks 9–11.
