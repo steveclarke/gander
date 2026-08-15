@@ -52,7 +52,18 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => window.addEventListener("keydown", onKeydown));
 onUnmounted(() => window.removeEventListener("keydown", onKeydown));
 
-const currentRepoLabel = computed(() => props.store.currentRepoId ?? "Select repo");
+function repoName(repoId: string): string {
+  return repoId.split("/").pop() ?? repoId;
+}
+
+function repoOwner(repoId: string): string | null {
+  const parts = repoId.split("/");
+  return parts.length > 1 ? parts.slice(0, -1).join("/") : null;
+}
+
+const currentRepoLabel = computed(() =>
+  props.store.currentRepoId ? repoName(props.store.currentRepoId) : "Select repo",
+);
 const currentPr = computed(() => props.store.view?.pr ?? null);
 const progress = computed(() => props.store.progress());
 </script>
@@ -114,7 +125,8 @@ const progress = computed(() => props.store.progress());
       @keydown.enter.space.prevent="pickRepo(repo.repoId)"
     >
       <span class="ic">📁</span>
-      <span class="nm">{{ repo.repoId }}</span>
+      <span class="nm">{{ repoName(repo.repoId) }}</span>
+      <span v-if="repoOwner(repo.repoId)" class="meta">{{ repoOwner(repo.repoId) }}</span>
     </div>
     <div
       v-if="!addingRepo"
