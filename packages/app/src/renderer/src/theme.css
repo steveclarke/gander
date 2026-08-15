@@ -1,0 +1,14 @@
+:root {
+  --bg: #16181d; --panel: #1c1f26; --panel2: #191c22; --border: #2a2e37;
+  --text: #d7dae0; --dim: #8b919d; --faint: #5c6370;
+  --accent: #4d9fec; --green: #3fb950; --red: #f85149; --yellow: #d29922; --purple: #bc8cff;
+  --add-bg: rgba(63,185,80,.13); --del-bg: rgba(248,81,73,.12);
+  --add-gut: rgba(63,185,80,.25); --del-gut: rgba(248,81,73,.25);
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

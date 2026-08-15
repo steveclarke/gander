@@ -1,0 +1,95 @@
+import { reactive } from "vue";
+import type { PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { GanderApi } from "./api.js";
+
+export interface Store {
+  repos: RepoEntry[];
+  prs: PrSummary[];
+  currentRepoId: string | null;
+  view: PrView | null;
+  selectedPath: string | null;
+  error: string | null;
+  loadRepos(): Promise<void>;
+  addRepo(url: string): Promise<void>;
+  selectRepo(repoId: string): Promise<void>;
+  openPr(prNumber: number): Promise<void>;
+  refresh(): Promise<void>;
+  setChecked(path: string, checked: boolean): Promise<void>;
+  setCheckedMany(paths: string[], checked: boolean): Promise<void>;
+  select(path: string): void;
+  progress(): { done: number; total: number };
+}
+
+export function createStore(api: GanderApi): Store {
+  const store: Store = reactive({
+    repos: [],
+    prs: [],
+    currentRepoId: null,
+    view: null,
+    selectedPath: null,
+    error: null,
+
+    async loadRepos() {
+      await guard(async () => {
+        store.repos = await api.listRepos();
+      });
+    },
+    async addRepo(url: string) {
+      await guard(async () => {
+        await api.addRepo(url);
+        store.repos = await api.listRepos();
+      });
+    },
+    async selectRepo(repoId: string) {
+      await guard(async () => {
+        store.prs = await api.listPrs(repoId);
+        store.currentRepoId = repoId;
+        store.view = null;
+        store.selectedPath = null;
+      });
+    },
+    async openPr(prNumber: number) {
+      await guard(async () => {
+        if (!store.currentRepoId) throw new Error("no repo selected");
+        store.view = await api.openPr(store.currentRepoId, prNumber);
+        store.selectedPath = store.view.files[0]?.path ?? null;
+      });
+    },
+    async refresh() {
+      await guard(async () => {
+        if (!store.currentRepoId || !store.view) return;
+        store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+      });
+    },
+    async setChecked(path: string, checked: boolean) {
+      await guard(async () => {
+        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
+        store.view = await api.setChecked(store.currentRepoId, store.view.pr.number, path, checked);
+      });
+    },
+    async setCheckedMany(paths: string[], checked: boolean) {
+      await guard(async () => {
+        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
+        store.view = await api.setCheckedMany(store.currentRepoId, store.view.pr.number, paths, checked);
+      });
+    },
+    select(path: string) {
+      store.selectedPath = path;
+    },
+    progress() {
+      const files = store.view?.files ?? [];
+      return { done: files.filter((f) => f.checked).length, total: files.length };
+    },
+  });
+
+  async function guard(fn: () => Promise<void>): Promise<void> {
+    try {
+      await fn();
+      store.error = null;
+    } catch (err) {
+      store.error = (err as Error).message;
+    }
+  }
+
+  return store;
+}
