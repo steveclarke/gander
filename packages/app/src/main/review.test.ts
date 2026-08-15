@@ -100,8 +100,56 @@ describe("review pipeline", () => {
     expect(b.checked).toBe(true);        // content identical -> review survives the force-push
     expect(b.changedSince).toBe(false);
 
-    // The un-check was persisted, not just displayed:
+    // The un-check was persisted, not just displayed: read storage directly, not
+    // just the derived view (which would read false from hash mismatch alone even
+    // if the PUT never happened).
+    await reviewer.openPr("acme/atlas", 1);
+    const stored = storage.getReview("acme/atlas", 1).files.find((f) => f.path === "a.rb")!;
+    expect(stored.checked).toBe(false);
+  });
+
+  it("changedSince survives a second re-open, after the stored checked flag has already gone false", async () => {
+    await reviewer.openPr("acme/atlas", 1);
+    await reviewer.setChecked("acme/atlas", 1, "a.rb", true);
+
+    await fixture.git(["checkout", "feature"]);
+    writeFileSync(join(fixture.dir, "a.rb"), "class A\n  def go; puts 1; end\nend\n");
+    await fixture.git(["add", "-A"]);
+    await fixture.git(["commit", "--amend", "-m", "rewritten feature"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    const first = await reviewer.openPr("acme/atlas", 1);
+    expect(first.files.find((f) => f.path === "a.rb")!.changedSince).toBe(true);
+
+    // The stored checked flag is now false, per the persisted-uncheck test above —
+    // the flag must still be derived from the hash mismatch, not from `checked`.
+    const second = await reviewer.openPr("acme/atlas", 1);
+    const a = second.files.find((f) => f.path === "a.rb")!;
+    expect(a.checked).toBe(false);
+    expect(a.changedSince).toBe(true);
+  });
+
+  it("re-checking a changed file clears changedSince and persists the new snapshot", async () => {
+    await reviewer.openPr("acme/atlas", 1);
+    await reviewer.setChecked("acme/atlas", 1, "a.rb", true);
+
+    await fixture.git(["checkout", "feature"]);
+    writeFileSync(join(fixture.dir, "a.rb"), "class A\n  def go; puts 1; end\nend\n");
+    await fixture.git(["add", "-A"]);
+    await fixture.git(["commit", "--amend", "-m", "rewritten feature"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    await reviewer.openPr("acme/atlas", 1);
+    const reChecked = await reviewer.setChecked("acme/atlas", 1, "a.rb", true);
+    const a = reChecked.files.find((f) => f.path === "a.rb")!;
+    expect(a.checked).toBe(true);
+    expect(a.changedSince).toBe(false);
+
     const reopened = await reviewer.openPr("acme/atlas", 1);
-    expect(reopened.files.find((f) => f.path === "a.rb")!.checked).toBe(false);
+    const aReopened = reopened.files.find((f) => f.path === "a.rb")!;
+    expect(aReopened.checked).toBe(true);
+    expect(aReopened.changedSince).toBe(false);
   });
 });

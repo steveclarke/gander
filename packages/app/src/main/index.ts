@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { repoIdFromUrl, type RepoEntry } from "@gander/shared";
@@ -52,5 +52,14 @@ function createWindow(): void {
   else win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
 }
 
-app.whenReady().then(async () => { await bootstrap(); createWindow(); });
+app.whenReady().then(async () => {
+  try {
+    await bootstrap();
+  } catch (err) {
+    dialog.showErrorBox("Gander failed to start", (err as Error).message);
+    app.exit(1);
+    return;
+  }
+  createWindow();
+});
 app.on("window-all-closed", () => app.quit());

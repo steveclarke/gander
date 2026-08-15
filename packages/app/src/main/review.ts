@@ -44,12 +44,21 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       const baseHash = sha256(baseContent);
       const headHash = sha256(headContent);
       const stored = byPath.get(path);
-      const stillValid = stored?.checked === true && stored.baseHash === baseHash && stored.headHash === headHash;
-      const changedSince = stored?.checked === true && !stillValid;
-      if (changedSince) {
+      // A snapshot exists once the file has ever been checked (or un-checked from
+      // checked), because the service retains the prior base/head hashes as the
+      // delta base even on a bare uncheck — see storage.ts's putFileState. Absence
+      // of a snapshot means "never reviewed", not "unchanged".
+      const hasSnapshot = stored !== undefined && (stored.baseHash !== null || stored.headHash !== null);
+      const hashesMatch = hasSnapshot && stored.baseHash === baseHash && stored.headHash === headHash;
+      // changedSince must survive re-opens after the checked flag has already been
+      // persisted to false: derive it from the hashes, not from the stored checked
+      // flag, so the "changed since your review" signal doesn't vanish on refresh.
+      const changedSince = hasSnapshot && !hashesMatch;
+      const checked = stored?.checked === true && hashesMatch;
+      if (stored?.checked === true && changedSince) {
         await deps.service.putFileState(repoId, prNumber, { checked: false, path });
       }
-      files.push({ path, status, baseContent, headContent, baseHash, headHash, checked: stillValid === true, changedSince: changedSince === true });
+      files.push({ path, status, baseContent, headContent, baseHash, headHash, checked, changedSince });
     }
     const view: PrView = { pr, files };
     cache.set(key(repoId, prNumber), view);

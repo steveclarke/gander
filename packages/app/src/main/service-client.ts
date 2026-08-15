@@ -14,7 +14,7 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
     } catch (err) {
       throw new Error(`Gander service unreachable at ${baseUrl}: ${(err as Error).message}`);
     }
-    if (!res.ok) throw new Error(`Gander service ${res.status} on ${method} ${path}: ${await res.text()}`);
+    if (!res.ok) throw new Error(`Gander service ${res.status} on ${method} ${baseUrl}${path}: ${await res.text()}`);
     return res.json();
   };
   const enc = encodeURIComponent;
