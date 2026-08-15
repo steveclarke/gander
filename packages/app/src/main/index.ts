@@ -1,7 +1,42 @@
 import { app, BrowserWindow, ipcMain } from "electron";
+import { hostname } from "node:os";
 import { join } from "node:path";
+import { repoIdFromUrl, type RepoEntry } from "@gander/shared";
+import { loadConfig, saveConfig } from "./config.js";
+import { createGitEngine } from "./git.js";
+import { listOpenPrs, resolveGithubToken } from "./github.js";
+import { createReviewer } from "./review.js";
+import { createServiceClient } from "./service-client.js";
 
-const CHANNELS = ["listRepos", "addRepo", "listPrs", "openPr", "setChecked", "setCheckedMany", "refreshPr"] as const;
+async function bootstrap(): Promise<void> {
+  const cfg = loadConfig();
+  const ghToken = await resolveGithubToken(cfg.githubToken);
+  const git = createGitEngine(join(app.getPath("userData"), "clones"));
+  const service = createServiceClient(cfg.serviceUrl, cfg.serviceToken);
+  const urlFor = (repoId: string): string => {
+    const entry = cfg.repos.find((r) => r.repoId === repoId);
+    if (!entry) throw new Error(`Repo ${repoId} is not registered`);
+    return entry.url;
+  };
+  const reviewer = createReviewer({
+    git, service,
+    listPrs: (repoId) => listOpenPrs(repoId, ghToken),
+    repoUrl: urlFor,
+    machine: hostname(),
+  });
+
+  ipcMain.handle("gander:listRepos", async () => cfg.repos);
+  ipcMain.handle("gander:addRepo", async (_e, url: string): Promise<RepoEntry> => {
+    const entry = { repoId: repoIdFromUrl(url), url };
+    if (!cfg.repos.some((r) => r.repoId === entry.repoId)) { cfg.repos.push(entry); saveConfig(cfg); }
+    return entry;
+  });
+  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, ghToken));
+  ipcMain.handle("gander:openPr", async (_e, repoId: string, n: number) => reviewer.openPr(repoId, n));
+  ipcMain.handle("gander:refreshPr", async (_e, repoId: string, n: number) => reviewer.openPr(repoId, n));
+  ipcMain.handle("gander:setChecked", async (_e, repoId: string, n: number, path: string, checked: boolean) => reviewer.setChecked(repoId, n, path, checked));
+  ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean) => reviewer.setCheckedMany(repoId, n, paths, checked));
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -17,9 +52,5 @@ function createWindow(): void {
   else win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
 }
 
-for (const ch of CHANNELS) {
-  ipcMain.handle(`gander:${ch}`, async () => { throw new Error(`gander:${ch} not implemented yet`); });
-}
-
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => { await bootstrap(); createWindow(); });
 app.on("window-all-closed", () => app.quit());
