@@ -1,8 +1,15 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { FileStatus } from "@gander/shared";
+
+const FILE_STATUSES: readonly FileStatus[] = ["A", "M", "D", "R"];
+
+function parseFileStatus(raw: string): FileStatus {
+  if ((FILE_STATUSES as readonly string[]).includes(raw)) return raw as FileStatus;
+  throw new Error(`unrecognized git diff status letter: ${raw}`);
+}
 
 const run = promisify(execFile);
 
@@ -31,7 +38,14 @@ export function createGitEngine(clonesRoot: string): GitEngine {
       const dir = join(clonesRoot, repoId.replace("/", "__") + ".git");
       if (!existsSync(dir)) {
         mkdirSync(clonesRoot, { recursive: true });
-        await git(clonesRoot, ["clone", "--bare", url, dir]);
+        // `git clone --bare` creates the destination before it finishes, so an
+        // interrupted clone would leave a broken repo that existsSync reports as
+        // good. Clone into a temp sibling and rename into place only on success,
+        // so `dir` only ever exists in a complete state.
+        const tmpDir = `${dir}.tmp`;
+        rmSync(tmpDir, { recursive: true, force: true }); // clear any leftover from a previous failed attempt
+        await git(clonesRoot, ["clone", "--bare", url, tmpDir]);
+        renameSync(tmpDir, dir);
       }
       return dir;
     },
@@ -49,13 +63,13 @@ export function createGitEngine(clonesRoot: string): GitEngine {
     },
 
     async diffFiles(cloneDir, base, head) {
+      // -M only (no -C), so git never emits a "C" (copy) status line here.
       const out = await git(cloneDir, ["diff", "--name-status", "-M", base, head]);
       return out.split("\n").filter(Boolean).map((line) => {
         const parts = line.split("\t");
-        const raw = (parts[0] ?? "").charAt(0) as FileStatus | "C";
-        // Renames/copies report old\tnew — the new path is the reviewable file.
-        const path = (raw === "R" || raw === "C" ? parts[2] : parts[1]) ?? "";
-        const status: FileStatus = raw === "C" ? "A" : (raw as FileStatus);
+        const status = parseFileStatus((parts[0] ?? "").charAt(0));
+        // Renames report old\tnew — the new path is the reviewable file.
+        const path = (status === "R" ? parts[2] : parts[1]) ?? "";
         return { path, status };
       });
     },
@@ -65,7 +79,10 @@ export function createGitEngine(clonesRoot: string): GitEngine {
         return await git(cloneDir, ["show", `${rev}:${path}`]);
       } catch (err) {
         const msg = (err as Error).message;
-        if (/does not exist|exists on disk, but not in|invalid object name|bad revision/i.test(msg)) return null;
+        // Only absorb messages about the *path* being absent at a valid revision.
+        // "invalid object name" / "bad revision" mean the revision itself is
+        // unresolvable (corrupt clone, stale ref) and must throw, not fake a miss.
+        if (/does not exist in|exists on disk, but not in/i.test(msg)) return null;
         throw err;
       }
     },

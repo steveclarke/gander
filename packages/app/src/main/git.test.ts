@@ -57,4 +57,28 @@ describe("git engine", () => {
     const base = await engine.resolveRef(clone, "refs/gander/base/main");
     expect(await engine.showFile(clone, base, "b.rb")).toBeNull();
   });
+
+  it("showFile throws (does not swallow) when the revision itself is bad", async () => {
+    const clone = await engine.ensureClone("acme/atlas", fixture.dir);
+    await engine.fetchPr(clone, 1, "main");
+    await expect(engine.showFile(clone, "not-a-real-rev", "b.rb")).rejects.toThrow();
+  });
+
+  it("diffFiles reports a rename with the new path and status R", async () => {
+    // Rename unchanged.txt -> renamed.txt on the feature branch, keep content identical
+    // so git's rename detection (-M) fires, then advance refs/pull/1/head to it.
+    await fixture.git(["checkout", "feature"]);
+    await fixture.git(["mv", "unchanged.txt", "renamed.txt"]);
+    await fixture.git(["commit", "-m", "rename unchanged.txt"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    const clone = await engine.ensureClone("acme/atlas", fixture.dir);
+    await engine.fetchPr(clone, 1, "main");
+    const base = await engine.resolveRef(clone, "refs/gander/base/main");
+    const head = await engine.resolveRef(clone, "refs/gander/pr/1");
+    const files = await engine.diffFiles(clone, base, head);
+    expect(files).toContainEqual({ path: "renamed.txt", status: "R" });
+    expect(files.some((f) => f.path === "unchanged.txt")).toBe(false);
+  });
 });
