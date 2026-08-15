@@ -66,4 +66,12 @@ describe("storage", () => {
     });
     expect(storage.getSnapshot("acme/atlas", 7, "new.rb")).toEqual({ baseContent: null, headContent: "created" });
   });
+
+  it("returns the stored base content for a deleted file, not null", () => {
+    storage.putFileState("acme/atlas", 7, {
+      checked: true, path: "gone.rb", baseHash: null, headHash: null,
+      baseContent: "old body", headContent: null, machine: "m",
+    });
+    expect(storage.getSnapshot("acme/atlas", 7, "gone.rb")).toEqual({ baseContent: "old body", headContent: null });
+  });
 });

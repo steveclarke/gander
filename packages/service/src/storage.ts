@@ -80,8 +80,8 @@ export function openStorage(dbPath: string): Storage {
 
     getSnapshot(repoId, prNumber, path) {
       const rid = reviewId(repoId, prNumber);
-      const row = db.prepare("SELECT base_content, head_content, head_hash FROM file_states WHERE review_id = ? AND path = ?").get(rid, path) as { base_content: Buffer | null; head_content: Buffer | null; head_hash: string | null } | undefined;
-      if (!row || (row.head_hash === null && row.base_content === null && row.head_content === null)) return null;
+      const row = db.prepare("SELECT base_content, head_content FROM file_states WHERE review_id = ? AND path = ?").get(rid, path) as { base_content: Buffer | null; head_content: Buffer | null } | undefined;
+      if (!row) return null;
       return { baseContent: unpack(row.base_content), headContent: unpack(row.head_content) };
     },
 
