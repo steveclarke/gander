@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onBeforeUnmount, onMounted } from "vue";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
 import TopBar from "./components/TopBar.vue";
@@ -9,6 +9,25 @@ import "./theme.css";
 
 const store = createStore(api);
 onMounted(() => store.loadRepos());
+
+const POLL_MS = 30_000;
+let refreshing = false;
+async function refreshOnce(): Promise<void> {
+  if (refreshing || !store.view) return;
+  refreshing = true;
+  try {
+    await store.refresh();
+  } finally {
+    refreshing = false;
+  }
+}
+const timer = setInterval(() => void refreshOnce(), POLL_MS);
+const onFocus = (): void => { void refreshOnce(); };
+window.addEventListener("focus", onFocus);
+onBeforeUnmount(() => {
+  clearInterval(timer);
+  window.removeEventListener("focus", onFocus);
+});
 </script>
 
 <template>

@@ -83,6 +83,9 @@ onBeforeUnmount(dispose);
         {{ current.checked ? "✓ Reviewed" : "Mark reviewed" }}
       </button>
     </header>
+    <div v-if="current.changedSince" class="banner">
+      ⚠ Changed since your review — un-checked automatically. Re-review and mark again.
+    </div>
     <div ref="host" class="editor" />
   </section>
 </template>
@@ -147,10 +150,22 @@ onBeforeUnmount(dispose);
   font-size: 12px;
   cursor: pointer;
 }
+.check:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
 .check.on {
   border-color: var(--green);
   color: var(--green);
   background: rgba(63, 185, 80, 0.15);
+}
+.banner {
+  background: rgba(210, 153, 34, 0.08);
+  color: var(--yellow);
+  padding: 7px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
 }
 .editor {
   flex: 1;

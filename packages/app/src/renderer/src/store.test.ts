@@ -53,4 +53,15 @@ describe("store", () => {
     await store.selectRepo("acme/atlas");
     expect(store.error).toBeNull();
   });
+
+  it("refresh replaces the view but keeps the selected path", async () => {
+    const store = createStore(fakeApi());
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    await store.openPr(1);
+    store.select("b.rb");
+    await store.refresh();
+    expect(store.selectedPath).toBe("b.rb");
+    expect(store.view).not.toBeNull();
+  });
 });
