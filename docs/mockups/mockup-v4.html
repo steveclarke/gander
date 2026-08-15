@@ -159,7 +159,7 @@
     <span class="ic">📁</span>
     <div class="col">
       <span class="lbl">Repository</span>
-      <span class="val">unio<span class="caret">▼</span></span>
+      <span class="val">atlas<span class="caret">▼</span></span>
     </div>
   </div>
   <div class="seg" id="seg-review">
@@ -190,7 +190,7 @@
   <div class="search"><input placeholder="Filter repositories…"></div>
   <div class="dd-list">
     <div class="sw-h">REPOSITORIES</div>
-    <div class="sw-item kb" onclick="dd(false)"><span class="ic">📁</span><span class="nm">unio</span><span class="meta">myunio · 2 PRs</span></div>
+    <div class="sw-item kb" onclick="dd(false)"><span class="ic">📁</span><span class="nm">atlas</span><span class="meta">acme · 2 PRs</span></div>
     <div class="sw-item" onclick="dd(false, true)"><span class="ic">📁</span><span class="nm">signal-spotter</span><span class="meta">steveclarke · 1 PR</span></div>
     <div class="sw-item" onclick="dd(false, true)"><span class="ic">📁</span><span class="nm">hugo</span><span class="meta">local only</span></div>
     <div class="sw-item" onclick="dd(false, true)"><span class="ic">＋</span><span class="nm" style="color:var(--accent)">Add repository…</span></div>
@@ -200,10 +200,10 @@
 <div class="dd" id="dd-review">
   <div class="search"><input placeholder="Jump to a PR, branch, or worktree…"></div>
   <div class="dd-list">
-    <div class="sw-h">OPEN PULL REQUESTS — unio</div>
+    <div class="sw-h">OPEN PULL REQUESTS — atlas</div>
     <div class="sw-item kb" onclick="dd(false)"><span class="dot draft"></span><span class="num">#987</span><span class="nm">Late-fee automation for dues</span><span class="meta">1/4 · 2q</span></div>
     <div class="sw-item" onclick="dd(false, true)"><span class="dot open"></span><span class="num">#985</span><span class="nm">Member portal SSO callback fix</span><span class="meta">0/9</span></div>
-    <div class="sw-h">LOCAL — ~/src/myunio/unio</div>
+    <div class="sw-h">LOCAL — ~/src/acme/atlas</div>
     <div class="sw-item" onclick="dd(false, true)"><span class="dot wt"></span><span class="nm">feature/late-fees</span><span class="pr-link">#987 ↗</span></div>
     <div class="sw-item" onclick="dd(false, true)"><span class="dot wt"></span><span class="nm">wt/agent-scheduler</span><span class="meta">+412 −87 · 9 files</span></div>
     <div class="sw-item" onclick="dd(false, true)"><span class="dot wt"></span><span class="nm">main</span><span class="meta">clean</span></div>
@@ -328,7 +328,7 @@ const collapsed = {};                    /* dirPath -> bool */
 const visualOrder = [2, 0, 1, 3];        /* j/k order matches tree */
 
 let questions = [
-  { file: "app/services/dues/late_fee_calculator.rb", text: "Why default the grace period to 30 days instead of reading the local’s policy? UA 740 uses 21.", state: "open" },
+  { file: "app/services/dues/late_fee_calculator.rb", text: "Why default the grace period to 30 days instead of reading the local’s policy? Local 123 uses 21.", state: "open" },
   { file: "app/models/member.rb", text: "Should email uniqueness be scoped per-local? Members transfer between locals.", state: "addressed", ref: "a1b2c3f", note: "scoped uniqueness to local_id" },
 ];
 
@@ -450,7 +450,7 @@ function dd(which, unwired) {
   document.querySelectorAll(".dd").forEach(el => el.classList.remove("open"));
   $("veil").classList.toggle("open", !!which);
   if (which) { $(which).classList.add("open"); $(which).querySelector("input").focus(); }
-  else if (unwired) toast("Mockup: only unio / #987 is wired up");
+  else if (unwired) toast("Mockup: only atlas / #987 is wired up");
 }
 $("seg-repo").onclick = e => { e.stopPropagation(); dd("dd-repo"); };
 $("seg-review").onclick = e => { e.stopPropagation(); dd("dd-review"); };

@@ -71,7 +71,7 @@ Validated interactively; the reference mockup is `docs/mockups/mockup-v4.html`.
 **Segmented context header** (GitHub Desktop grammar). Navigation costs zero pixels until summoned:
 
 - **Repository ▾** — registered repos; dropdown to switch or add.
-- **Reviewing ▾** — current PR (or local branch), with draft/open badge and title; dropdown lists the repo's open PRs and local worktrees/branches. Also opened by ⌘K.
+- **Reviewing ▾** — current PR (or local branch), with draft/open badge and title; dropdown lists the repo's open PRs and local worktrees/branches. Also opened by ⌘K. Clicking the title expands a panel with the PR description (the only PR prose Gander shows).
 - **Fetch origin** — last-refresh status.
 - Right side: file-tree toggle, progress pill (`3/14 reviewed`), questions button with open-count badge.
 
