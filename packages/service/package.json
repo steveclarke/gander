@@ -2,7 +2,7 @@
   "name": "@gander/service",
   "version": "0.1.0",
   "type": "module",
-  "scripts": { "dev": "tsx src/main.ts" },
+  "scripts": { "dev": "tsx src/main.ts", "typecheck": "tsc --noEmit" },
   "dependencies": {
     "@gander/shared": "workspace:*",
     "better-sqlite3": "^13.0.3",
