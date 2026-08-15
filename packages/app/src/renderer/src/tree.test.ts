@@ -26,6 +26,18 @@ describe("buildTree", () => {
     const tree = buildTree([file("zz.rb"), file("app/a.rb"), file("aa.rb")]);
     expect(tree.map((n) => (n.type === "dir" ? `d:${n.name}` : `f:${n.file.path}`))).toEqual(["d:app", "f:aa.rb", "f:zz.rb"]);
   });
+
+  it("does not compact a directory that holds both a direct file and a single subdirectory", () => {
+    const tree = buildTree([file("app/a.rb"), file("app/sub/b.rb")]);
+    expect(tree).toEqual([{ type: "dir", name: "app", path: "app", children: expect.any(Array) }]);
+    const app = tree[0]!;
+    if (app.type !== "dir") throw new Error("expected dir");
+    expect(app.children.map((c) => (c.type === "dir" ? `d:${c.name}` : `f:${c.file.path}`))).toEqual(["d:sub", "f:app/a.rb"]);
+    const sub = app.children[0]!;
+    if (sub.type !== "dir") throw new Error("expected dir");
+    expect(sub.name).toBe("sub");
+    expect(sub.children).toEqual([{ type: "file", file: expect.objectContaining({ path: "app/sub/b.rb" }) }]);
+  });
 });
 
 describe("dirState / filesUnder", () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, reactive, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
 
@@ -9,6 +9,12 @@ const collapsed = reactive(new Set<string>());
 
 const depth = computed(() => props.depth ?? 0);
 const nodes = computed(() => props.nodes ?? buildTree(props.store.view?.files ?? []));
+
+// Directory paths carry no PR identity, and `store.openPr` reassigns `view` in one step
+// (never through a null in between), so switching PRs within the same repo never unmounts
+// this component. Clear stale collapse state whenever the reviewed PR changes.
+const prIdentity = computed(() => `${props.store.currentRepoId ?? ""}#${props.store.view?.pr.number ?? ""}`);
+watch(prIdentity, () => collapsed.clear());
 
 function toggleCollapsed(path: string) {
   if (collapsed.has(path)) collapsed.delete(path);
