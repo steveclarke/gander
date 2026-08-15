@@ -1,4 +1,5 @@
-import type { FileCheckoff, PutFileState, ReviewState } from "@gander/shared";
+import type { z } from "zod";
+import { FileCheckoffSchema, ReviewStateSchema, type FileCheckoff, type PutFileState, type ReviewState } from "@gander/shared";
 
 export interface ServiceClient {
   getReview(repoId: string, prNumber: number): Promise<ReviewState>;
@@ -17,9 +18,26 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
     if (!res.ok) throw new Error(`Gander service ${res.status} on ${method} ${baseUrl}${path}: ${await res.text()}`);
     return res.json();
   };
+  // Cross-machine review state is the product's core promise: a version-skewed or
+  // corrupted service response must fail loudly here, not get cast past the zod schemas
+  // that already exist and flow into the hash comparison in review.ts as if it were valid.
+  function validate<T>(schema: z.ZodType<T>, path: string, data: unknown): T {
+    const parsed = schema.safeParse(data);
+    if (!parsed.success) {
+      const problem = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
+      throw new Error(`Gander service at ${baseUrl}${path} returned data that failed validation: ${problem}`);
+    }
+    return parsed.data;
+  }
   const enc = encodeURIComponent;
   return {
-    getReview: (repoId, prNumber) => req("GET", `/api/reviews/${enc(repoId)}/${prNumber}`) as Promise<ReviewState>,
-    putFileState: (repoId, prNumber, input) => req("PUT", `/api/reviews/${enc(repoId)}/${prNumber}/files`, input) as Promise<FileCheckoff>,
+    getReview: async (repoId, prNumber) => {
+      const path = `/api/reviews/${enc(repoId)}/${prNumber}`;
+      return validate(ReviewStateSchema, path, await req("GET", path));
+    },
+    putFileState: async (repoId, prNumber, input) => {
+      const path = `/api/reviews/${enc(repoId)}/${prNumber}/files`;
+      return validate(FileCheckoffSchema, path, await req("PUT", path, input));
+    },
   };
 }
