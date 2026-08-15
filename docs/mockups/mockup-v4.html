@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review App — Mockup v4 (file tree)</title>
+<style>
+  :root {
+    --bg: #16181d; --panel: #1c1f26; --panel2: #191c22; --border: #2a2e37;
+    --text: #d7dae0; --dim: #8b919d; --faint: #5c6370;
+    --accent: #4d9fec; --green: #3fb950; --red: #f85149; --yellow: #d29922; --purple: #bc8cff;
+    --add-bg: rgba(63,185,80,.13); --del-bg: rgba(248,81,73,.12);
+    --add-gut: rgba(63,185,80,.25); --del-gut: rgba(248,81,73,.25);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: grid; grid-template-rows: 50px 1fr 26px; overflow: hidden;
+  }
+
+  /* ---------- segmented header ---------- */
+  #topbar { display: flex; align-items: stretch; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .seg { display: flex; align-items: center; gap: 10px; padding: 0 14px; min-width: 0; border-right: 1px solid var(--border); cursor: pointer; position: relative; }
+  .seg:hover { background: #232833; }
+  .seg .ic { color: var(--dim); font-size: 14px; }
+  .seg .col { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+  .seg .lbl { font-size: 10px; letter-spacing: .4px; color: var(--faint); text-transform: uppercase; }
+  .seg .val { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+  .seg .caret { color: var(--faint); font-size: 9px; margin-left: 4px; }
+  #seg-repo { width: 190px; }
+  #seg-review { flex: 1; max-width: 430px; }
+  .chip { font: 10.5px var(--mono); background: #262b34; color: var(--dim); border-radius: 9px; padding: 0 7px; white-space: nowrap; flex: none; }
+  .chip.draft { color: var(--yellow); border: 1px solid rgba(210,153,34,.4); background: rgba(210,153,34,.08); }
+  #seg-fetch { cursor: default; border-right: none; }
+  #seg-fetch:hover { background: none; }
+  #seg-fetch .val { font-weight: 400; color: var(--dim); font-size: 11.5px; }
+  #topbar .spacer { flex: 1; }
+  #topbar .right { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+  #progress { font-size: 12px; color: var(--dim); background: #262b34; border-radius: 10px; padding: 2px 10px; white-space: nowrap; }
+  #progress b { color: var(--green); }
+  .icon-btn { background: none; border: none; color: var(--dim); font-size: 15px; cursor: pointer; padding: 4px 7px; border-radius: 5px; }
+  .icon-btn:hover { background: #262b34; color: var(--text); }
+  .icon-btn.active { color: var(--accent); }
+  #drawer-btn { position: relative; }
+  #q-badge { position: absolute; top: -2px; right: -2px; background: var(--accent); color: #fff; font-size: 9.5px; font-weight: 700; border-radius: 8px; padding: 0 4px; min-width: 14px; text-align: center; }
+
+  /* ---------- dropdown panels ---------- */
+  .dd { position: fixed; top: 51px; background: var(--panel); border: 1px solid var(--border); border-radius: 0 0 12px 12px; box-shadow: 0 20px 50px rgba(0,0,0,.5); display: none; flex-direction: column; max-height: 65vh; z-index: 31; }
+  .dd.open { display: flex; }
+  #dd-repo { left: 0; width: 320px; }
+  #dd-review { left: 190px; width: 460px; }
+  .dd .search { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .dd .search input { width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 13px; padding: 7px 10px; outline: none; }
+  .dd .search input:focus { border-color: var(--accent); }
+  .dd-list { overflow: auto; padding: 6px 0 10px; }
+  .sw-h { font-size: 10.5px; letter-spacing: .8px; color: var(--faint); font-weight: 700; padding: 10px 14px 4px; }
+  .sw-item { display: flex; align-items: center; gap: 8px; padding: 6px 14px; cursor: pointer; }
+  .sw-item:hover, .sw-item.kb { background: rgba(77,159,236,.12); }
+  .sw-item .num { font: 12px var(--mono); color: var(--dim); }
+  .sw-item .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sw-item .meta { margin-left: auto; font: 11px var(--mono); color: var(--faint); }
+  .sw-item .pr-link { color: var(--accent); font: 11px var(--mono); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.draft { background: var(--yellow); } .dot.open { background: var(--green); } .dot.wt { background: var(--purple); }
+  #veil { position: fixed; inset: 0; background: transparent; display: none; z-index: 30; }
+  #veil.open { display: block; }
+
+  /* ---------- main ---------- */
+  #main { display: grid; grid-template-columns: 264px 1fr; min-height: 0; transition: grid-template-columns .18s ease; }
+  body.no-files #main { grid-template-columns: 0 1fr; }
+  #files { background: var(--panel2); border-right: 1px solid var(--border); overflow: hidden auto; padding: 8px 0; }
+  body.no-files #files { display: none; }
+
+  /* ----- tree ----- */
+  .tnode { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 0; cursor: pointer; white-space: nowrap; }
+  .tnode:hover { background: #232833; }
+  .tnode.sel { background: rgba(77,159,236,.14); box-shadow: inset 2px 0 0 var(--accent); }
+  .tnode .chev { width: 14px; flex: none; text-align: center; color: var(--faint); font-size: 9px; }
+  .tnode .fname { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; }
+  .tnode.isdir .fname { font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--dim); }
+  .tnode .st { margin-left: auto; font: 11px var(--mono); flex: none; }
+  .st.M { color: var(--yellow); } .st.A { color: var(--green); }
+  .cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
+  .cb.on { border-color: var(--green); color: var(--green); }
+  .cb.part { border-color: var(--green); color: var(--green); }
+  .tnode.checked .fname { color: var(--faint); }
+  .qmark { color: var(--accent); font-size: 11px; flex: none; }
+  .delta-mark { color: var(--yellow); font-size: 10px; flex: none; }
+
+  /* ---------- diff pane ---------- */
+  #diffwrap { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  #filehead { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  #filehead .path { font: 12.5px var(--mono); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #filehead .path .d { color: var(--faint); }
+  .tabs { display: flex; gap: 2px; margin-left: auto; background: #14161b; border-radius: 7px; padding: 2px; flex: none; }
+  .tab { border: none; background: none; color: var(--dim); font-size: 11.5px; padding: 3px 10px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+  .tab.active { background: #2c3340; color: var(--text); }
+  .tab:disabled { color: #3a3f4a; cursor: default; }
+  .tab .y { color: var(--yellow); }
+  #check-btn { flex: none; border: 1px solid var(--border); background: #22262e; color: var(--text); border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  #check-btn:hover { border-color: var(--green); color: var(--green); }
+  #check-btn.on { background: rgba(63,185,80,.15); border-color: var(--green); color: var(--green); }
+  #note-btn { flex: none; border: 1px solid var(--border); background: #22262e; color: var(--text); border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  #note-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  #capture { display: none; padding: 10px 14px; background: rgba(77,159,236,.07); border-bottom: 1px solid var(--border); }
+  #capture.show { display: flex; gap: 10px; align-items: center; }
+  #capture input { flex: 1; background: var(--panel); color: var(--text); border: 1px solid var(--accent); border-radius: 6px; padding: 7px 10px; font-size: 13px; outline: none; }
+  #capture .hint { font-size: 11px; color: var(--dim); white-space: nowrap; }
+
+  #diff { overflow: auto; flex: 1; font: 12.5px/1.65 var(--mono); }
+  .row { display: flex; white-space: pre; }
+  .row .g { width: 88px; flex: none; display: flex; color: var(--faint); font-size: 11.5px; user-select: none; }
+  .row .g span { width: 40px; text-align: right; padding-right: 8px; }
+  .row .sign { width: 18px; flex: none; text-align: center; user-select: none; }
+  .row .code { flex: 1; padding-right: 20px; }
+  .row.add { background: var(--add-bg); } .row.add .sign { color: var(--green); } .row.add .g { background: var(--add-gut); color: #9fd7ab; }
+  .row.del { background: var(--del-bg); } .row.del .sign { color: var(--red); } .row.del .g { background: var(--del-gut); color: #e5a9a5; }
+  .fold { display: flex; align-items: center; gap: 8px; color: var(--faint); background: #1a1d24; padding: 3px 14px; font-size: 11px; cursor: pointer; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .fold:hover { color: var(--dim); }
+  .banner { display: flex; gap: 8px; align-items: center; padding: 7px 14px; font-size: 12px; border-bottom: 1px solid var(--border); }
+  .banner.delta { background: rgba(210,153,34,.08); color: var(--yellow); }
+  .banner.plain { background: rgba(139,145,157,.07); color: var(--dim); }
+  .kw { color: #ff7b72; } .cn { color: #d2a8ff; } .fn { color: #d2a8ff; } .sym { color: #79c0ff; } .str { color: #a5d6ff; } .com { color: #8b949e; font-style: italic; }
+
+  /* ---------- drawer ---------- */
+  #drawer { position: fixed; top: 50px; right: -380px; bottom: 26px; width: 372px; background: var(--panel); border-left: 1px solid var(--border); transition: right .2s ease; display: flex; flex-direction: column; box-shadow: -12px 0 30px rgba(0,0,0,.35); z-index: 10; }
+  #drawer.open { right: 0; }
+  #drawer header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  #drawer header .copy-all { margin-left: auto; }
+  .link-btn { background: none; border: 1px solid var(--border); color: var(--dim); font-size: 11px; border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+  .link-btn:hover { color: var(--accent); border-color: var(--accent); }
+  #qlist { overflow: auto; flex: 1; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .q { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--panel2); }
+  .q .qf { font: 11px var(--mono); color: var(--dim); margin-bottom: 5px; display: flex; align-items: center; gap: 7px; }
+  .q .qf .copy1 { margin-left: auto; }
+  .q .qt { font-size: 12.5px; }
+  .q .qs { margin-top: 7px; font-size: 11.5px; display: flex; gap: 6px; align-items: center; }
+  .q.open-q .qs { color: var(--accent); }
+  .q.addr .qs { color: var(--green); }
+  .q.addr { border-color: rgba(63,185,80,.35); }
+  .q .qs code { font: 10.5px var(--mono); background: #22262e; border-radius: 4px; padding: 1px 5px; }
+
+  /* ---------- status bar ---------- */
+  #status { display: flex; align-items: center; gap: 16px; padding: 0 12px; background: var(--panel); border-top: 1px solid var(--border); font-size: 11px; color: var(--faint); }
+  #status .svc { display: flex; gap: 5px; align-items: center; }
+  #status .svc .dot { width: 6px; height: 6px; background: var(--green); }
+  #status .keys { margin-left: auto; font: 10.5px var(--mono); }
+  #toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%) translateY(60px); background: #262b34; border: 1px solid var(--border); padding: 6px 14px; border-radius: 7px; font-size: 12px; transition: transform .2s; z-index: 40; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="seg" id="seg-repo">
+    <span class="ic">📁</span>
+    <div class="col">
+      <span class="lbl">Repository</span>
+      <span class="val">unio<span class="caret">▼</span></span>
+    </div>
+  </div>
+  <div class="seg" id="seg-review">
+    <span class="ic">⎇</span>
+    <div class="col">
+      <span class="lbl">Reviewing</span>
+      <span class="val"><span class="chip draft">Draft #987</span> Late-fee automation for dues module<span class="caret">▼</span></span>
+    </div>
+  </div>
+  <div class="seg" id="seg-fetch">
+    <span class="ic">⟳</span>
+    <div class="col">
+      <span class="lbl">Fetch origin</span>
+      <span class="val">12 seconds ago</span>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="right">
+    <button class="icon-btn active" id="t-files" title="Toggle file tree (⌘1)">☑</button>
+    <span id="progress"><b id="p-count">1</b>/4 reviewed</span>
+    <button class="icon-btn" id="drawer-btn" title="Questions">🗨<span id="q-badge">2</span></button>
+  </div>
+</div>
+
+<div id="veil"></div>
+
+<div class="dd" id="dd-repo">
+  <div class="search"><input placeholder="Filter repositories…"></div>
+  <div class="dd-list">
+    <div class="sw-h">REPOSITORIES</div>
+    <div class="sw-item kb" onclick="dd(false)"><span class="ic">📁</span><span class="nm">unio</span><span class="meta">myunio · 2 PRs</span></div>
+    <div class="sw-item" onclick="dd(false, true)"><span class="ic">📁</span><span class="nm">signal-spotter</span><span class="meta">steveclarke · 1 PR</span></div>
+    <div class="sw-item" onclick="dd(false, true)"><span class="ic">📁</span><span class="nm">hugo</span><span class="meta">local only</span></div>
+    <div class="sw-item" onclick="dd(false, true)"><span class="ic">＋</span><span class="nm" style="color:var(--accent)">Add repository…</span></div>
+  </div>
+</div>
+
+<div class="dd" id="dd-review">
+  <div class="search"><input placeholder="Jump to a PR, branch, or worktree…"></div>
+  <div class="dd-list">
+    <div class="sw-h">OPEN PULL REQUESTS — unio</div>
+    <div class="sw-item kb" onclick="dd(false)"><span class="dot draft"></span><span class="num">#987</span><span class="nm">Late-fee automation for dues</span><span class="meta">1/4 · 2q</span></div>
+    <div class="sw-item" onclick="dd(false, true)"><span class="dot open"></span><span class="num">#985</span><span class="nm">Member portal SSO callback fix</span><span class="meta">0/9</span></div>
+    <div class="sw-h">LOCAL — ~/src/myunio/unio</div>
+    <div class="sw-item" onclick="dd(false, true)"><span class="dot wt"></span><span class="nm">feature/late-fees</span><span class="pr-link">#987 ↗</span></div>
+    <div class="sw-item" onclick="dd(false, true)"><span class="dot wt"></span><span class="nm">wt/agent-scheduler</span><span class="meta">+412 −87 · 9 files</span></div>
+    <div class="sw-item" onclick="dd(false, true)"><span class="dot wt"></span><span class="nm">main</span><span class="meta">clean</span></div>
+  </div>
+</div>
+
+<div id="main">
+  <nav id="files"></nav>
+  <section id="diffwrap">
+    <div id="filehead">
+      <span class="path" id="fh-path"></span>
+      <div class="tabs" id="fh-tabs"></div>
+      <button id="note-btn" title="Attach a question (n)">＋ Question</button>
+      <button id="check-btn" title="Mark reviewed (space)">✓ Reviewed</button>
+    </div>
+    <div id="capture">
+      <input id="cap-in" placeholder="Question about this file — type or dictate, Enter to save…">
+      <span class="hint">Enter ↵ save · Esc cancel</span>
+    </div>
+    <div id="diff"></div>
+  </section>
+</div>
+
+<aside id="drawer">
+  <header>Questions — PR #987 <button class="link-btn copy-all" id="copy-all">Copy all</button></header>
+  <div id="qlist"></div>
+</aside>
+
+<div id="status">
+  <span class="svc"><span class="dot"></span>service · dockervm</span>
+  <span class="keys">⌘K switch review · j/k files · space reviewed · n question</span>
+</div>
+<div id="toast">Copied</div>
+
+<script>
+const R = (g1, g2, sign, cls, code) =>
+  `<div class="row ${cls}"><div class="g"><span>${g1}</span><span>${g2}</span></div><div class="sign">${sign}</div><div class="code">${code}</div></div>`;
+
+const files = [
+  {
+    path: "app/models/member.rb", st: "M", checked: false, changedSince: false,
+    diff: `
+      <div class="fold">⋯ 11 unchanged lines — click to expand</div>
+      ${R(12,12,"","", `  <span class="kw">has_many</span> <span class="sym">:dues_payments</span>, dependent: <span class="sym">:destroy</span>`)}
+      ${R(13,13,"","", `  <span class="kw">has_many</span> <span class="sym">:dispatch_requests</span>`)}
+      ${R(14,14,"","", ``)}
+      ${R("",15,"+","add", `  <span class="kw">scope</span> <span class="sym">:with_overdue_dues</span>, -> { joins(<span class="sym">:dues_payments</span>).merge(<span class="cn">DuesPayment</span>.overdue) }`)}
+      ${R("",16,"+","add", `  <span class="kw">validates</span> <span class="sym">:email</span>, presence: <span class="kw">true</span>, uniqueness: { scope: <span class="sym">:local_id</span> }`)}
+      ${R("",17,"+","add", ``)}
+      ${R(15,18,"","", `  <span class="kw">def</span> <span class="fn">full_name</span>`)}
+      ${R(16,19,"","", `    [first_name, last_name].compact.join(<span class="str">" "</span>)`)}
+      ${R(17,20,"","", `  <span class="kw">end</span>`)}
+      <div class="fold">⋯ 148 unchanged lines — click to expand</div>`
+  },
+  {
+    path: "app/services/dues/late_fee_calculator.rb", st: "A", checked: false, changedSince: false,
+    diff: `
+      ${R("",1,"+","add", `<span class="kw">module</span> <span class="cn">Dues</span>`)}
+      ${R("",2,"+","add", `  <span class="kw">class</span> <span class="cn">LateFeeCalculator</span>`)}
+      ${R("",3,"+","add", `    <span class="cn">GRACE_PERIOD_DAYS</span> = <span class="sym">30</span>`)}
+      ${R("",4,"+","add", ``)}
+      ${R("",5,"+","add", `    <span class="kw">def</span> <span class="fn">initialize</span>(member, as_of: <span class="cn">Time</span>.current)`)}
+      ${R("",6,"+","add", `      <span class="sym">@member</span> = member`)}
+      ${R("",7,"+","add", `      <span class="sym">@as_of</span> = as_of`)}
+      ${R("",8,"+","add", `    <span class="kw">end</span>`)}
+      ${R("",9,"+","add", ``)}
+      ${R("",10,"+","add", `    <span class="kw">def</span> <span class="fn">amount_owing</span>`)}
+      ${R("",11,"+","add", `      overdue_payments.sum { |p| p.amount * rate_for(p) }`)}
+      ${R("",12,"+","add", `    <span class="kw">end</span>`)}
+      ${R("",13,"+","add", ``)}
+      ${R("",14,"+","add", `    <span class="kw">private</span>`)}
+      ${R("",15,"+","add", ``)}
+      ${R("",16,"+","add", `    <span class="kw">def</span> <span class="fn">overdue_payments</span>`)}
+      ${R("",17,"+","add", `      <span class="sym">@member</span>.dues_payments.overdue(grace: <span class="cn">GRACE_PERIOD_DAYS</span>, as_of: <span class="sym">@as_of</span>)`)}
+      ${R("",18,"+","add", `    <span class="kw">end</span>`)}
+      ${R("",19,"+","add", `  <span class="kw">end</span>`)}
+      ${R("",20,"+","add", `<span class="kw">end</span>`)}`
+  },
+  {
+    path: "app/javascript/components/DuesTable.vue", st: "M", checked: false, changedSince: true,
+    banner: `<div class="banner delta">⚠ Changed since your review — 3 new lines. Showing everything; the “since my ✓” tab shows just what’s new.</div>`,
+    diff: `
+      <div class="fold">⋯ 24 unchanged lines — click to expand</div>
+      ${R(25,25,"","", `    &lt;<span class="cn">th</span>&gt;Amount&lt;/<span class="cn">th</span>&gt;`)}
+      ${R("",26,"+","add", `    &lt;<span class="cn">th</span>&gt;Late fee&lt;/<span class="cn">th</span>&gt;`)}
+      ${R("",27,"+","add", `    &lt;<span class="cn">th</span>&gt;Grace ends&lt;/<span class="cn">th</span>&gt;`)}
+      ${R(26,28,"","", `    &lt;<span class="cn">th</span>&gt;Status&lt;/<span class="cn">th</span>&gt;`)}
+      <div class="fold">⋯ 31 unchanged lines — click to expand</div>
+      ${R(58,60,"","", `<span class="kw">const</span> columns = useDuesColumns(props.member)`)}
+      ${R("",61,"+","add", `<span class="kw">const</span> lateFees = <span class="fn">computed</span>(() => props.payments.map(p => p.late_fee))`)}
+      <div class="fold">⋯ 40 unchanged lines — click to expand</div>`,
+    deltaDiff: `
+      <div class="banner delta">Since your ✓ (yesterday 4:12pm) — only the new changes:</div>
+      <div class="fold">⋯ context</div>
+      ${R("",27,"+","add", `    &lt;<span class="cn">th</span>&gt;Grace ends&lt;/<span class="cn">th</span>&gt;`)}
+      <div class="fold">⋯ context</div>
+      ${R("",61,"+","add", `<span class="kw">const</span> lateFees = <span class="fn">computed</span>(() => props.payments.map(p => p.late_fee))`)}
+      ${R("",62,"+","add", `<span class="kw">const</span> graceEnds = <span class="fn">computed</span>(() => props.payments.map(p => p.grace_ends_on))`)}
+      <div class="fold">⋯ context</div>`
+  },
+  {
+    path: "config/routes.rb", st: "M", checked: true, changedSince: false,
+    diff: `
+      <div class="fold">⋯ 42 unchanged lines — click to expand</div>
+      ${R(43,43,"","", `  <span class="kw">namespace</span> <span class="sym">:dues</span> <span class="kw">do</span>`)}
+      ${R("",44,"+","add", `    resources <span class="sym">:late_fees</span>, only: %i[index show]`)}
+      ${R(44,45,"","", `  <span class="kw">end</span>`)}
+      <div class="fold">⋯ 60 unchanged lines — click to expand</div>`
+  },
+];
+
+/* tree: compact single-child chains, like VS Code */
+const tree = [
+  { dir: "app", depth: 0, children: [
+    { dir: "javascript/components", depth: 1, children: [ { fileIdx: 2, depth: 2 } ] },
+    { dir: "models", depth: 1, children: [ { fileIdx: 0, depth: 2 } ] },
+    { dir: "services/dues", depth: 1, children: [ { fileIdx: 1, depth: 2 } ] },
+  ]},
+  { dir: "config", depth: 0, children: [ { fileIdx: 3, depth: 1 } ] },
+];
+const collapsed = {};                    /* dirPath -> bool */
+const visualOrder = [2, 0, 1, 3];        /* j/k order matches tree */
+
+let questions = [
+  { file: "app/services/dues/late_fee_calculator.rb", text: "Why default the grace period to 30 days instead of reading the local’s policy? UA 740 uses 21.", state: "open" },
+  { file: "app/models/member.rb", text: "Should email uniqueness be scoped per-local? Members transfer between locals.", state: "addressed", ref: "a1b2c3f", note: "scoped uniqueness to local_id" },
+];
+
+let cur = 2, view = "main";
+const $ = id => document.getElementById(id);
+
+function dirFiles(node, acc = []) {
+  node.children.forEach(c => c.fileIdx !== undefined ? acc.push(c.fileIdx) : dirFiles(c, acc));
+  return acc;
+}
+function dirPath(node, parent) { return parent ? parent + "/" + node.dir : node.dir; }
+
+function renderTree() {
+  let html = "";
+  const walk = (nodes, parentPath) => nodes.forEach(node => {
+    if (node.fileIdx !== undefined) {
+      const f = files[node.fileIdx];
+      const name = f.path.split("/").pop();
+      const hasQ = questions.some(q => q.file === f.path && q.state !== "resolved");
+      html += `<div class="tnode ${node.fileIdx===cur?"sel":""} ${f.checked?"checked":""}" style="padding-left:${10 + node.depth*16}px" onclick="pick(${node.fileIdx})">
+        <span class="cb ${f.checked?"on":""}" onclick="event.stopPropagation();toggleCheck(${node.fileIdx})">✓</span>
+        <span class="fname">${name}</span>
+        ${f.changedSince ? `<span class="delta-mark" title="Changed since your review">●</span>` : ""}
+        ${hasQ ? `<span class="qmark">🗨</span>` : ""}
+        <span class="st ${f.st}">${f.st}</span></div>`;
+    } else {
+      const p = dirPath(node, parentPath);
+      const kids = dirFiles(node);
+      const done = kids.filter(i => files[i].checked).length;
+      const cbState = done === kids.length ? "on" : done > 0 ? "part" : "";
+      const cbGlyph = cbState === "part" ? "–" : "✓";
+      html += `<div class="tnode isdir" style="padding-left:${10 + node.depth*16}px" onclick="toggleDir('${p}')">
+        <span class="chev">${collapsed[p] ? "▶" : "▼"}</span>
+        <span class="cb ${cbState}" onclick="event.stopPropagation();checkDir('${p}')">${cbGlyph}</span>
+        <span class="fname">${node.dir}</span></div>`;
+      if (!collapsed[p]) walk(node.children, p);
+    }
+  });
+  walk(tree, "");
+  $("files").innerHTML = html;
+  $("p-count").textContent = files.filter(f => f.checked).length;
+}
+
+function findDir(nodes, path, parentPath) {
+  for (const n of nodes) {
+    if (n.fileIdx !== undefined) continue;
+    const p = dirPath(n, parentPath);
+    if (p === path) return n;
+    const hit = findDir(n.children, path, p);
+    if (hit) return hit;
+  }
+  return null;
+}
+function toggleDir(p) { collapsed[p] = !collapsed[p]; renderTree(); }
+function checkDir(p) {
+  const node = findDir(tree, p, "");
+  const kids = dirFiles(node);
+  const allDone = kids.every(i => files[i].checked);
+  kids.forEach(i => {
+    files[i].checked = !allDone;
+    if (files[i].checked && files[i].changedSince) files[i].changedSince = false;
+  });
+  renderTree(); renderDiff();
+}
+
+function renderDiff() {
+  const f = files[cur];
+  const parts = f.path.split("/"); const base = parts.pop();
+  $("fh-path").innerHTML = `<span class="d">${parts.join("/")}/</span>${base}`;
+  $("fh-tabs").innerHTML = `
+    <button class="tab ${view==="main"?"active":""}" onclick="setView('main')">vs main</button>
+    <button class="tab ${view==="delta"?"active":""}" ${f.deltaDiff?"":"disabled"} onclick="setView('delta')">since my ✓ ${f.changedSince?'<span class="y">●</span>':""}</button>
+    <button class="tab ${view==="disk"?"active":""}" onclick="setView('disk')">file on disk</button>`;
+  $("check-btn").className = f.checked ? "on" : "";
+  $("check-btn").textContent = f.checked ? "✓ Reviewed" : "Mark reviewed";
+  if (view === "delta" && f.deltaDiff) $("diff").innerHTML = f.deltaDiff;
+  else if (view === "disk") $("diff").innerHTML =
+    `<div class="banner plain">Read-only view of the full file as it sits on disk right now (mockup shows a stub).</div>` +
+    f.diff.replaceAll('class="row add"','class="row"').replaceAll('class="row del"','class="row"');
+  else $("diff").innerHTML = (f.banner || "") + f.diff;
+}
+
+function renderQuestions() {
+  $("qlist").innerHTML = questions.map((q, i) => `
+    <div class="q ${q.state==="open"?"open-q":"addr"}">
+      <div class="qf">${q.file.split("/").pop()} <button class="link-btn copy1" onclick="copyQ(${i})">Copy</button></div>
+      <div class="qt">${q.text}</div>
+      <div class="qs">${q.state==="open"
+        ? "● open — agents see this over MCP"
+        : `✓ addressed <code>${q.ref}</code> — ${q.note}`}</div>
+    </div>`).join("");
+  $("q-badge").textContent = questions.filter(q => q.state !== "resolved").length;
+}
+
+function pick(i) { cur = i; view = "main"; renderTree(); renderDiff(); }
+function setView(v) { view = v; renderDiff(); }
+function toggleCheck(i) {
+  const f = files[i];
+  f.checked = !f.checked;
+  if (f.checked && f.changedSince) f.changedSince = false;
+  renderTree(); if (i === cur) renderDiff();
+}
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1400); }
+function copyQ(i) {
+  const q = questions[i];
+  navigator.clipboard?.writeText(`**${q.file}** — ${q.text}`);
+  toast("Question copied as markdown");
+}
+$("copy-all").onclick = () => {
+  navigator.clipboard?.writeText(questions.map(q => `- **${q.file}** — ${q.text}`).join("\n"));
+  toast("All questions copied");
+};
+$("drawer-btn").onclick = () => $("drawer").classList.toggle("open");
+$("t-files").onclick = e => { document.body.classList.toggle("no-files"); e.currentTarget.classList.toggle("active"); };
+$("note-btn").onclick = openCapture;
+$("check-btn").onclick = () => toggleCheck(cur);
+
+function dd(which, unwired) {
+  document.querySelectorAll(".dd").forEach(el => el.classList.remove("open"));
+  $("veil").classList.toggle("open", !!which);
+  if (which) { $(which).classList.add("open"); $(which).querySelector("input").focus(); }
+  else if (unwired) toast("Mockup: only unio / #987 is wired up");
+}
+$("seg-repo").onclick = e => { e.stopPropagation(); dd("dd-repo"); };
+$("seg-review").onclick = e => { e.stopPropagation(); dd("dd-review"); };
+$("veil").onclick = () => dd(false);
+
+function openCapture() { $("capture").classList.add("show"); $("cap-in").focus(); }
+function closeCapture() { $("capture").classList.remove("show"); $("cap-in").value = ""; }
+$("cap-in").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.currentTarget.value.trim()) {
+    questions.unshift({ file: files[cur].path, text: e.currentTarget.value.trim(), state: "open" });
+    closeCapture(); renderQuestions(); renderTree();
+    $("drawer").classList.add("open");
+    toast("Question saved — agents can pull it now");
+  }
+  if (e.key === "Escape") closeCapture();
+});
+
+document.addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); dd("dd-review"); return; }
+  if (e.key === "Escape") { dd(false); closeCapture(); return; }
+  if (e.target.tagName === "INPUT") return;
+  const vo = visualOrder.indexOf(cur);
+  if (e.key === "j") pick(visualOrder[Math.min(vo + 1, visualOrder.length - 1)]);
+  if (e.key === "k") pick(visualOrder[Math.max(vo - 1, 0)]);
+  if (e.key === " ") { e.preventDefault(); toggleCheck(cur); }
+  if (e.key === "n") { e.preventDefault(); openCapture(); }
+});
+
+renderTree(); renderDiff(); renderQuestions();
+</script>
+</body>
+</html>
