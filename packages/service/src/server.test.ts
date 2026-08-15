@@ -55,4 +55,25 @@ describe("service API", () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toMatch(/path|machine|Hash/i);
   });
+
+  it("rejects a non-numeric prNumber on GET with 400", async () => {
+    const res = await server.inject({ method: "GET", url: "/api/reviews/acme%2Fatlas/abc", headers: AUTH });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/prNumber/i);
+  });
+
+  it("rejects a non-positive prNumber on GET with 400", async () => {
+    const res = await server.inject({ method: "GET", url: "/api/reviews/acme%2Fatlas/0", headers: AUTH });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/prNumber/i);
+  });
+
+  it("rejects a non-numeric prNumber on PUT with 400", async () => {
+    const res = await server.inject({
+      method: "PUT", url: "/api/reviews/acme%2Fatlas/abc/files", headers: AUTH,
+      payload: { checked: true, path: "a.rb", baseHash: "b1", headHash: "h1", baseContent: "o", headContent: "n", machine: "studio" },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/prNumber/i);
+  });
 });
