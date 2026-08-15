@@ -4,6 +4,7 @@ import { api } from "./api.js";
 import { createStore } from "./store.js";
 import TopBar from "./components/TopBar.vue";
 import FileTree from "./components/FileTree.vue";
+import DiffPane from "./components/DiffPane.vue";
 import "./theme.css";
 
 const store = createStore(api);
@@ -18,7 +19,7 @@ onMounted(() => store.loadRepos());
       <p v-if="!store.view" class="empty">Pick a repository, then a pull request.</p>
       <template v-else>
         <FileTree :store="store" class="tree" />
-        <section class="diff-placeholder">{{ store.selectedPath }}</section>
+        <DiffPane :store="store" class="diff" />
       </template>
     </main>
   </div>
@@ -30,5 +31,5 @@ onMounted(() => store.loadRepos());
 .empty { color: var(--faint); padding: 2rem; }
 .body { display: grid; grid-template-columns: 264px 1fr; min-height: 0; }
 .tree { border-right: 1px solid var(--border); overflow: hidden auto; }
-.diff-placeholder { min-width: 0; padding: 14px; color: var(--faint); font: 12.5px var(--mono); }
+.diff { min-width: 0; overflow: hidden; }
 </style>
