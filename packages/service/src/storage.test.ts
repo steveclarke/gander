@@ -74,4 +74,13 @@ describe("storage", () => {
     });
     expect(storage.getSnapshot("acme/atlas", 7, "gone.rb")).toEqual({ baseContent: "old body", headContent: null });
   });
+
+  it("distinguishes a checked binary file (all-null snapshot) from never-checked", () => {
+    storage.putFileState("acme/atlas", 7, {
+      checked: true, path: "image.png", baseHash: null, headHash: null,
+      baseContent: null, headContent: null, machine: "m",
+    });
+    expect(storage.getSnapshot("acme/atlas", 7, "image.png")).toEqual({ baseContent: null, headContent: null });
+    expect(storage.getSnapshot("acme/atlas", 7, "never-touched.png")).toBeNull();
+  });
 });
