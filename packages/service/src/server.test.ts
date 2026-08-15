@@ -76,4 +76,12 @@ describe("service API", () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toMatch(/prNumber/i);
   });
+
+  it("handles a repoId containing a literal percent sign without a 500", async () => {
+    // The router already URL-decodes params; a handler that decodeURIComponent's them again
+    // throws URIError on a literal "%" that isn't part of a valid escape sequence, turning
+    // what should be a normal (if odd) repoId into an unhandled 500.
+    const res = await server.inject({ method: "GET", url: "/api/reviews/acme%252Fweird%25repo/7", headers: AUTH });
+    expect(res.statusCode).toBeLessThan(500);
+  });
 });

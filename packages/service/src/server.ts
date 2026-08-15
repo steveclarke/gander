@@ -28,7 +28,7 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
     async (req, reply) => {
       const prNumber = parsePrNumber(req.params.prNumber, reply);
       if (prNumber === undefined) return;
-      return opts.storage.getReview(decodeURIComponent(req.params.repoId), prNumber);
+      return opts.storage.getReview(req.params.repoId, prNumber);
     },
   );
 
@@ -41,7 +41,7 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
       }
-      return opts.storage.putFileState(decodeURIComponent(req.params.repoId), prNumber, parsed.data);
+      return opts.storage.putFileState(req.params.repoId, prNumber, parsed.data);
     },
   );
 
