@@ -8,12 +8,12 @@ import type { PrSummary } from "@gander/shared";
 import { buildServer } from "../../../service/src/server.js";
 import { openStorage, type Storage } from "../../../service/src/storage.js";
 import { makeFixtureRepo, type FixtureRepo } from "./fixtures.js";
-import { createGitEngine } from "./git.js";
+import { createGitEngine, type GitEngine } from "./git.js";
 import { createServiceClient } from "./service-client.js";
 import { createReviewer, type Reviewer } from "./review.js";
 
 let fixture: FixtureRepo; let clonesRoot: string; let dbDir: string;
-let storage: Storage; let server: FastifyInstance; let reviewer: Reviewer;
+let storage: Storage; let server: FastifyInstance; let reviewer: Reviewer; let port: number;
 
 async function currentPr(fx: FixtureRepo): Promise<PrSummary> {
   const headSha = await fx.git(["rev-parse", "refs/pull/1/head"]);
@@ -28,7 +28,7 @@ beforeEach(async () => {
   storage = openStorage(join(dbDir, "t.db"));
   server = buildServer({ storage, token: "t", version: "test" });
   await server.listen({ port: 0, host: "127.0.0.1" });
-  const port = (server.addresses()[0] as { port: number }).port;
+  port = (server.addresses()[0] as { port: number }).port;
 
   reviewer = createReviewer({
     git: createGitEngine(clonesRoot),
@@ -151,5 +151,52 @@ describe("review pipeline", () => {
     const aReopened = reopened.files.find((f) => f.path === "a.rb")!;
     expect(aReopened.checked).toBe(true);
     expect(aReopened.changedSince).toBe(false);
+  });
+
+  it("refreshPr re-reads no blobs when the head is unchanged, and fully recomputes once it moves", async () => {
+    let showFileCalls = 0;
+    const baseEngine = createGitEngine(clonesRoot);
+    const countingEngine: GitEngine = {
+      ...baseEngine,
+      async showFile(clone, rev, path) {
+        showFileCalls += 1;
+        return baseEngine.showFile(clone, rev, path);
+      },
+    };
+    const instrumented = createReviewer({
+      git: countingEngine,
+      service: createServiceClient(`http://127.0.0.1:${port}`, "t"),
+      listPrs: async () => [await currentPr(fixture)],
+      repoUrl: () => fixture.dir,
+      machine: "test-machine",
+    });
+
+    await instrumented.openPr("acme/atlas", 1);
+    const afterOpen = showFileCalls;
+    expect(afterOpen).toBeGreaterThan(0);
+
+    // Head hasn't moved: refreshPr must not spawn a single `git show`.
+    const unchanged = await instrumented.refreshPr("acme/atlas", 1);
+    expect(showFileCalls).toBe(afterOpen);
+    expect(unchanged.files.map((f) => f.path)).toEqual(["a.rb", "b.rb"]);
+
+    // Cross-machine sync must still work on the no-blob-read path: a checkoff made
+    // "elsewhere" (a direct service call, standing in for another machine) shows up.
+    await instrumented.setChecked("acme/atlas", 1, "a.rb", true);
+    const afterCheck = await instrumented.refreshPr("acme/atlas", 1);
+    expect(showFileCalls).toBe(afterOpen); // still no new blob reads
+    expect(afterCheck.files.find((f) => f.path === "a.rb")!.checked).toBe(true);
+
+    // Now genuinely move the PR head — refreshPr must recompute fully.
+    await fixture.git(["checkout", "feature"]);
+    writeFileSync(join(fixture.dir, "a.rb"), "class A\n  def go; puts 2; end\nend\n");
+    await fixture.git(["add", "-A"]);
+    await fixture.git(["commit", "-m", "advance the PR"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    const moved = await instrumented.refreshPr("acme/atlas", 1);
+    expect(showFileCalls).toBeGreaterThan(afterOpen);
+    expect(moved.files.find((f) => f.path === "a.rb")!.changedSince).toBe(true);
   });
 });
