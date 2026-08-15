@@ -22,6 +22,14 @@ const dirName = computed(() => {
 });
 const baseName = computed(() => current.value?.path.split("/").pop() ?? "");
 
+// git.ts hashes a binary blob's raw bytes but withholds its content, so `content === null`
+// paired with a real hash (as opposed to a null hash, which means "absent at this revision")
+// is how a binary file is told apart from a file that simply doesn't exist at that side of
+// the diff. See git.ts's ShowFileResult doc comment for the full reasoning.
+const baseBinary = computed(() => current.value !== null && current.value.baseContent === null && current.value.baseHash !== null);
+const headBinary = computed(() => current.value !== null && current.value.headContent === null && current.value.headHash !== null);
+const isBinary = computed(() => baseBinary.value || headBinary.value);
+
 function dispose(): void {
   editor?.dispose();
   editor = null;
@@ -32,7 +40,8 @@ function dispose(): void {
 function render(): void {
   dispose();
   const file = current.value;
-  if (!host.value || !file) return;
+  if (!file || isBinary.value) return; // no `host` element in the DOM for a binary file — see template
+  if (!host.value) return;
   const lang = languageForPath(file.path);
   if (view.value === "diff") {
     const original = monaco.editor.createModel(file.baseContent ?? "", lang);
@@ -59,11 +68,40 @@ function render(): void {
   }
 }
 
+// The editor must only be torn down and rebuilt when the content it displays actually
+// changes — not on every store.view reassignment, which the 30s poll does unconditionally
+// and every setChecked/setCheckedMany does too (IPC returns freshly cloned objects, so
+// `current` is a new object identity even when nothing the reviewer is looking at changed).
+// Rebuilding on identity churn resets scroll position, folded regions, and selection in the
+// middle of the diff the reviewer is reading — the core reading loop of the product.
+//
+// The key below collapses to a sentinel when there's no selected file (or it's binary, where
+// `render()` is a no-op and there's no `host` element to mount into), and otherwise names
+// exactly the three things that change what should be on screen: which file, its content at
+// each revision (baseHash/headHash — not the object identity of the PrFile), and which tab
+// (diff vs full file). Reasoned through each trigger:
+//   - 30s poll, unchanged content -> same path/hashes/tab -> key unchanged -> no rebuild.
+//   - setChecked / setCheckedMany -> only `checked`/`changedSince` differ -> key unchanged.
+//   - the PR's head moves and this file's content changes -> baseHash or headHash differs
+//     -> key changes -> rebuild (correct: there's new content to show).
+//   - reviewer clicks a different file in the tree -> path differs -> rebuild.
+//   - reviewer switches "vs main" <-> "full file" -> tab differs -> rebuild.
+//   - the selected file drops out of the PR view (e.g. a refresh landing on a smaller diff)
+//     -> current becomes null -> key becomes the sentinel -> dispose() runs, no crash.
+const renderKey = computed(() => {
+  const file = current.value;
+  if (!file) return null;
+  return `${file.path}#${file.baseHash ?? ""}#${file.headHash ?? ""}#${view.value}`;
+});
+
 onMounted(() => {
   setupMonacoWorkers();
   render();
 });
-watch([current, view], render);
+// flush: "post" — the binary/text split below is a v-if/v-else, so the `host` element is
+// created or destroyed by that same content change. The default pre-flush timing would run
+// render() before Vue patches the DOM, handing it a stale or absent host element.
+watch(renderKey, render, { flush: "post" });
 onBeforeUnmount(dispose);
 </script>
 
@@ -86,7 +124,8 @@ onBeforeUnmount(dispose);
     <div v-if="current.changedSince" class="banner">
       ⚠ Changed since your review — un-checked automatically. Re-review and mark again.
     </div>
-    <div ref="host" class="editor" />
+    <div v-if="isBinary" class="binary-note">Binary file — diff cannot be displayed.</div>
+    <div v-else ref="host" class="editor" />
   </section>
 </template>
 
@@ -171,5 +210,13 @@ onBeforeUnmount(dispose);
   flex: 1;
   min-height: 0;
   min-width: 0;
+}
+.binary-note {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  font-size: 13px;
 }
 </style>
