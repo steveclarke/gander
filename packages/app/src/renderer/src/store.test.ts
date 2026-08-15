@@ -64,4 +64,24 @@ describe("store", () => {
     expect(store.selectedPath).toBe("b.rb");
     expect(store.view).not.toBeNull();
   });
+
+  it("busy is true only while a long-running action is in flight, and clears even on failure", async () => {
+    let resolveOpen!: () => void;
+    const store = createStore(fakeApi({
+      openPr: () => new Promise((resolve) => { resolveOpen = () => resolve(prView()); }),
+    }));
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    expect(store.busy).toBe(false);
+
+    const opening = store.openPr(1);
+    expect(store.busy).toBe(true);
+    resolveOpen();
+    await opening;
+    expect(store.busy).toBe(false);
+
+    const failing = createStore(fakeApi({ listPrs: async () => { throw new Error("boom"); } }));
+    await failing.selectRepo("acme/atlas");
+    expect(failing.busy).toBe(false); // guard() swallows the error, withBusy's finally still clears it
+  });
 });

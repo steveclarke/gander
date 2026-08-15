@@ -30,6 +30,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     view,
     selectedPath: view.files[0]!.path,
     error: null,
+    busy: false,
     async loadRepos() {},
     async addRepo() {},
     async selectRepo() {},

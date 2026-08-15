@@ -109,6 +109,7 @@ const progress = computed(() => props.store.progress());
     </div>
     <div class="spacer" />
     <div class="right">
+      <span v-if="store.busy" class="busy">Working…</span>
       <span class="progress"><b>{{ progress.done }}</b>/{{ progress.total }} reviewed</span>
     </div>
   </div>
@@ -183,6 +184,7 @@ const progress = computed(() => props.store.progress());
 .right { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
 .progress { font-size: 12px; color: var(--dim); background: #262b34; border-radius: 10px; padding: 2px 10px; white-space: nowrap; }
 .progress b { color: var(--green); }
+.busy { font-size: 12px; color: var(--faint); white-space: nowrap; }
 
 .sw-h { font-size: 10.5px; letter-spacing: .8px; color: var(--faint); font-weight: 700; padding: 10px 14px 4px; }
 .sw-empty { padding: 10px 14px; color: var(--faint); font-size: 12px; }

@@ -9,6 +9,8 @@ export interface Store {
   view: PrView | null;
   selectedPath: string | null;
   error: string | null;
+  /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
+  busy: boolean;
   loadRepos(): Promise<void>;
   addRepo(url: string): Promise<void>;
   selectRepo(repoId: string): Promise<void>;
@@ -28,6 +30,7 @@ export function createStore(api: GanderApi): Store {
     view: null,
     selectedPath: null,
     error: null,
+    busy: false,
 
     async loadRepos() {
       await guard(async () => {
@@ -35,31 +38,31 @@ export function createStore(api: GanderApi): Store {
       });
     },
     async addRepo(url: string) {
-      await guard(async () => {
+      await withBusy(() => guard(async () => {
         await api.addRepo(url);
         store.repos = await api.listRepos();
-      });
+      }));
     },
     async selectRepo(repoId: string) {
-      await guard(async () => {
+      await withBusy(() => guard(async () => {
         store.prs = await api.listPrs(repoId);
         store.currentRepoId = repoId;
         store.view = null;
         store.selectedPath = null;
-      });
+      }));
     },
     async openPr(prNumber: number) {
-      await guard(async () => {
+      await withBusy(() => guard(async () => {
         if (!store.currentRepoId) throw new Error("no repo selected");
         store.view = await api.openPr(store.currentRepoId, prNumber);
         store.selectedPath = store.view.files[0]?.path ?? null;
-      });
+      }));
     },
     async refresh() {
-      await guard(async () => {
+      await withBusy(() => guard(async () => {
         if (!store.currentRepoId || !store.view) return;
         store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
-      });
+      }));
     },
     async setChecked(path: string, checked: boolean) {
       await guard(async () => {
@@ -88,6 +91,15 @@ export function createStore(api: GanderApi): Store {
       store.error = null;
     } catch (err) {
       store.error = (err as Error).message;
+    }
+  }
+
+  async function withBusy(fn: () => Promise<void>): Promise<void> {
+    store.busy = true;
+    try {
+      await fn();
+    } finally {
+      store.busy = false;
     }
   }
 
