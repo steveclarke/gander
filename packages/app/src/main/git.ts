@@ -89,21 +89,40 @@ async function gitBuffer(cwd: string, args: string[], timeoutMs = DEFAULT_TIMEOU
 }
 
 export function createGitEngine(clonesRoot: string): GitEngine {
+  // A first clone of a large repo takes long enough that a second openPr can arrive before
+  // the first finishes. Without this, both would clone into the same destination and destroy
+  // each other's partial work. Concurrent callers for the same repo share one clone.
+  const inFlightClones = new Map<string, Promise<string>>();
+  let tmpCounter = 0;
+
+  async function clone(dir: string, url: string): Promise<string> {
+    mkdirSync(clonesRoot, { recursive: true });
+    // `git clone --bare` creates the destination before it finishes, so an
+    // interrupted clone would leave a broken repo that existsSync reports as
+    // good. Clone into a temp sibling and rename into place only on success,
+    // so `dir` only ever exists in a complete state. The suffix is unique per
+    // attempt so cleaning up one attempt can never touch another's live clone.
+    const tmpDir = `${dir}.tmp-${process.pid}-${tmpCounter++}`;
+    try {
+      await git(clonesRoot, ["clone", "--bare", url, tmpDir], CLONE_TIMEOUT_MS);
+      renameSync(tmpDir, dir);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+    return dir;
+  }
+
   return {
     async ensureClone(repoId, url) {
       const dir = join(clonesRoot, repoId.replace("/", "__") + ".git");
-      if (!existsSync(dir)) {
-        mkdirSync(clonesRoot, { recursive: true });
-        // `git clone --bare` creates the destination before it finishes, so an
-        // interrupted clone would leave a broken repo that existsSync reports as
-        // good. Clone into a temp sibling and rename into place only on success,
-        // so `dir` only ever exists in a complete state.
-        const tmpDir = `${dir}.tmp`;
-        rmSync(tmpDir, { recursive: true, force: true }); // clear any leftover from a previous failed attempt
-        await git(clonesRoot, ["clone", "--bare", url, tmpDir], CLONE_TIMEOUT_MS);
-        renameSync(tmpDir, dir);
-      }
-      return dir;
+      if (existsSync(dir)) return dir;
+
+      const pending = inFlightClones.get(dir);
+      if (pending) return pending;
+
+      const attempt = clone(dir, url).finally(() => inFlightClones.delete(dir));
+      inFlightClones.set(dir, attempt);
+      return attempt;
     },
 
     async fetchPr(cloneDir, prNumber, baseRef) {

@@ -49,6 +49,23 @@ describe("git engine", () => {
     expect(files.map((f) => f.path)).toContain("c.rb");
   });
 
+  it("concurrent ensureClone calls for the same repo share one clone", async () => {
+    // Overlapping openPr calls (a second click while the first clone is still running) used
+    // to clone into the same destination and delete each other's in-progress pack files.
+    const results = await Promise.all([
+      engine.ensureClone("acme/atlas", fixture.dir),
+      engine.ensureClone("acme/atlas", fixture.dir),
+      engine.ensureClone("acme/atlas", fixture.dir),
+    ]);
+    expect(new Set(results).size).toBe(1);
+
+    // Every caller gets a usable repo, and no temp directory survives.
+    const head = await engine.resolveRef(results[0]!, "refs/heads/main");
+    expect(head).toMatch(/^[0-9a-f]{40}$/);
+    const { readdirSync } = await import("node:fs");
+    expect(readdirSync(clonesRoot).filter((n) => n.includes(".tmp"))).toEqual([]);
+  });
+
   it("showFile returns content for existing paths and null for absent ones", async () => {
     const clone = await engine.ensureClone("acme/atlas", fixture.dir);
     await engine.fetchPr(clone, 1, "main");
