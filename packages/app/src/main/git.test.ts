@@ -53,9 +53,42 @@ describe("git engine", () => {
     const clone = await engine.ensureClone("acme/atlas", fixture.dir);
     await engine.fetchPr(clone, 1, "main");
     const head = await engine.resolveRef(clone, "refs/gander/pr/1");
-    expect(await engine.showFile(clone, head, "b.rb")).toBe("class B\nend\n");
+    const present = await engine.showFile(clone, head, "b.rb");
+    expect(present.content).toBe("class B\nend\n");
+    expect(present.binary).toBe(false);
+    expect(present.hash).not.toBeNull();
+
     const base = await engine.resolveRef(clone, "refs/gander/base/main");
-    expect(await engine.showFile(clone, base, "b.rb")).toBeNull();
+    const absent = await engine.showFile(clone, base, "b.rb");
+    expect(absent.content).toBeNull();
+    expect(absent.hash).toBeNull();
+    expect(absent.binary).toBe(false);
+  });
+
+  it("showFile detects a binary blob, withholds its content, but still hashes it", async () => {
+    // A real binary fixture: a NUL byte anywhere in the blob is git's own binary heuristic.
+    const { writeFileSync } = await import("node:fs");
+    await fixture.git(["checkout", "feature"]);
+    writeFileSync(join(fixture.dir, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0x01]));
+    await fixture.git(["add", "-A"]);
+    await fixture.git(["commit", "-m", "add binary fixture"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    const clone = await engine.ensureClone("acme/atlas", fixture.dir);
+    await engine.fetchPr(clone, 1, "main");
+    const head = await engine.resolveRef(clone, "refs/gander/pr/1");
+    const base = await engine.resolveRef(clone, "refs/gander/base/main");
+
+    const atHead = await engine.showFile(clone, head, "logo.png");
+    expect(atHead.content).toBeNull();
+    expect(atHead.binary).toBe(true);
+    expect(atHead.hash).not.toBeNull(); // real hash from raw bytes, distinguishable from "absent"
+
+    const atBase = await engine.showFile(clone, base, "logo.png");
+    expect(atBase.content).toBeNull();
+    expect(atBase.hash).toBeNull(); // absent at base — same content-shape as binary, different hash-shape
+    expect(atBase.binary).toBe(false);
   });
 
   it("showFile throws (does not swallow) when the revision itself is bad", async () => {
