@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@vue/language-core@3.3.10'
+  - vue-tsc@3.3.10
