@@ -95,3 +95,18 @@ carries a `stack` object per pull request.
 A shared `id` groups the members, and `position`/`size` order them. Worth showing
 in the Reviewing dropdown, and worth considering for questions — an agent working
 one branch of a stack currently sees nothing captured against its sibling.
+
+## Fixed three-column layout squeezes the diff — partly addressed
+
+With the tree, the diff, and the questions panel side by side, the diff — the pane
+the whole product exists to display — gets the least room.
+
+Partly addressed: panels resize by dragging, the questions panel docks either
+beside the diff or beneath it, and both choices persist. Docking questions to the
+bottom gives the diff the full window width.
+
+Still open: arbitrary rearrangement. Panels cannot be dragged into new positions,
+torn out, or stacked as tabs the way an editor's panels can. That needs a real
+layout engine rather than fixed slots — `dockview` and `golden-layout` are the
+established options, and either is a substantial piece of work rather than an
+adjustment to what exists.

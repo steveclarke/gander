@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { MessageSquare, Trash2, X } from "lucide-vue-next";
+import { MessageSquare, PanelBottom, PanelRight, Trash2, X } from "lucide-vue-next";
 import type { Store } from "../store.js";
 import { revealLine } from "../selection.js";
 
-const props = defineProps<{ store: Store }>();
-defineEmits<{ close: [] }>();
+const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
+defineEmits<{ close: []; dock: ["right" | "bottom"] }>();
 
 const questions = computed(() => props.store.view?.questions ?? []);
 
@@ -27,6 +27,14 @@ function goTo(q: { path: string | null; line: number | null }): void {
       <MessageSquare :size="15" />
       <span class="title">Questions</span>
       <span class="count">{{ questions.length }}</span>
+      <button
+        class="close dockbtn"
+        :aria-label="dock === 'right' ? 'Dock questions below the diff' : 'Dock questions beside the diff'"
+        :title="dock === 'right' ? 'Dock below the diff' : 'Dock beside the diff'"
+        @click="$emit('dock', dock === 'right' ? 'bottom' : 'right')"
+      >
+        <component :is="dock === 'right' ? PanelBottom : PanelRight" :size="15" />
+      </button>
       <button class="close" aria-label="Close questions" title="Close questions" @click="$emit('close')">
         <X :size="15" />
       </button>
@@ -62,6 +70,8 @@ function goTo(q: { path: string | null; line: number | null }): void {
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--dim); flex: none; }
 .title { font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
 .count { font: 11px var(--mono); background: #262b34; border-radius: 9px; padding: 1px 7px; }
+.dockbtn { margin-left: auto; }
+.dockbtn + .close { margin-left: 0; }
 .close { margin-left: auto; background: none; border: none; color: var(--faint); cursor: pointer; display: flex; }
 .close:hover { color: var(--fg); }
 

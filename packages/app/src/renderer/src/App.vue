@@ -8,6 +8,8 @@ import DiffPane from "./components/DiffPane.vue";
 import QuestionCapture from "./components/QuestionCapture.vue";
 import QuestionsDrawer from "./components/QuestionsDrawer.vue";
 import StatusBar from "./components/StatusBar.vue";
+import Splitter from "./components/Splitter.vue";
+import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
 import { X } from "lucide-vue-next";
 import "./theme.css";
 
@@ -21,6 +23,16 @@ onMounted(async () => {
 const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
+
+// v-model needs something assignable, and which dimension the questions splitter drags
+// depends on where the panel is docked.
+const questionsSize = computed({
+  get: () => (questionsDock.value === "right" ? questionsWidth.value : questionsHeight.value),
+  set: (value: number) => {
+    if (questionsDock.value === "right") questionsWidth.value = value;
+    else questionsHeight.value = value;
+  },
+});
 const questionCount = computed(() => store.view?.questions.length ?? 0);
 
 // Monaco takes keyboard input through a hidden textarea, so clicking a line to position
@@ -93,9 +105,38 @@ onBeforeUnmount(() => {
       </p>
       <p v-else-if="!store.view" class="empty">Pick a repository, then a pull request.</p>
       <template v-else>
-        <FileTree v-if="treeVisible" :store="store" class="tree" />
-        <DiffPane :store="store" class="diff" />
-        <QuestionsDrawer v-if="drawerOpen" :store="store" class="drawer" @close="drawerOpen = false" />
+        <FileTree v-if="treeVisible" :store="store" class="tree" :style="{ width: `${treeWidth}px` }" />
+        <Splitter
+          v-if="treeVisible"
+          v-model="treeWidth"
+          orientation="vertical"
+          :min="160"
+          :max="600"
+        />
+        <!-- Docked right, questions sit beside the diff; docked bottom, under both the
+             diff and the tree, which is what gives the diff the full window width. -->
+        <div class="workspace" :class="questionsDock">
+          <DiffPane :store="store" class="diff" />
+          <template v-if="drawerOpen">
+            <Splitter
+              v-model="questionsSize"
+              :orientation="questionsDock === 'right' ? 'vertical' : 'horizontal'"
+              :min="questionsDock === 'right' ? 220 : 120"
+              :max="700"
+              inverted
+            />
+            <QuestionsDrawer
+              :store="store"
+              class="drawer"
+              :dock="questionsDock"
+              @dock="questionsDock = $event"
+              :style="questionsDock === 'right'
+                ? { width: `${questionsWidth}px` }
+                : { height: `${questionsHeight}px` }"
+              @close="drawerOpen = false"
+            />
+          </template>
+        </div>
       </template>
     </main>
     <StatusBar :store="store" :tree-visible="treeVisible" @toggle-tree="treeVisible = !treeVisible" />
@@ -117,11 +158,14 @@ onBeforeUnmount(() => {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
-.body { display: grid; grid-template-columns: 264px 1fr; min-height: 0; }
-.body:has(.drawer) { grid-template-columns: 264px 1fr 320px; }
-/* Hiding the tree gives its width back to the diff rather than leaving a gap. */
-.body:not(:has(.tree)) { grid-template-columns: 1fr; }
-.body:not(:has(.tree)):has(.drawer) { grid-template-columns: 1fr 320px; }
-.tree { border-right: 1px solid var(--border); overflow: hidden auto; }
-.diff { min-width: 0; overflow: hidden; }
+/* Flex rather than grid: panel sizes are dragged, so they are inline styles on the panels
+   themselves and the container only has to decide direction. */
+.body { display: flex; min-height: 0; }
+.workspace { flex: 1; display: flex; min-width: 0; min-height: 0; }
+.workspace.right { flex-direction: row; }
+.workspace.bottom { flex-direction: column; }
+.drawer { flex: none; }
+.workspace.bottom .drawer { border-left: none; border-top: 1px solid var(--border); }
+.tree { flex: none; border-right: 1px solid var(--border); overflow: hidden auto; }
+.diff { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 </style>
