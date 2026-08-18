@@ -13,6 +13,8 @@ bin/dev
 
 `bin/setup` installs dependencies, allocates a port, and generates a local
 service token. `bin/dev` starts the review service and the app together.
+`bin/dev --hosted` starts only the app and uses the hosted connection saved in
+this checkout's settings; see `DEVSTACK.md` for the setup and precedence rules.
 
 Reviewing a pull request needs a GitHub token — `gh auth login` is enough.
 

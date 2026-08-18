@@ -39,13 +39,22 @@ To update: `git pull && docker compose up -d --build`.
 
 ## Point the app at it
 
-The app reads `GANDER_SERVICE_URL` and `GANDER_TOKEN` from the environment,
-falling back to `serviceUrl` and `serviceToken` in its config file. Either works;
-the environment wins.
+In the installed app, open **Settings → Connection**, enter the hosted URL and
+token, then test and save the connection.
+
+From a development checkout, use the checkout-local settings and start the app
+without its local service:
 
 ```bash
-GANDER_SERVICE_URL=https://gander.example.internal GANDER_TOKEN=… bin/dev
+bin/dev --hosted
 ```
+
+On the first run, enter and save the same connection under **Settings →
+Connection**. It is stored in the gitignored `.gander/config.json` with
+owner-only permissions. Hosted mode does not accept the URL or token on its
+command line or from exported variables, which keeps the pair out of shell
+history and makes their source unambiguous. Ordinary `bin/dev` continues to
+override the saved connection with its generated checkout-local values.
 
 ## Point an agent at it
 

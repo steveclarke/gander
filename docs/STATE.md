@@ -53,14 +53,15 @@ the dedicated MCP reply tool.
 Each opened pull request records its own branch, which is how the service maps an
 agent's working branch to a pull request without holding GitHub credentials.
 
+A development checkout can run only its Electron app against the hosted service
+with `bin/dev --hosted`; ordinary `bin/dev` keeps its isolated local service for
+development.
+
 ## Still open
 
 - Local branch/worktree viewer (stateless, no review state)
 - Packaging: signing, notarization, and the Homebrew cask. Gander runs only from
   a development checkout.
-- The service still runs as a local development process. The design puts it on
-  one host on the network, which is what makes a review readable from any
-  machine and reachable by agents with no GUI running.
 
 Interface work and the agent reply channel are tracked as GitHub issues.
 

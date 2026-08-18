@@ -1,7 +1,8 @@
 # Gander dev stack
 
 Two processes — the review service and the Electron app — supervised by
-process-compose, with ports allocated by outport.
+process-compose, with ports allocated by outport. Hosted mode runs only the app
+while preserving the checkout's process and config isolation.
 
 ## Commands
 
@@ -10,6 +11,7 @@ process-compose, with ports allocated by outport.
 | First run after a clone | `bin/setup` |
 | Start (TUI) | `bin/dev` |
 | Start (headless, for agents) | `bin/dev -D` |
+| Start app against hosted service | `bin/dev --hosted` (add `-D` for headless) |
 | Stop | `bin/dev stop` |
 | Status | `bin/dev status` (add `--json` for machine-readable) |
 | Logs | `bin/dev logs service` |
@@ -57,6 +59,37 @@ checkout.
 
 `service` is probed with `curl -sf $GANDER_SERVICE_URL/healthz`. `app` is set to
 `restart: "no"` — closing the Electron window is a quit, not a crash.
+
+## Reviewing against a hosted service
+
+Use the checkout-local service while developing service behavior. When this
+checkout is being used to review other work, start only its Electron app:
+
+```bash
+bin/dev --hosted
+```
+
+On the first hosted run, open **Settings → Connection**, enter the hosted URL
+and token, then test and save the connection. Gander stores them in this
+worktree's gitignored `.gander/config.json`; saving applies owner-only
+permissions. Keep the token out of shell history and committed files. Future
+hosted runs reuse the saved connection. `bin/dev --hosted -D` provides the same
+mode without the process-compose TUI.
+
+The mode is deliberately config-driven. `bin/dev --hosted` loads `.pc_env` only
+for this worktree's process-compose and app sockets, removes
+`GANDER_SERVICE_URL` and `GANDER_TOKEN` from the child environment, disables
+process-compose's `.env` loading, and starts `app` without its `service`
+dependency. The existing connection-time resolver therefore uses
+`.gander/config.json`. Caller-exported service values do not override it.
+
+Ordinary `bin/dev` is unchanged: it starts both processes and the generated
+values in `.pc_env` override the saved connection at connection time. This
+keeps local development, worktrees, and test fixtures isolated. `bin/dev stop`,
+`status`, and `bin/gander` continue to use the same per-worktree sockets in
+either mode. `bin/mcp` remains a tool for the checkout-local service; register
+agents directly against the hosted MCP endpoint as described in
+`docs/deploy.md`.
 
 ## Where state lives
 
@@ -183,6 +216,8 @@ re-reviewing the file in the app.
 
 ## Config precedence
 
-`GANDER_SERVICE_URL` and `GANDER_TOKEN` from `.env` override the URL and token in
-`.gander/config.json`. The override is applied at connection time, not at load
-time, so registering a repo cannot write an allocated port back into the file.
+For ordinary `bin/dev`, `GANDER_SERVICE_URL` and `GANDER_TOKEN` generated in
+`.pc_env` override the URL and token in `.gander/config.json`. The override is
+applied at connection time, not at load time, so registering a repo cannot
+write an allocated port back into the file. Hosted mode deliberately removes
+both variables so the saved connection wins as a complete URL-and-token pair.

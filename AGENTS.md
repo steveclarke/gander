@@ -26,6 +26,7 @@ in code, comments, commits, or issues.
 |------|---------|
 | First run after a clone | `bin/setup` |
 | Start service + app | `bin/dev` (`-D` headless, `stop`, `status`, `logs service`) |
+| Start app against hosted service | `bin/dev --hosted` (add `-D` for headless) |
 | Unit tests | `pnpm test` |
 | One test file | `pnpm vitest run packages/service/src/storage.test.ts` |
 | One test by name | `pnpm vitest run -t "un-check retains the snapshot"` |
