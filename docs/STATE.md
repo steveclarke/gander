@@ -53,12 +53,17 @@ agent's working branch to a pull request without holding GitHub credentials.
 ## Still open
 
 - Local branch/worktree viewer (stateless, no review state)
-- End-to-end tests. There is still no harness driving the real Electron window;
-  every layer below it is tested. The clone race was invisible to the whole suite
-  because no test ever clicked twice.
-- Packaging: signing, notarization, and the Homebrew cask.
+- Packaging: signing, notarization, and the Homebrew cask. Gander runs only from
+  a development checkout.
+- The service still runs as a local development process. The design puts it on
+  one host on the network, which is what makes a review readable from any
+  machine and reachable by agents with no GUI running.
 
-## Open decision
+Interface work and the agent reply channel are tracked as GitHub issues.
 
-Whether M2 opens with the E2E harness (`wdio-electron-service` driving the
-packaged app) or with features.
+## Testing
+
+`pnpm test` runs the unit suites against real git repositories and real service
+instances. `pnpm test:e2e` drives the built Electron window through WebDriverIO —
+register a repository, open a pull request, tick a file, restart, and confirm the
+tick survived, plus the clone race that reached a person before it reached a test.

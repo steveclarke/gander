@@ -14,6 +14,8 @@ process-compose, with ports allocated by outport.
 | Status | `bin/dev status` (add `--json` for machine-readable) |
 | Logs | `bin/dev logs service` |
 | Restart one process | `bin/dev restart service` |
+| Check the live MCP endpoint | `bin/mcp check` |
+| Debug the live MCP endpoint | `bin/mcp tui` or `bin/mcp inspect` |
 | End-to-end tests | `pnpm test:e2e` |
 
 `pnpm test:e2e` builds the Electron app, starts an isolated service and local
@@ -102,9 +104,40 @@ commands work without it.
 `outport up` gives each initialized worktree its own port. `PC_SOCKET_PATH`
 gives it its own process-compose control socket, so `bin/dev status` in one
 checkout never reaches another stack. `.gander/` keeps the registered repos and
-SQLite review state local to that worktree.
+SQLite review state local to that worktree. Outport also allocates the two
+ports used by MCP Inspector's web client and MCP Apps sandbox, so interactive
+inspectors can run in more than one worktree at once.
 
-## Registering the MCP endpoint with an agent
+## Testing and debugging MCP
+
+`bin/mcp` runs the official MCP Inspector against the service for the current
+worktree. It reads the endpoint, bearer token, and Inspector ports from the
+local `.env`; it does not depend on an MCP server registered in Claude or
+Codex.
+
+```bash
+bin/mcp check
+bin/mcp tools
+bin/mcp call get_review_questions repo=steveclarke/gander branch=master
+bin/mcp call get_review_questions --json '{"repo":"steveclarke/gander","prNumber":4}'
+bin/mcp tui
+bin/mcp inspect
+```
+
+`check` is the non-interactive smoke test: it verifies service health, bearer
+authentication, MCP negotiation, and the core tool contract. `tools` and
+`call` expose Inspector's CLI for manual checks. `tui` opens its terminal UI.
+`inspect` opens the web debugger using this worktree's Outport allocations.
+The Inspector package is an exact development dependency, while
+`GANDER_MCP_INSPECTOR_PACKAGE` can select another package version through
+`pnpm dlx` for deliberate compatibility testing.
+
+## Registering the MCP endpoint with an agent (optional)
+
+Agents working inside a Gander development worktree should use `bin/mcp` as
+documented above. It discovers this worktree's connection without changing
+global agent configuration. Direct MCP registration remains available for an
+agent working in another repository that needs to reach this Gander instance.
 
 Agents read the reviewer's questions from the same service, at `/mcp`, with the
 same bearer token. Port and token are allocated per checkout, so the command is
