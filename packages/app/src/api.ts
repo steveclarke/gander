@@ -1,7 +1,19 @@
 import type { NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
+import type { ThemeId } from "./themes.js";
+
+export type WindowStyle = "native-titlebar" | "integrated-titlebar";
+export const WINDOW_STYLE_ARGUMENT = "--gander-window-style=";
+export const COLOR_THEME_ARGUMENT = "--gander-color-theme=";
+
+export interface InitialWindowState {
+  windowStyle: WindowStyle;
+  colorTheme: ThemeId;
+}
 
 export interface GanderApi {
+  /** Fixed by the main process when the window is created; renderer code cannot change it. */
+  initialWindowState: InitialWindowState;
   listRepos(): Promise<RepoEntry[]>;
   addRepo(url: string): Promise<RepoEntry>;
   listPrs(repoId: string): Promise<PrSummary[]>;

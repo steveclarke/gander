@@ -14,6 +14,10 @@ const prView = (checkedPaths: string[] = []): PrView => ({
 
 function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
   return {
+    initialWindowState: {
+      windowStyle: "native-titlebar",
+      colorTheme: "Catppuccin Mocha",
+    },
     listRepos: async () => [{ repoId: "acme/atlas", url: "u" }],
     addRepo: async (url) => ({ repoId: "acme/new", url }),
     listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" }],

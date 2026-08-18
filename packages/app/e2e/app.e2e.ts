@@ -77,6 +77,39 @@ describe("Gander end to end", () => {
   it("opens the built application with the Gander title", async () => {
     await expect(browser).toHaveTitle("Gander");
     await expect($(".empty")).toHaveText("Pick a repository, then a pull request.");
+
+    const nativeWindow = await browser.electron.execute((electron) => {
+      const window = electron.BrowserWindow.getAllWindows()[0];
+      if (!window) throw new Error("Gander BrowserWindow is missing");
+      return {
+        background: window.getBackgroundColor().toLowerCase(),
+        closable: window.isClosable(),
+        minimizable: window.isMinimizable(),
+        maximizable: window.isMaximizable(),
+        fullscreenable: window.isFullScreenable(),
+      };
+    });
+    expect(nativeWindow).toMatchObject({
+      background: expect.stringContaining("#1e1e2e"),
+      closable: true,
+      minimizable: true,
+      maximizable: true,
+      fullscreenable: true,
+    });
+    expect(await browser.execute(() => document.documentElement.dataset.colorTheme)).toBe("Catppuccin Mocha");
+
+    if (process.platform === "darwin") {
+      await expect($(".topbar")).toHaveElementClass(expect.stringContaining("integrated-titlebar"));
+      expect(await browser.execute(() => {
+        const region = (selector: string): string =>
+          getComputedStyle(document.querySelector<HTMLElement>(selector)!).getPropertyValue("-webkit-app-region");
+        return {
+          topbar: region(".topbar"),
+          repository: region(".seg-repo"),
+          settings: region("button[aria-label='Editor settings']"),
+        };
+      })).toEqual({ topbar: "drag", repository: "no-drag", settings: "no-drag" });
+    }
   });
 
   it("changes workbench and editor settings live and keeps them after restart", async () => {
@@ -96,6 +129,12 @@ describe("Gander end to end", () => {
       background: document.documentElement.style.getPropertyValue("--workbench-background"),
       status: document.querySelector(".settings-pane [role='status']")?.textContent,
     }))).toEqual({ selected: "Gander Dark", theme: "Gander Dark", background: "#16181d", status: "Saved automatically" });
+    if (process.platform === "darwin") {
+      const nativeBackground = await browser.electron.execute((electron) =>
+        electron.BrowserWindow.getAllWindows()[0]?.getBackgroundColor().toLowerCase(),
+      );
+      expect(nativeBackground).toContain("#16181d");
+    }
     await $("//button[contains(@class, 'category') and normalize-space()='Editor']").click();
     const family = await $("input[name='editor.fontFamily']");
     const size = await $("input[name='editor.fontSize']");
@@ -138,6 +177,11 @@ describe("Gander end to end", () => {
 
     await $("button[aria-label='Editor settings']").click();
     await expect($("select[name='workbench.colorTheme']")).toHaveValue("Gander Dark");
+    expect(await browser.execute(() => document.documentElement.dataset.colorTheme)).toBe("Gander Dark");
+    expect(await browser.execute(() =>
+      (window as unknown as { gander: { initialWindowState: { colorTheme: string } } })
+        .gander.initialWindowState.colorTheme,
+    )).toBe("Gander Dark");
     await expect($("select[name='workbench.iconTheme']")).toHaveValue("catppuccin-mocha");
     await $("//button[contains(@class, 'category') and normalize-space()='Editor']").click();
     await expect($("input[name='editor.fontFamily']")).toHaveValue("'Courier New', monospace");

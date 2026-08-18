@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { createGanderApi } from "./api.js";
+import { createGanderApi, initialWindowStateFromArguments } from "./api.js";
 
 contextBridge.exposeInMainWorld("gander", createGanderApi(
   (channel, ...args) => ipcRenderer.invoke(channel, ...args),
@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld("gander", createGanderApi(
     ipcRenderer.on(channel, handler);
     return () => ipcRenderer.removeListener(channel, handler);
   },
+  initialWindowStateFromArguments(process.argv),
 ));

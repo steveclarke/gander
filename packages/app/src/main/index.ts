@@ -11,7 +11,7 @@ import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
 import { registerSettingsIpc } from "./settings-ipc.js";
 import { buildMenuTemplate } from "./menu.js";
-import { themeFor } from "../themes.js";
+import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.js";
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
@@ -56,7 +56,9 @@ async function bootstrap(): Promise<GanderConfig> {
   ipcMain.handle("gander:addReviewerReply", async (_e, repoId: string, n: number, id: number, text: string) => reviewer.addReviewerReply(repoId, n, id, text));
   ipcMain.handle("gander:deleteQuestion", async (_e, repoId: string, n: number, id: number) => reviewer.deleteQuestion(repoId, n, id));
   ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean) => reviewer.setCheckedMany(repoId, n, paths, checked));
-  registerSettingsIpc(ipcMain, cfg);
+  registerSettingsIpc(ipcMain, cfg, saveConfig, (settings) => {
+    updateNativeWindowTheme(process.platform, BrowserWindow.getAllWindows(), settings.workbench.colorTheme);
+  });
 
   return cfg;
 }
@@ -89,19 +91,25 @@ function installMenu(cfg: GanderConfig): void {
 const appIcon = nativeImage.createFromPath(join(import.meta.dirname, "../../resources/icon.png"));
 
 function createWindow(cfg: GanderConfig): void {
+  const appearance = windowAppearance(process.platform, cfg.settings.workbench.colorTheme);
   const win = new BrowserWindow({
     width: 1360, height: 860,
-    // Match the persisted workbench while the renderer starts, so theme changes do not
-    // flash the bundled default on the next launch.
-    backgroundColor: themeFor(cfg.settings.workbench.colorTheme).workbench.background,
+    ...appearance.windowOptions,
     // Ignored on macOS, where the dock icon comes from the bundle — app.dock.setIcon covers that.
     icon: appIcon,
     // sandbox: false — our preload output is an ES module (index.mjs, from "type": "module");
     // Electron's default sandboxed preload context cannot load ESM, so window.gander would
     // silently never be defined. contextIsolation stays at its secure default and
     // nodeIntegration is not enabled.
-    webPreferences: { preload: join(import.meta.dirname, "../preload/index.mjs"), sandbox: false },
+    webPreferences: {
+      preload: join(import.meta.dirname, "../preload/index.mjs"),
+      sandbox: false,
+      additionalArguments: appearance.preloadArguments,
+    },
   });
+  // On macOS the web content paints beneath the traffic lights. Reveal only the themed
+  // first frame so the system never exposes its default light backing surface.
+  if (process.platform === "darwin") win.once("ready-to-show", () => win.show());
   // The renderer's whole input is arbitrary repo content — Monaco link-detects URLs inside
   // reviewed files — so a window this preload is attached to must never be allowed to
   // navigate away or spawn a same-preload child window. Electron would otherwise carry the

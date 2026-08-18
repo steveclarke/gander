@@ -1,7 +1,7 @@
 import { reactive } from "vue";
 import * as monaco from "monaco-editor";
 import type { GanderApi } from "./api.js";
-import { DEFAULT_APP_SETTINGS, parseAppSettings, type AppSettings } from "../../settings.js";
+import { DEFAULT_APP_SETTINGS, parseAppSettings, type AppSettings, type ThemeId } from "../../settings.js";
 import { applyAppTheme } from "./theme-runtime.js";
 
 export interface EditorSettingsStore {
@@ -18,9 +18,16 @@ function applyCodeSurfaceSettings(settings: AppSettings): void {
   applyAppTheme(settings.workbench.colorTheme, document.documentElement, monaco.editor);
 }
 
-export function createEditorSettingsStore(api: Pick<GanderApi, "getSettings" | "updateSettings">): EditorSettingsStore {
+export function createEditorSettingsStore(
+  api: Pick<GanderApi, "getSettings" | "updateSettings">,
+  initialColorTheme: ThemeId = DEFAULT_APP_SETTINGS.workbench.colorTheme,
+): EditorSettingsStore {
+  const initialSettings: AppSettings = {
+    ...DEFAULT_APP_SETTINGS,
+    workbench: { ...DEFAULT_APP_SETTINGS.workbench, colorTheme: initialColorTheme },
+  };
   const store: EditorSettingsStore = reactive({
-    settings: DEFAULT_APP_SETTINGS,
+    settings: initialSettings,
     busy: false,
     error: null,
 
