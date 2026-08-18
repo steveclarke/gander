@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Store } from "../store.js";
 import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw, Settings } from "lucide-vue-next";
 import SwitcherDropdown from "./SwitcherDropdown.vue";
+import RepositoryPicker from "./RepositoryPicker.vue";
 
 const props = defineProps<{
   store: Store;
@@ -14,13 +15,11 @@ const emit = defineEmits<{ toggleQuestions: []; toggleSettings: []; addQuestion:
 
 const repoOpen = ref(false);
 const reviewOpen = ref(false);
-const addingRepo = ref(false);
-const newRepoUrl = ref("");
+const repositoryPickerOpen = ref(false);
 
 function toggleRepo() {
   reviewOpen.value = false;
   repoOpen.value = !repoOpen.value;
-  if (!repoOpen.value) addingRepo.value = false;
 }
 
 function toggleReview() {
@@ -36,7 +35,6 @@ function toggleSettings(): void {
 function closeAll() {
   repoOpen.value = false;
   reviewOpen.value = false;
-  addingRepo.value = false;
 }
 
 async function pickRepo(repoId: string) {
@@ -44,12 +42,9 @@ async function pickRepo(repoId: string) {
   closeAll();
 }
 
-async function submitAddRepo() {
-  const url = newRepoUrl.value.trim();
-  if (!url) return;
-  await props.store.addRepo(url);
-  newRepoUrl.value = "";
-  addingRepo.value = false;
+function openRepositoryPicker(): void {
+  closeAll();
+  repositoryPickerOpen.value = true;
 }
 
 async function pickPr(prNumber: number) {
@@ -191,19 +186,15 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
       <span v-if="repoOwner(repo.repoId)" class="meta">{{ repoOwner(repo.repoId) }}</span>
     </div>
     <div
-      v-if="!addingRepo"
       class="sw-item"
       role="button"
       tabindex="0"
-      @click.stop="addingRepo = true"
-      @keydown.enter.space.prevent="addingRepo = true"
+      @click.stop="openRepositoryPicker"
+      @keydown.enter.space.prevent="openRepositoryPicker"
     >
       <Plus class="ic" :size="16" />
       <span class="nm add">Add repository…</span>
     </div>
-    <form v-else class="add-row" @submit.prevent="submitAddRepo">
-      <input v-model="newRepoUrl" placeholder="https://github.com/owner/repo" autofocus @click.stop />
-    </form>
   </SwitcherDropdown>
 
   <SwitcherDropdown :open="reviewOpen" :left="190 + titleBarInset" :width="460" @close="closeAll">
@@ -223,6 +214,8 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
       <span class="nm">{{ pr.title }}</span>
     </div>
   </SwitcherDropdown>
+
+  <RepositoryPicker :open="repositoryPickerOpen" :store="store" @close="repositoryPickerOpen = false" />
 
 </template>
 
@@ -302,7 +295,4 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
 .dot.draft { background: var(--warning); }
 .dot.open { background: var(--success); }
 
-.add-row { padding: 10px 12px; }
-.add-row input { width: 100%; background: var(--secondary-panel-background); border: 1px solid var(--workbench-border); border-radius: 7px; color: var(--workbench-foreground); font-size: 13px; padding: 7px 10px; outline: none; }
-.add-row input:focus { border-color: var(--accent); }
 </style>

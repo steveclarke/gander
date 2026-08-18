@@ -10,6 +10,12 @@ export const DEVELOPMENT_ARGUMENT = "--gander-development";
 export const WORKTREE_LABEL_ARGUMENT = "--gander-worktree-label=";
 export type GithubTokenCheck = { ok: true; login: string } | { ok: false; reason: string };
 
+export interface GithubRepository {
+  repoId: string;
+  url: string;
+  private: boolean;
+}
+
 export interface InitialWindowState {
   windowStyle: WindowStyle;
   colorTheme: ThemeId;
@@ -23,6 +29,8 @@ export interface GanderApi {
   /** Fixed by the main process when the window is created; renderer code cannot change it. */
   initialWindowState: InitialWindowState;
   listRepos(): Promise<RepoEntry[]>;
+  /** All non-archived repositories visible to the current GitHub credential. */
+  listGithubRepos(): Promise<GithubRepository[]>;
   addRepo(url: string): Promise<RepoEntry>;
   listPrs(repoId: string): Promise<PrSummary[]>;
   lastReview(): Promise<{ repoId: string; prNumber: number } | null>;

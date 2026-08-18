@@ -26,6 +26,9 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
   const calls: Calls = { setChecked: [], setCheckedMany: [] };
   const store: Store = reactive({
     repos: [],
+    githubRepos: [],
+    githubReposBusy: false,
+    githubReposError: null,
     prs: [],
     currentRepoId: "acme/atlas",
     view,
@@ -35,6 +38,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     lastFetchAt: null,
     busy: false,
     async loadRepos() {},
+    async loadGithubRepos() {},
     async restoreLastReview() {},
     async checkService() {},
     dismissError() {},

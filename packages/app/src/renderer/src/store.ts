@@ -1,9 +1,12 @@
 import { reactive } from "vue";
 import type { OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
-import type { GanderApi } from "./api.js";
+import type { GanderApi, GithubRepository } from "./api.js";
 
 export interface Store {
   repos: RepoEntry[];
+  githubRepos: GithubRepository[];
+  githubReposBusy: boolean;
+  githubReposError: string | null;
   prs: PrSummary[];
   currentRepoId: string | null;
   view: PrView | null;
@@ -16,6 +19,7 @@ export interface Store {
   /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
   busy: boolean;
   loadRepos(): Promise<void>;
+  loadGithubRepos(): Promise<void>;
   checkService(): Promise<void>;
   dismissError(): void;
   /** Reopen the pull request that was open when the app last closed. */
@@ -41,6 +45,9 @@ export interface Store {
 export function createStore(api: GanderApi): Store {
   const store: Store = reactive({
     repos: [],
+    githubRepos: [],
+    githubReposBusy: false,
+    githubReposError: null,
     prs: [],
     currentRepoId: null,
     view: null,
@@ -54,6 +61,17 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         store.repos = await api.listRepos();
       });
+    },
+    async loadGithubRepos() {
+      store.githubReposBusy = true;
+      store.githubReposError = null;
+      try {
+        store.githubRepos = await api.listGithubRepos();
+      } catch (err) {
+        store.githubReposError = (err as Error).message;
+      } finally {
+        store.githubReposBusy = false;
+      }
     },
     async checkService() {
       store.serviceReachable = await api.serviceHealthy();
@@ -75,8 +93,12 @@ export function createStore(api: GanderApi): Store {
     },
     async addRepo(url: string) {
       await userAction(() => withBusy(() => guard(async () => {
-        await api.addRepo(url);
+        const entry = await api.addRepo(url);
         store.repos = await api.listRepos();
+        store.prs = await api.listPrs(entry.repoId);
+        store.currentRepoId = entry.repoId;
+        store.view = null;
+        store.selectedPath = null;
       })));
     },
     async openTarget(target: OpenTarget) {
