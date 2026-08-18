@@ -1,6 +1,8 @@
 import { reactive } from "vue";
+import * as monaco from "monaco-editor";
 import type { GanderApi } from "./api.js";
-import { DEFAULT_APP_SETTINGS, type AppSettings } from "../../settings.js";
+import { DEFAULT_APP_SETTINGS, parseAppSettings, type AppSettings } from "../../settings.js";
+import { applyAppTheme } from "./theme-runtime.js";
 
 export interface EditorSettingsStore {
   settings: AppSettings;
@@ -13,6 +15,7 @@ export interface EditorSettingsStore {
 function applyCodeSurfaceSettings(settings: AppSettings): void {
   document.documentElement.style.setProperty("--editor-font-family", settings.editor.fontFamily);
   document.documentElement.style.setProperty("--editor-font-size", `${settings.editor.fontSize}px`);
+  applyAppTheme(settings.workbench.colorTheme, document.documentElement, monaco.editor);
 }
 
 export function createEditorSettingsStore(api: Pick<GanderApi, "getSettings" | "updateSettings">): EditorSettingsStore {
@@ -34,7 +37,9 @@ export function createEditorSettingsStore(api: Pick<GanderApi, "getSettings" | "
       store.busy = true;
       store.error = null;
       try {
-        store.settings = await api.updateSettings(settings);
+        // Vue makes nested settings objects reactive. Normalize through the shared
+        // schema so Electron receives plain cloneable data from every settings view.
+        store.settings = await api.updateSettings(parseAppSettings(settings));
         applyCodeSurfaceSettings(store.settings);
         return true;
       } catch (error) {

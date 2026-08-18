@@ -32,15 +32,31 @@ describe("config", () => {
   it("persists editor settings across save and load", () => {
     saveConfig({
       serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
-      settings: { editor: { fontFamily: "'Fira Code', monospace", fontSize: 18.5 } },
+      settings: {
+        editor: { fontFamily: "'Fira Code', monospace", fontSize: 18.5 },
+        workbench: { colorTheme: "Gander Dark" },
+      },
     }, cfgPath);
     expect(loadConfig(cfgPath).settings.editor).toEqual({ fontFamily: "'Fira Code', monospace", fontSize: 18.5 });
+    expect(loadConfig(cfgPath).settings.workbench.colorTheme).toBe("Gander Dark");
+  });
+
+  it("adds the workbench default without discarding an older editor configuration", () => {
+    writeFileSync(cfgPath, JSON.stringify({
+      serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
+      settings: { editor: { fontFamily: "Consolas, monospace", fontSize: 19 } },
+    }));
+    expect(loadConfig(cfgPath).settings).toEqual({
+      editor: { fontFamily: "Consolas, monospace", fontSize: 19 },
+      workbench: { colorTheme: "Catppuccin Mocha" },
+    });
   });
 
   it.each([
     { editor: { fontFamily: "", fontSize: 16 } },
     { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY, fontSize: 1000 } },
     { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY } },
+    { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY, fontSize: 16 }, workbench: { colorTheme: "Missing Theme" } },
   ])("falls back safely when persisted editor settings are invalid", (settings) => {
     writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://h:8390", serviceToken: "t", repos: [], settings }));
     expect(loadConfig(cfgPath).settings).toEqual(DEFAULT_APP_SETTINGS);

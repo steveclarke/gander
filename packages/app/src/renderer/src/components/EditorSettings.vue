@@ -132,27 +132,27 @@ onBeforeUnmount(() => {
 <style scoped>
 .editor-settings { height: 100%; overflow: auto; padding: 28px; }
 .heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; max-width: 820px; margin-bottom: 30px; }
-.heading h2 { color: var(--text); font-size: 20px; line-height: 1.25; }
-.heading p, .setting > p { color: var(--faint); font-size: 12px; }
+.heading h2 { color: var(--workbench-foreground); font-size: 20px; line-height: 1.25; }
+.heading p, .setting > p { color: var(--faint-foreground); font-size: 12px; }
 .reset { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; white-space: nowrap; }
 .reset:disabled { cursor: default; opacity: .55; }
 .setting { max-width: 820px; margin-bottom: 26px; }
-.setting label, .setting-label { display: block; color: var(--text); font-size: 13px; font-weight: 650; margin-bottom: 2px; }
-.setting code { color: var(--dim); font: 11.5px var(--mono); }
+.setting label, .setting-label { display: block; color: var(--workbench-foreground); font-size: 13px; font-weight: 650; margin-bottom: 2px; }
+.setting code { color: var(--muted-foreground); font: 11.5px var(--mono); }
 .setting input {
   width: 100%; min-width: 0; margin-top: 8px; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 6px;
-  outline: none; background: #14161b; color: var(--text); font: 13px/1.4 var(--mono);
+  border: 1px solid var(--workbench-border); border-radius: 6px;
+  outline: none; background: var(--input-background); color: var(--workbench-foreground); font: 13px/1.4 var(--mono);
 }
-.setting input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(77,159,236,.16); }
+.setting input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
 .setting input:disabled { opacity: .65; }
-.size-row { display: flex; align-items: center; gap: 8px; width: 130px; color: var(--faint); }
+.size-row { display: flex; align-items: center; gap: 8px; width: 130px; color: var(--faint-foreground); }
 .preview-setting { margin-top: 34px; }
 .preview {
   min-width: 0; overflow: hidden; margin-top: 8px; padding: 14px;
-  border: 1px solid var(--border); border-radius: 6px; background: #14161b;
-  color: var(--text); line-height: 1.5; white-space: nowrap;
+  border: 1px solid var(--workbench-border); border-radius: 6px; background: var(--input-background);
+  color: var(--workbench-foreground); line-height: 1.5; white-space: nowrap;
 }
 .preview code { color: inherit; font: inherit; }
-.error { max-width: 820px; color: var(--red); font-size: 12px; overflow-wrap: anywhere; }
+.error { max-width: 820px; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
 </style>

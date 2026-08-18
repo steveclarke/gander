@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
-import { Braces, Settings2, SlidersHorizontal, Type, X } from "lucide-vue-next";
+import { Braces, Palette, Settings2, SlidersHorizontal, Type, X } from "lucide-vue-next";
 import type { EditorSettingsStore } from "../editor-settings-store.js";
 import { settingsFromJson, settingsToJson, type AppSettings } from "../../../settings.js";
 import EditorSettings from "./EditorSettings.vue";
 import SettingsJsonEditor from "./SettingsJsonEditor.vue";
+import WorkbenchSettings from "./WorkbenchSettings.vue";
 
 const props = defineProps<{ store: EditorSettingsStore }>();
 const emit = defineEmits<{ close: [] }>();
 
 const mode = shallowRef<"ui" | "json">("ui");
+const category = shallowRef<"workbench" | "editor">("workbench");
 const saveState = shallowRef<"idle" | "saving" | "saved" | "error">("idle");
 const jsonSource = shallowRef(settingsToJson(props.store.settings));
 const jsonError = shallowRef<string | null>(null);
@@ -124,13 +126,29 @@ onBeforeUnmount(() => {
     <div class="settings-body">
       <nav class="categories" aria-label="Settings categories">
         <p>Categories</p>
-        <button class="category active" aria-current="page">
+        <button
+          class="category"
+          :class="{ active: category === 'workbench' }"
+          :aria-current="category === 'workbench' ? 'page' : undefined"
+          @click="category = 'workbench'"
+        >
+          <Palette :size="15" />Workbench
+        </button>
+        <button
+          class="category"
+          :class="{ active: category === 'editor' }"
+          :aria-current="category === 'editor' ? 'page' : undefined"
+          @click="category = 'editor'"
+        >
           <Type :size="15" />Editor
         </button>
       </nav>
 
       <div class="content">
-        <EditorSettings v-if="mode === 'ui'" :store="store" @saved="onUiSaved" />
+        <template v-if="mode === 'ui'">
+          <WorkbenchSettings v-if="category === 'workbench'" :store="store" @saved="onUiSaved" />
+          <EditorSettings v-else :store="store" @saved="onUiSaved" />
+        </template>
         <div v-else class="json-view">
           <div class="json-heading">
             <div>
@@ -155,36 +173,36 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.settings-pane { flex: 1; display: grid; grid-template-rows: auto 1fr 28px; min-width: 0; min-height: 0; background: var(--bg); }
-.titlebar { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.settings-pane { flex: 1; display: grid; grid-template-rows: auto 1fr 28px; min-width: 0; min-height: 0; background: var(--workbench-background); }
+.titlebar { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; padding: 10px 18px; border-bottom: 1px solid var(--workbench-border); background: var(--panel-background); }
 .title { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.title > svg { color: var(--dim); flex: none; }
-.title h1 { color: var(--text); font-size: 16px; line-height: 1.25; }
-.title p, .json-heading p { color: var(--faint); font-size: 11.5px; }
+.title > svg { color: var(--muted-foreground); flex: none; }
+.title h1 { color: var(--workbench-foreground); font-size: 16px; line-height: 1.25; }
+.title p, .json-heading p { color: var(--faint-foreground); font-size: 11.5px; }
 .title-actions, .view-switcher { display: flex; align-items: center; gap: 4px; }
-.view-switcher { padding: 2px; border-radius: 7px; background: #14161b; }
+.view-switcher { padding: 2px; border-radius: 7px; background: var(--input-background); }
 .view-switcher button, .close {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   height: 28px; border: 0; border-radius: 5px; background: transparent;
-  color: var(--dim); cursor: pointer; font: inherit; font-size: 12px;
+  color: var(--muted-foreground); cursor: pointer; font: inherit; font-size: 12px;
 }
 .view-switcher button { padding: 0 10px; }
-.view-switcher button.active { background: #2c3340; color: var(--text); }
+.view-switcher button.active { background: var(--elevated-background); color: var(--workbench-foreground); }
 .view-switcher button:focus-visible, .close:focus-visible, .category:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .close { width: 28px; }
-.close:hover { background: rgba(255,255,255,.06); color: var(--text); }
+.close:hover { background: var(--hover-background); color: var(--workbench-foreground); }
 .settings-body { display: grid; grid-template-columns: 190px 1fr; min-width: 0; min-height: 0; }
-.categories { padding: 18px 10px; border-right: 1px solid var(--border); background: var(--panel2); }
-.categories > p { padding: 0 10px 8px; color: var(--faint); font-size: 10.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
-.category { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: default; font: inherit; text-align: left; }
-.category.active { background: rgba(77,159,236,.12); color: var(--text); }
+.categories { padding: 18px 10px; border-right: 1px solid var(--workbench-border); background: var(--secondary-panel-background); }
+.categories > p { padding: 0 10px 8px; color: var(--faint-foreground); font-size: 10.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
+.category { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--muted-foreground); cursor: pointer; font: inherit; text-align: left; }
+.category.active { background: var(--selection-background); color: var(--workbench-foreground); }
 .content { min-width: 0; min-height: 0; overflow: hidden; }
 .json-view { display: grid; grid-template-rows: auto 1fr; height: 100%; min-width: 0; min-height: 0; }
 .json-heading { padding: 22px 28px 16px; }
-.json-heading h2 { color: var(--text); font-size: 17px; margin-bottom: 3px; }
-.settings-status { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 12px; border-top: 1px solid var(--border); background: var(--panel); color: var(--green); font-size: 11px; }
-.settings-status .error { color: var(--red); }
-.format { margin-left: auto; color: var(--faint); }
+.json-heading h2 { color: var(--workbench-foreground); font-size: 17px; margin-bottom: 3px; }
+.settings-status { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 12px; border-top: 1px solid var(--workbench-border); background: var(--panel-background); color: var(--success); font-size: 11px; }
+.settings-status .error { color: var(--danger); }
+.format { margin-left: auto; color: var(--faint-foreground); }
 @media (max-width: 720px) {
   .settings-body { grid-template-columns: 1fr; }
   .categories { display: none; }

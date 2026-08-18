@@ -49,13 +49,13 @@ const lastFetch = computed(() => {
 </template>
 
 <style scoped>
-.status { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; background: var(--panel); border-top: 1px solid var(--border); font-size: 11px; color: var(--faint); flex: none; }
-.toggle { display: flex; align-items: center; background: none; border: none; color: var(--faint); cursor: pointer; padding: 0 2px; }
-.toggle:hover, .toggle[aria-pressed="true"] { color: var(--fg); }
+.status { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; background: var(--panel-background); border-top: 1px solid var(--workbench-border); font-size: 11px; color: var(--faint-foreground); flex: none; }
+.toggle { display: flex; align-items: center; background: none; border: none; color: var(--faint-foreground); cursor: pointer; padding: 0 2px; }
+.toggle:hover, .toggle[aria-pressed="true"] { color: var(--workbench-foreground); }
 .service { display: flex; align-items: center; gap: 5px; }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
-.service.down { color: var(--red); }
-.service.down .dot { background: var(--red); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex: none; }
+.service.down { color: var(--danger); }
+.service.down .dot { background: var(--danger); }
 .spacer { flex: 1; }
-.working { color: var(--dim); }
+.working { color: var(--muted-foreground); }
 </style>

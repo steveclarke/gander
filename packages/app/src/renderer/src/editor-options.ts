@@ -14,7 +14,6 @@ export function diffEditorOptions(settings: EditorSettings): editor.IStandaloneD
     readOnly: true,
     automaticLayout: true,
     hideUnchangedRegions: { enabled: true },
-    theme: "vs-dark",
     ...editorFontOptions(settings),
   };
 }
@@ -23,7 +22,6 @@ export function codeEditorOptions(settings: EditorSettings): editor.IStandaloneE
   return {
     readOnly: true,
     automaticLayout: true,
-    theme: "vs-dark",
     ...editorFontOptions(settings),
   };
 }
