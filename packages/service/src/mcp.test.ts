@@ -87,8 +87,12 @@ describe("MCP endpoint", () => {
     const openOnly = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
-    })) as { content?: unknown })) as { questions: unknown[] };
+    })) as { content?: unknown })) as {
+      questionCounts: { open: number; addressed: number; resolved: number };
+      questions: unknown[];
+    };
     expect(openOnly.questions).toHaveLength(1);
+    expect(openOnly.questionCounts).toEqual({ open: 1, addressed: 1, resolved: 0 });
 
     const both = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions",

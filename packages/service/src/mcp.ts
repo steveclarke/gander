@@ -72,14 +72,14 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       const hiddenStates = (["addressed", "resolved"] as const)
         .filter((state) => !wanted.has(state) && questionCounts[state] > 0);
       let message: string;
-      if (questions.length === 0 && hiddenStates.length === 1) {
-        const state = hiddenStates[0]!;
-        const count = questionCounts[state];
-        message = `No ${[...wanted].join(" or ")} questions returned. ${count} ${state} question${count === 1 ? " is" : "s are"} hidden; pass include${state[0]!.toUpperCase()}${state.slice(1)}: true to retrieve ${count === 1 ? "it" : "them"}.`;
-      } else if (questions.length === 0 && hiddenStates.length > 1) {
-        const hidden = hiddenStates.map((state) => `${questionCounts[state]} ${state}`).join(" and ");
-        const flags = hiddenStates.map((state) => `include${state[0]!.toUpperCase()}${state.slice(1)}: true`).join(" and ");
-        message = `No ${[...wanted].join(" or ")} questions returned. ${hidden} questions are hidden; pass ${flags} to retrieve them.`;
+      if (questions.length === 0 && hiddenStates.length > 0) {
+        const includeFlag = { addressed: "includeAddressed", resolved: "includeResolved" } as const;
+        const hiddenCount = hiddenStates.reduce((total, state) => total + questionCounts[state], 0);
+        const hidden = hiddenStates
+          .map((state) => `${questionCounts[state]} ${state} question${questionCounts[state] === 1 ? "" : "s"}`)
+          .join(" and ");
+        const flags = hiddenStates.map((state) => `${includeFlag[state]}: true`).join(" and ");
+        message = `No ${[...wanted].join(" or ")} questions returned. ${hidden} ${hiddenCount === 1 ? "is" : "are"} hidden; pass ${flags} to retrieve ${hiddenCount === 1 ? "it" : "them"}.`;
       } else if (questions.length === 0 && allQuestions.length === 0) {
         message = "No questions exist for this pull request.";
       } else {
