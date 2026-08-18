@@ -11,6 +11,7 @@ import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
 import { registerSettingsIpc } from "./settings-ipc.js";
 import { buildMenuTemplate } from "./menu.js";
+import { themeFor } from "../themes.js";
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
@@ -90,7 +91,9 @@ const appIcon = nativeImage.createFromPath(join(import.meta.dirname, "../../reso
 function createWindow(cfg: GanderConfig): void {
   const win = new BrowserWindow({
     width: 1360, height: 860,
-    backgroundColor: "#16181d",
+    // Match the persisted workbench while the renderer starts, so theme changes do not
+    // flash the bundled default on the next launch.
+    backgroundColor: themeFor(cfg.settings.workbench.colorTheme).workbench.background,
     // Ignored on macOS, where the dock icon comes from the bundle — app.dock.setIcon covers that.
     icon: appIcon,
     // sandbox: false — our preload output is an ES module (index.mjs, from "type": "module");

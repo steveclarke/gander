@@ -131,21 +131,21 @@ function fileName(path: string): string {
 <style scoped>
 .tree.root { padding: 8px 0; }
 .tnode { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 0; cursor: pointer; white-space: nowrap; }
-.tnode:hover { background: #232833; }
-.tnode.sel { background: rgba(77, 159, 236, 0.14); box-shadow: inset 2px 0 0 var(--accent); }
+.tnode:hover { background: var(--hover-background); }
+.tnode.sel { background: var(--selection-background); box-shadow: inset 2px 0 0 var(--accent); }
 .tnode .hierarchy-slot { width: 14px; flex: none; }
-.tnode .chev { flex: none; color: var(--faint); }
+.tnode .chev { flex: none; color: var(--faint-foreground); }
 .tnode .fname { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; }
-.tnode.isdir .fname { font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--dim); }
+.tnode.isdir .fname { font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--muted-foreground); }
 .tnode .st { margin-left: auto; font: 11px var(--mono); flex: none; }
-.st.M { color: var(--yellow); }
-.st.A { color: var(--green); }
-.st.D { color: var(--red); }
-.st.R { color: var(--purple); }
-.cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
-.cb.on { border-color: var(--green); color: var(--green); }
-.cb.part { border-color: var(--green); color: var(--green); }
-.tnode.checked .fname { color: var(--faint); }
+.st.M { color: var(--warning); }
+.st.A { color: var(--success); }
+.st.D { color: var(--danger); }
+.st.R { color: var(--info); }
+.cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint-foreground); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
+.cb.on { border-color: var(--success); color: var(--success); }
+.cb.part { border-color: var(--success); color: var(--success); }
+.tnode.checked .fname { color: var(--faint-foreground); }
 .qmark { color: var(--accent); flex: none; }
-.delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); flex: none; }
+.delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; }
 </style>

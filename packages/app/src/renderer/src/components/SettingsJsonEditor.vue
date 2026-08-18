@@ -25,7 +25,6 @@ onMounted(() => {
     model,
     automaticLayout: true,
     ariaLabel: "Settings JSON editor",
-    theme: "vs-dark",
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
     tabSize: 2,

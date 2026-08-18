@@ -55,12 +55,12 @@ async function submit(): Promise<void> {
 </template>
 
 <style scoped>
-.capture { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; z-index: 50; }
-.panel { width: min(620px, 90vw); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
-label { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-label b { color: var(--fg); font-weight: 600; }
-textarea { background: #14161b; border: 1px solid var(--border); border-radius: 7px; color: var(--fg); font: inherit; font-size: 13px; padding: 9px 11px; resize: vertical; }
+.capture { position: fixed; inset: 0; background: var(--overlay-background); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; z-index: 50; }
+.panel { width: min(620px, 90vw); background: var(--panel-background); border: 1px solid var(--workbench-border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 18px 50px var(--workbench-shadow); }
+label { font-size: 12px; color: var(--faint-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+label b { color: var(--workbench-foreground); font-weight: 600; }
+textarea { background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: 7px; color: var(--workbench-foreground); font: inherit; font-size: 13px; padding: 9px 11px; resize: vertical; }
 textarea:focus { outline: none; border-color: var(--accent); }
-.hint { font-size: 11px; color: var(--faint); }
-kbd { font: 10.5px var(--mono); background: #262b34; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+.hint { font-size: 11px; color: var(--faint-foreground); }
+kbd { font: 10.5px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: 4px; padding: 1px 5px; }
 </style>

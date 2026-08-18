@@ -183,14 +183,14 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app { display: grid; grid-template-rows: 50px 1fr auto; height: 100vh; }
-.error-banner { display: flex; align-items: center; gap: 10px; background: rgba(248,81,73,.12); color: var(--red); padding: 8px 14px; font-size: 12px; border-bottom: 1px solid var(--border); }
+.error-banner { display: flex; align-items: center; gap: 10px; background: var(--danger-background); color: var(--danger); padding: 8px 14px; font-size: 12px; border-bottom: 1px solid var(--workbench-border); }
 .error-banner span { flex: 1; }
 .error-banner button { background: none; border: none; color: inherit; cursor: pointer; display: flex; flex: none; }
-.empty { color: var(--faint); padding: 2rem; }
+.empty { color: var(--faint-foreground); padding: 2rem; }
 .working { display: flex; align-items: center; gap: 10px; }
 .spinner {
   width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid var(--border); border-top-color: var(--faint);
+  border: 2px solid var(--workbench-border); border-top-color: var(--faint-foreground);
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
 .workspace.right { flex-direction: row; }
 .workspace.bottom { flex-direction: column; }
 .drawer { flex: none; }
-.workspace.bottom .drawer { border-left: none; border-top: 1px solid var(--border); }
-.tree { flex: none; border-right: 1px solid var(--border); overflow: hidden auto; }
+.workspace.bottom .drawer { border-left: none; border-top: 1px solid var(--workbench-border); }
+.tree { flex: none; border-right: 1px solid var(--workbench-border); overflow: hidden auto; }
 .diff { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 </style>
