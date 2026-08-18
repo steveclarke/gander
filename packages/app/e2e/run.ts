@@ -22,8 +22,8 @@ interface RepoFixture {
   headSha: string;
 }
 
-async function repoFixture(repoId: string, title: string): Promise<RepoFixture> {
-  const fixture = await makeFixtureRepo();
+async function repoFixture(repoId: string, title: string, featureFiles: Record<string, string> = {}): Promise<RepoFixture> {
+  const fixture = await makeFixtureRepo(featureFiles);
   return {
     repoId,
     url: `https://github.com/${repoId}`,
@@ -40,12 +40,22 @@ async function main(): Promise<void> {
   const databasePath = join(root, "gander.db");
   const userDataPath = join(root, "user-data");
   const raceMarkerPath = join(root, "concurrent-race-requests");
-  const [persistence, race, launcher] = await Promise.all([
+  const [persistence, race, launcher, icons] = await Promise.all([
     repoFixture("acme/persistence", "Persist reviewed files"),
     repoFixture("acme/race", "Open without corrupting the clone"),
     repoFixture("acme/launcher", "Open from the command line"),
+    repoFixture("acme/icons", "Render file icons", {
+      ".editorconfig": "root = true\n",
+      "Gemfile": "source \"https://rubygems.org\"\n",
+      "README.md": "# Icon fixture\n",
+      "config/settings.json": "{}\n",
+      "src/App.vue": "<template><main /></template>\n",
+      "src/main.ts": "export const ready = true;\n",
+      "types/index.d.ts": "export declare const ready: boolean;\n",
+      "unknown/file.mystery": "unknown\n",
+    }),
   ]);
-  const fixtures = [persistence, race, launcher];
+  const fixtures = [persistence, race, launcher, icons];
   const storage = openStorage(databasePath);
   const service = buildServer({ storage, token: SERVICE_TOKEN, version: "e2e" });
   const github = Fastify({ logger: false });
@@ -106,6 +116,7 @@ async function main(): Promise<void> {
       GANDER_E2E_RACE_URL: race.url,
       GANDER_E2E_RACE_MARKER: raceMarkerPath,
       GANDER_E2E_LAUNCHER_REPO: launcher.repoId,
+      GANDER_E2E_ICONS_URL: icons.url,
       // Where the app listens with no allocated socket in the environment: beside the
       // suite's own user data, so this run cannot reach a development app.
       GANDER_E2E_APP_SOCKET: join(userDataPath, "app.sock"),

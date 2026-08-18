@@ -177,6 +177,7 @@ describe("FileTree", () => {
       expect((row.element as HTMLElement).style.paddingLeft).toBe(paddingLeft);
       expect(row.element.children[0]?.classList).toContain("hierarchy-slot");
       expect(row.element.children[1]?.classList).toContain("cb");
+      expect(row.element.children[2]?.classList).toContain("file-icon");
     }
 
     const leafRow = fileRow(wrapper, leaf.path);
@@ -184,5 +185,35 @@ describe("FileTree", () => {
     expect(leafRow.find(".delta-mark").exists()).toBe(true);
     expect(leafRow.find(".st").text()).toBe("A");
     expect(wrapper.findAll(".tnode.isdir .chev")).toHaveLength(3);
+  });
+
+  it("renders representative Catppuccin file and folder icons with expanded state", async () => {
+    const { store } = fakeStore(prView(1, [
+      file("Gemfile"),
+      file("README.md"),
+      file("app/models/member.rb"),
+      file("config/settings.json"),
+      file("src/App.vue"),
+      file("src/main.ts"),
+      file("types/index.d.ts"),
+      file("unknown/file.mystery"),
+    ]));
+    const wrapper = mount(FileTree, { props: { store } });
+
+    expect(fileRow(wrapper, "Gemfile").find(".file-icon").attributes("data-icon-id")).toBe("ruby-gem");
+    expect(fileRow(wrapper, "README.md").find(".file-icon").attributes("data-icon-id")).toBe("readme");
+    expect(fileRow(wrapper, "app/models/member.rb").find(".file-icon").attributes("data-icon-id")).toBe("ruby");
+    expect(fileRow(wrapper, "config/settings.json").find(".file-icon").attributes("data-icon-id")).toBe("json");
+    expect(fileRow(wrapper, "src/App.vue").find(".file-icon").attributes("data-icon-id")).toBe("vue");
+    expect(fileRow(wrapper, "src/main.ts").find(".file-icon").attributes("data-icon-id")).toBe("typescript");
+    expect(fileRow(wrapper, "types/index.d.ts").find(".file-icon").attributes("data-icon-id")).toBe("typescript-def");
+    expect(fileRow(wrapper, "unknown/file.mystery").find(".file-icon").attributes("data-icon-id")).toBe("_file");
+
+    const src = dirRow(wrapper, "src");
+    expect(src.find(".file-icon").attributes("data-icon-id")).toBe("folder_src_open");
+    expect(src.find(".chev").exists()).toBe(true);
+    await src.trigger("click");
+    expect(dirRow(wrapper, "src").find(".file-icon").attributes("data-icon-id")).toBe("folder_src");
+    expect(store.selectedPath).toBe("Gemfile");
   });
 });

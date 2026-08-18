@@ -2,7 +2,14 @@
 import { computed, reactive, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
+import {
+  CATPPUCCIN_MOCHA_SHOWS_EXPLORER_ARROWS,
+  catppuccinFileIcon,
+  catppuccinFolderIcon,
+} from "../icon-theme.js";
+import { languageForPath } from "../languages.js";
 import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
+import FileIcon from "./FileIcon.vue";
 
 const props = defineProps<{ store: Store; nodes?: TreeNode[]; depth?: number }>();
 
@@ -58,7 +65,14 @@ function fileName(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
+function fileIcon(path: string) {
+  const languageId = languageForPath(path);
+  return catppuccinFileIcon({ path, languageId: languageId === "plaintext" ? undefined : languageId });
+}
 
+function folderIcon(node: TreeNode & { type: "dir" }) {
+  return catppuccinFolderIcon({ name: node.name, expanded: !collapsed.has(node.path) });
+}
 </script>
 
 <template>
@@ -73,7 +87,13 @@ function fileName(path: string): string {
         @click="toggleCollapsed(node.path)"
         @keydown.enter.space.prevent="toggleCollapsed(node.path)"
       >
-        <component :is="collapsed.has(node.path) ? ChevronRight : ChevronDown" class="hierarchy-slot chev" :size="14" />
+        <component
+          :is="collapsed.has(node.path) ? ChevronRight : ChevronDown"
+          v-if="CATPPUCCIN_MOCHA_SHOWS_EXPLORER_ARROWS"
+          class="hierarchy-slot chev"
+          :size="14"
+        />
+        <span v-else class="hierarchy-slot" aria-hidden="true" />
         <span
           class="cb"
           :class="{ on: dirStateFor(node) === 'all', part: dirStateFor(node) === 'some' }"
@@ -86,6 +106,7 @@ function fileName(path: string): string {
           <Minus v-if="dirStateFor(node) === 'some'" :size="12" :stroke-width="3" />
           <Check v-else :size="12" :stroke-width="3" />
         </span>
+        <FileIcon :src="folderIcon(node).src" :data-icon-id="folderIcon(node).id" />
         <span class="fname">{{ node.name }}</span>
       </div>
       <FileTree
@@ -114,6 +135,7 @@ function fileName(path: string): string {
           @click.stop="toggleFile(node.file.path, node.file.checked)"
           @keydown.enter.space.stop.prevent="toggleFile(node.file.path, node.file.checked)"
         ><Check :size="12" :stroke-width="3" /></span>
+        <FileIcon :src="fileIcon(node.file.path).src" :data-icon-id="fileIcon(node.file.path).id" />
         <span class="fname">{{ fileName(node.file.path) }}</span>
         <MessageSquare
           v-if="questionCounts.get(node.file.path)"

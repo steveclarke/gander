@@ -51,6 +51,10 @@ function fileCheckbox(filename: string) {
   return $(`//div[contains(@class, 'tnode')][.//span[contains(@class, 'fname') and normalize-space()='${filename}']]//span[@role='checkbox']`);
 }
 
+function treeRow(name: string) {
+  return $(`//div[contains(@class, 'tnode')][.//span[contains(@class, 'fname') and normalize-space()='${name}']]`);
+}
+
 describe("Gander end to end", () => {
   it("opens the built application with the Gander title", async () => {
     await expect(browser).toHaveTitle("Gander");
@@ -179,6 +183,41 @@ describe("Gander end to end", () => {
     await expect($(".seg-review")).toHaveText(expect.stringContaining("Open from the command line"));
     await expect($(".progress")).toHaveText("0/2 reviewed");
     await expect($(".error-banner")).not.toBeDisplayed();
+  });
+
+  it("renders Catppuccin icons without disturbing file-tree interaction or status alignment", async () => {
+    await registerAndSelect(requiredEnv("GANDER_E2E_ICONS_URL"), "icons");
+    await openPullRequest("Render file icons");
+
+    const expectedIcons: Record<string, string> = {
+      Gemfile: "ruby-gem",
+      "README.md": "readme",
+      "App.vue": "vue",
+      "main.ts": "typescript",
+      "index.d.ts": "typescript-def",
+      "settings.json": "json",
+      "file.mystery": "_file",
+    };
+    for (const [file, icon] of Object.entries(expectedIcons)) {
+      await expect(treeRow(file).$(".file-icon")).toHaveAttribute("data-icon-id", icon);
+    }
+
+    const src = treeRow("src");
+    await expect(src.$(".chev")).toBeDisplayed();
+    await expect(src.$(".file-icon")).toHaveAttribute("data-icon-id", "folder_src_open");
+    await treeRow("App.vue").click();
+    await expect(treeRow("App.vue")).toHaveElementClass(expect.stringContaining("sel"));
+    await src.click();
+    await expect(treeRow("src").$(".file-icon")).toHaveAttribute("data-icon-id", "folder_src");
+    await expect(treeRow("App.vue")).not.toBeDisplayed();
+    await treeRow("src").click();
+    await expect(treeRow("App.vue")).toHaveElementClass(expect.stringContaining("sel"));
+
+    const statusRightEdges = await browser.execute(() =>
+      [...document.querySelectorAll<HTMLElement>(".tnode:not(.isdir) .st")]
+        .map((status) => Math.round(status.getBoundingClientRect().right)),
+    );
+    expect(new Set(statusRightEdges).size).toBe(1);
   });
 
   it("answers a command that names nothing openable", async () => {
