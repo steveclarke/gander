@@ -8,6 +8,9 @@ import TopBar from "./TopBar.vue";
 function storeWithProgress(done: number, total: number): Store {
   return {
     repos: [],
+    githubRepos: [],
+    githubReposBusy: false,
+    githubReposError: null,
     prs: [],
     currentRepoId: null,
     view: null,
