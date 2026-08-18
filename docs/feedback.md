@@ -110,3 +110,11 @@ torn out, or stacked as tabs the way an editor's panels can. That needs a real
 layout engine rather than fixed slots — `dockview` and `golden-layout` are the
 established options, and either is a substantial piece of work rather than an
 adjustment to what exists.
+
+## Questions are one-way
+
+An agent can read a question and mark it addressed with a single line. It cannot
+ask back, and the reasoning that produces a good answer is lost with the terminal
+session it happened in.
+
+Tracked in https://github.com/steveclarke/gander/issues/2.
