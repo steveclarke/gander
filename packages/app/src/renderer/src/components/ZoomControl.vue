@@ -104,6 +104,7 @@ function reset(): void {
 .zoom-toolbar {
   position: fixed; position-anchor: --zoom-trigger; position-area: block-start span-inline-start;
   margin: 0 0 7px; padding: 5px; border: 1px solid var(--workbench-border); border-radius: 7px;
+  overflow: visible;
   background: var(--elevated-background); color: var(--workbench-foreground);
   box-shadow: 0 6px 18px var(--workbench-shadow);
 }

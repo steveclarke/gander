@@ -127,6 +127,10 @@ describe("Gander end to end", () => {
 
     const zoomIn = await $("button[aria-label='Zoom in']");
     await zoomIn.waitForDisplayed();
+    expect(await browser.execute(() => {
+      const toolbar = document.querySelector<HTMLElement>(".zoom-toolbar");
+      return toolbar ? getComputedStyle(toolbar).overflowY : null;
+    })).toBe("visible");
     await zoomIn.click();
     await browser.waitUntil(async () => (await trigger.getText()) === "110%");
     expect(await browser.electron.execute((electron) =>
