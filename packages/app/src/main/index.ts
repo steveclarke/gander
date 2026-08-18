@@ -7,6 +7,7 @@ import { createGitEngine } from "./git.js";
 import { listOpenPrs, resolveGithubToken } from "./github.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
+import { registerSettingsIpc } from "./settings-ipc.js";
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
@@ -49,6 +50,7 @@ async function bootstrap(): Promise<GanderConfig> {
   ipcMain.handle("gander:addQuestion", async (_e, repoId: string, n: number, input: { path: string | null; line: number | null; text: string }) => reviewer.addQuestion(repoId, n, input));
   ipcMain.handle("gander:deleteQuestion", async (_e, repoId: string, n: number, id: number) => reviewer.deleteQuestion(repoId, n, id));
   ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean) => reviewer.setCheckedMany(repoId, n, paths, checked));
+  registerSettingsIpc(ipcMain, cfg);
 
   return cfg;
 }

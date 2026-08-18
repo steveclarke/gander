@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { RepoEntry } from "@gander/shared";
+import { AppSettingsSchema, DEFAULT_APP_SETTINGS, type AppSettings } from "../settings.js";
 
 // owner/repo, matching repoIdFromUrl's output — a hand-edited config must not be able to flow
 // an arbitrary string into both a filesystem path (clone directory name) and a GitHub API URL.
@@ -20,6 +21,9 @@ const ConfigSchema = z
     zoomLevel: z.number().optional(),
     // The pull request open when the app last closed, reopened on launch.
     lastReview: z.object({ repoId: RepoIdSchema, prNumber: z.number().int().positive() }).optional(),
+    // Invalid appearance values must not prevent the app from starting. Older config files
+    // have no settings key, so both missing and invalid persisted settings use the defaults.
+    settings: AppSettingsSchema.catch(DEFAULT_APP_SETTINGS).default(DEFAULT_APP_SETTINGS),
     repos: z.array(z.object({ repoId: RepoIdSchema, url: z.string() }).passthrough()).default([]),
   })
   .passthrough();
@@ -30,6 +34,7 @@ export interface GanderConfig {
   githubToken?: string;
   zoomLevel?: number;
   lastReview?: LastReview;
+  settings: AppSettings;
   repos: RepoEntry[];
 }
 
@@ -60,7 +65,9 @@ export function saveConfig(cfg: GanderConfig, path = defaultPath()): void {
  * loadConfig returned, and persisting a machine-specific port and token into the
  * config file is exactly what this avoids.
  */
-export function resolveServiceConnection(cfg: GanderConfig): { url: string; token: string } {
+export function resolveServiceConnection(
+  cfg: Pick<GanderConfig, "serviceUrl" | "serviceToken">,
+): { url: string; token: string } {
   return {
     url: process.env.GANDER_SERVICE_URL ?? cfg.serviceUrl,
     token: process.env.GANDER_TOKEN ?? cfg.serviceToken,

@@ -1,32 +1,44 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Store } from "../store.js";
-import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw } from "lucide-vue-next";
+import type { EditorSettingsStore } from "../editor-settings-store.js";
+import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw, Settings } from "lucide-vue-next";
 import SwitcherDropdown from "./SwitcherDropdown.vue";
+import EditorSettings from "./EditorSettings.vue";
 
-const props = defineProps<{ store: Store; questions: number }>();
+const props = defineProps<{ store: Store; editorSettings: EditorSettingsStore; questions: number }>();
 defineEmits<{ toggleQuestions: [] }>();
 
 const repoOpen = ref(false);
 const reviewOpen = ref(false);
 const addingRepo = ref(false);
+const settingsOpen = ref(false);
 const newRepoUrl = ref("");
 
 function toggleRepo() {
   reviewOpen.value = false;
+  settingsOpen.value = false;
   repoOpen.value = !repoOpen.value;
   if (!repoOpen.value) addingRepo.value = false;
 }
 
 function toggleReview() {
   repoOpen.value = false;
+  settingsOpen.value = false;
   reviewOpen.value = !reviewOpen.value;
+}
+
+function toggleSettings() {
+  repoOpen.value = false;
+  reviewOpen.value = false;
+  settingsOpen.value = !settingsOpen.value;
 }
 
 function closeAll() {
   repoOpen.value = false;
   reviewOpen.value = false;
   addingRepo.value = false;
+  settingsOpen.value = false;
 }
 
 async function pickRepo(repoId: string) {
@@ -112,6 +124,16 @@ const progress = computed(() => props.store.progress());
     <div class="spacer" />
     <div class="right">
       <button
+        class="fetch"
+        aria-label="Editor settings"
+        title="Editor settings"
+        :aria-expanded="settingsOpen"
+        aria-haspopup="dialog"
+        @click.stop="toggleSettings"
+      >
+        <Settings :size="16" />
+      </button>
+      <button
         v-if="store.view"
         class="fetch"
         aria-label="Questions"
@@ -182,6 +204,10 @@ const progress = computed(() => props.store.progress());
       <span class="num">#{{ pr.number }}</span>
       <span class="nm">{{ pr.title }}</span>
     </div>
+  </SwitcherDropdown>
+
+  <SwitcherDropdown :open="settingsOpen" :right="0" :width="440" @close="closeAll">
+    <EditorSettings :store="editorSettings" />
   </SwitcherDropdown>
 </template>
 

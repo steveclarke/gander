@@ -11,10 +11,13 @@ import StatusBar from "./components/StatusBar.vue";
 import Splitter from "./components/Splitter.vue";
 import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
 import { X } from "lucide-vue-next";
+import { createEditorSettingsStore } from "./editor-settings-store.js";
 import "./theme.css";
 
 const store = createStore(api);
+const editorSettings = createEditorSettingsStore(api);
 onMounted(async () => {
+  void editorSettings.load();
   await store.checkService();
   await store.loadRepos();
   await store.restoreLastReview();
@@ -94,7 +97,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app">
-    <TopBar :store="store" :questions="questionCount" @toggle-questions="drawerOpen = !drawerOpen" />
+    <TopBar :store="store" :editor-settings="editorSettings" :questions="questionCount" @toggle-questions="drawerOpen = !drawerOpen" />
     <div v-if="store.error" class="error-banner">
       <span>{{ store.error }}</span>
       <button aria-label="Dismiss" title="Dismiss" @click="store.dismissError()"><X :size="14" /></button>
@@ -116,7 +119,7 @@ onBeforeUnmount(() => {
         <!-- Docked right, questions sit beside the diff; docked bottom, under both the
              diff and the tree, which is what gives the diff the full window width. -->
         <div class="workspace" :class="questionsDock">
-          <DiffPane :store="store" class="diff" />
+          <DiffPane :store="store" :editor-settings="editorSettings.settings.editor" class="diff" />
           <template v-if="drawerOpen">
             <Splitter
               v-model="questionsSize"

@@ -5,6 +5,8 @@
   --add-bg: rgba(63,185,80,.13); --del-bg: rgba(248,81,73,.12);
   --add-gut: rgba(63,185,80,.25); --del-gut: rgba(248,81,73,.25);
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --editor-font-family: 'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+  --editor-font-size: 16px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -12,3 +14,4 @@ body {
   background: var(--bg); color: var(--text);
   font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
+code, pre { font-family: var(--editor-font-family); font-size: var(--editor-font-size); }

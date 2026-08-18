@@ -41,9 +41,40 @@ describe("Gander end to end", () => {
     await expect($(".empty")).toHaveText("Pick a repository, then a pull request.");
   });
 
+  it("changes editor font settings in the UI and keeps them after restart", async () => {
+    await $("button[aria-label='Editor settings']").click();
+    const family = await $("input[name='editor.fontFamily']");
+    const size = await $("input[name='editor.fontSize']");
+    await family.setValue("'Courier New', monospace");
+    await size.setValue("18.5");
+    await $(".settings .save").click();
+    await expect($(".settings [role='status']")).toHaveText("Saved");
+
+    await browser.reloadSession();
+
+    await $("button[aria-label='Editor settings']").click();
+    await expect($("input[name='editor.fontFamily']")).toHaveValue("'Courier New', monospace");
+    await expect($("input[name='editor.fontSize']")).toHaveValue("18.5");
+    await browser.keys("Escape");
+  });
+
   it("registers a repository and keeps a reviewed file checked after restart", async () => {
     await registerAndSelect(requiredEnv("GANDER_E2E_PERSISTENCE_URL"), "persistence");
     await openPullRequest("Persist reviewed files");
+
+    const typography = async () => browser.execute(() => {
+      const line = document.querySelector<HTMLElement>(".monaco-editor .view-line span");
+      if (!line) return null;
+      const style = getComputedStyle(line);
+      return { fontFamily: style.fontFamily, fontSize: style.fontSize };
+    });
+    await $(".monaco-editor .view-line span").waitForDisplayed();
+    await expect(typography()).resolves.toMatchObject({ fontSize: "18.5px" });
+    expect((await typography())?.fontFamily).toContain("Courier New");
+
+    await $("button[aria-label='Full file']").click();
+    await $(".monaco-editor .view-line span").waitForDisplayed();
+    await expect(typography()).resolves.toMatchObject({ fontSize: "18.5px" });
 
     const checkbox = await fileCheckbox("a.rb");
     await checkbox.click();
