@@ -109,7 +109,16 @@ const progress = computed(() => props.store.progress());
     </div>
     <div class="spacer" />
     <div class="right">
-      <span v-if="store.busy" class="busy">Working…</span>
+      <button
+        v-if="store.view"
+        class="fetch"
+        :disabled="store.busy"
+        title="Fetch origin (also runs automatically every 30 seconds and whenever the window regains focus)"
+        @click="store.refresh()"
+      >
+        <span class="ic" :class="{ spin: store.busy }">⟳</span>
+        <span>Fetch origin</span>
+      </button>
       <span class="progress"><b>{{ progress.done }}</b>/{{ progress.total }} reviewed</span>
     </div>
   </div>
@@ -184,7 +193,18 @@ const progress = computed(() => props.store.progress());
 .right { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
 .progress { font-size: 12px; color: var(--dim); background: #262b34; border-radius: 10px; padding: 2px 10px; white-space: nowrap; }
 .progress b { color: var(--green); }
-.busy { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.fetch {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--fg); font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer;
+  white-space: nowrap;
+}
+.fetch:hover:not(:disabled) { background: rgba(255,255,255,.06); }
+.fetch:disabled { cursor: default; color: var(--faint); }
+.fetch .ic { display: inline-block; }
+.fetch .ic.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .fetch .ic.spin { animation: none; } }
 
 .sw-h { font-size: 10.5px; letter-spacing: .8px; color: var(--faint); font-weight: 700; padding: 10px 14px 4px; }
 .sw-empty { padding: 10px 14px; color: var(--faint); font-size: 12px; }

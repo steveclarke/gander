@@ -12,6 +12,8 @@ export interface Store {
   /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
   busy: boolean;
   loadRepos(): Promise<void>;
+  /** Reopen the pull request that was open when the app last closed. */
+  restoreLastReview(): Promise<void>;
   addRepo(url: string): Promise<void>;
   selectRepo(repoId: string): Promise<void>;
   openPr(prNumber: number): Promise<void>;
@@ -36,6 +38,18 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         store.repos = await api.listRepos();
       });
+    },
+    async restoreLastReview() {
+      const last = await api.lastReview();
+      if (!last) return;
+      // A repository can be removed from the config, or a pull request merged and its
+      // refs gone, between one launch and the next. Neither is an error worth a banner
+      // on startup — the app just opens on the empty state instead.
+      if (!store.repos.some((r) => r.repoId === last.repoId)) return;
+      await store.selectRepo(last.repoId);
+      if (store.error) { store.error = null; return; }
+      await store.openPr(last.prNumber);
+      if (store.error) store.error = null;
     },
     async addRepo(url: string) {
       await withBusy(() => guard(async () => {

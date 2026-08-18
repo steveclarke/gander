@@ -4,6 +4,7 @@ export interface GanderApi {
   listRepos(): Promise<RepoEntry[]>;
   addRepo(url: string): Promise<RepoEntry>;
   listPrs(repoId: string): Promise<PrSummary[]>;
+  lastReview(): Promise<{ repoId: string; prNumber: number } | null>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;

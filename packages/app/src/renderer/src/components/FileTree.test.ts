@@ -32,6 +32,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     error: null,
     busy: false,
     async loadRepos() {},
+    async restoreLastReview() {},
     async addRepo() {},
     async selectRepo() {},
     async openPr() {},

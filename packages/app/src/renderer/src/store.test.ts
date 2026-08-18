@@ -20,6 +20,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     setChecked: async (_r, _n, path) => prView([path]),
     setCheckedMany: async (_r, _n, paths) => prView(paths),
     refreshPr: async () => prView(),
+    lastReview: async () => null,
     ...overrides,
   };
 }
@@ -83,5 +84,44 @@ describe("store", () => {
     const failing = createStore(fakeApi({ listPrs: async () => { throw new Error("boom"); } }));
     await failing.selectRepo("acme/atlas");
     expect(failing.busy).toBe(false); // guard() swallows the error, withBusy's finally still clears it
+  });
+
+  describe("restoreLastReview", () => {
+    it("reopens the last reviewed pull request", async () => {
+      const store = createStore(fakeApi({ lastReview: async () => ({ repoId: "acme/atlas", prNumber: 1 }) }));
+      await store.loadRepos();
+      await store.restoreLastReview();
+      expect(store.currentRepoId).toBe("acme/atlas");
+      expect(store.view?.pr.number).toBe(1);
+    });
+
+    it("does nothing when there is no last review", async () => {
+      const store = createStore(fakeApi());
+      await store.loadRepos();
+      await store.restoreLastReview();
+      expect(store.currentRepoId).toBeNull();
+      expect(store.view).toBeNull();
+    });
+
+    it("skips a repository that is no longer registered", async () => {
+      const store = createStore(fakeApi({ lastReview: async () => ({ repoId: "acme/removed", prNumber: 1 }) }));
+      await store.loadRepos();
+      await store.restoreLastReview();
+      expect(store.currentRepoId).toBeNull();
+      expect(store.error).toBeNull();
+    });
+
+    it("opens on the empty state, not an error banner, when the pull request is gone", async () => {
+      // A merged pull request's refs disappear between launches. That is ordinary, and
+      // greeting the reader with a red banner about it would be noise.
+      const store = createStore(fakeApi({
+        lastReview: async () => ({ repoId: "acme/atlas", prNumber: 1 }),
+        openPr: async () => { throw new Error("git rev-parse refs/gander/pr/1 failed"); },
+      }));
+      await store.loadRepos();
+      await store.restoreLastReview();
+      expect(store.view).toBeNull();
+      expect(store.error).toBeNull();
+    });
   });
 });
