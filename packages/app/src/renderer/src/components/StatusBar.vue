@@ -3,8 +3,17 @@ import { computed, onBeforeUnmount, ref } from "vue";
 import { PanelLeft } from "lucide-vue-next";
 import type { Store } from "../store.js";
 
-const props = defineProps<{ store: Store; treeVisible: boolean }>();
+const props = defineProps<{
+  store: Store;
+  treeVisible: boolean;
+  isDevelopment: boolean;
+  worktreeLabel: string | null;
+}>();
 defineEmits<{ toggleTree: [] }>();
+
+const developmentLabel = computed(() => props.worktreeLabel
+  ? `Development build · ${props.worktreeLabel}`
+  : "Development build");
 
 // Re-read on a timer so "3 minutes ago" does not sit frozen at "just now".
 const now = ref(Date.now());
@@ -45,6 +54,15 @@ const lastFetch = computed(() => {
 
     <span class="spacer" />
     <span v-if="store.busy" class="working">Working…</span>
+    <span
+      v-if="isDevelopment"
+      class="development"
+      :title="developmentLabel"
+      :aria-label="developmentLabel"
+    >
+      <span class="development-kind">DEV</span>
+      <span v-if="worktreeLabel" class="worktree-label">{{ `· ${worktreeLabel}` }}</span>
+    </span>
   </footer>
 </template>
 
@@ -58,4 +76,7 @@ const lastFetch = computed(() => {
 .service.down .dot { background: var(--danger); }
 .spacer { flex: 1; }
 .working { color: var(--muted-foreground); }
+.development { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 32ch; color: var(--warning); }
+.development-kind { flex: none; font-weight: 700; letter-spacing: 0.06em; }
+.worktree-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

@@ -18,6 +18,8 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     initialWindowState: {
       windowStyle: "native-titlebar",
       colorTheme: "Catppuccin Mocha",
+      isDevelopment: false,
+      worktreeLabel: null,
     },
     listRepos: async () => [{ repoId: "acme/atlas", url: "u" }],
     addRepo: async (url) => ({ repoId: "acme/new", url }),
