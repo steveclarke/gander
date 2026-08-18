@@ -7,12 +7,16 @@ describe("preload API", () => {
     const state = initialWindowStateFromArguments([
       "--gander-window-style=integrated-titlebar",
       "--gander-color-theme=Gander%20Dark",
+      "--gander-development",
+      "--gander-worktree-label=feature%2Freview-status",
     ]);
     const api = createGanderApi(vi.fn(), vi.fn(), state);
 
     expect(api.initialWindowState).toEqual({
       windowStyle: "integrated-titlebar",
       colorTheme: "Gander Dark",
+      isDevelopment: true,
+      worktreeLabel: "feature/review-status",
     });
     expect(initialWindowStateFromArguments([
       "--gander-window-style=integrated-titlebar",
@@ -22,6 +26,8 @@ describe("preload API", () => {
     ])).toEqual({
       windowStyle: "native-titlebar",
       colorTheme: "Catppuccin Mocha",
+      isDevelopment: false,
+      worktreeLabel: null,
     });
   });
 

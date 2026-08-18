@@ -6,11 +6,15 @@ import type { ConnectionCheck } from "./main/connection.js";
 export type WindowStyle = "native-titlebar" | "integrated-titlebar";
 export const WINDOW_STYLE_ARGUMENT = "--gander-window-style=";
 export const COLOR_THEME_ARGUMENT = "--gander-color-theme=";
+export const DEVELOPMENT_ARGUMENT = "--gander-development";
+export const WORKTREE_LABEL_ARGUMENT = "--gander-worktree-label=";
 export type GithubTokenCheck = { ok: true; login: string } | { ok: false; reason: string };
 
 export interface InitialWindowState {
   windowStyle: WindowStyle;
   colorTheme: ThemeId;
+  isDevelopment: boolean;
+  worktreeLabel: string | null;
 }
 
 export type { ConnectionCheck };

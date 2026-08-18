@@ -1,0 +1,49 @@
+// @vitest-environment jsdom
+
+import { mount } from "@vue/test-utils";
+import { describe, expect, it } from "vitest";
+import type { Store } from "../store.js";
+import StatusBar from "./StatusBar.vue";
+
+const store = {
+  serviceReachable: true,
+  view: null,
+  lastFetchAt: null,
+  busy: false,
+} as Store;
+
+describe("StatusBar", () => {
+  it("shows a development marker only for a development launch", () => {
+    const development = mount(StatusBar, {
+      props: { store, treeVisible: true, isDevelopment: true, worktreeLabel: null },
+    });
+    const release = mount(StatusBar, {
+      props: { store, treeVisible: true, isDevelopment: false, worktreeLabel: null },
+    });
+
+    expect(development.get(".development").text()).toBe("DEV");
+    expect(development.get(".development").attributes("title")).toBe("Development build");
+    expect(development.get(".development").attributes("aria-label")).toBe("Development build");
+    expect(release.find(".development").exists()).toBe(false);
+
+    development.unmount();
+    release.unmount();
+  });
+
+  it("identifies a linked worktree by branch name", () => {
+    const wrapper = mount(StatusBar, {
+      props: {
+        store,
+        treeVisible: true,
+        isDevelopment: true,
+        worktreeLabel: "feature/review-status",
+      },
+    });
+
+    expect(wrapper.get(".development-kind").text()).toBe("DEV");
+    expect(wrapper.get(".worktree-label").text()).toBe("· feature/review-status");
+    expect(wrapper.get(".development").attributes("title")).toBe("Development build · feature/review-status");
+
+    wrapper.unmount();
+  });
+});

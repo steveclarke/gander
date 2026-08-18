@@ -4,7 +4,7 @@ import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.j
 
 describe("native window appearance", () => {
   it("integrates macOS window controls into chrome derived from the active theme", () => {
-    const appearance = windowAppearance("darwin", "Gander Dark");
+    const appearance = windowAppearance("darwin", "Gander Dark", true, "feature/review-status");
 
     expect(appearance.windowOptions).toEqual({
       backgroundColor: themeFor("Gander Dark").workbench.background,
@@ -13,6 +13,9 @@ describe("native window appearance", () => {
     });
     expect(appearance.preloadArguments).toContain("--gander-window-style=integrated-titlebar");
     expect(appearance.preloadArguments).toContain("--gander-color-theme=Gander%20Dark");
+    expect(appearance.preloadArguments).toContain("--gander-development");
+    expect(appearance.preloadArguments).toContain("--gander-worktree-label=feature%2Freview-status");
+    expect(appearance.iconFilename).toBe("icon-dev.png");
   });
 
   it.each(["linux", "win32"] as const)("leaves the %s system title bar unchanged", (platform) => {
@@ -22,6 +25,9 @@ describe("native window appearance", () => {
       backgroundColor: themeFor("Catppuccin Mocha").workbench.background,
     });
     expect(appearance.preloadArguments).toContain("--gander-window-style=native-titlebar");
+    expect(appearance.preloadArguments).not.toContain("--gander-development");
+    expect(appearance.preloadArguments.some((argument) => argument.startsWith("--gander-worktree-label="))).toBe(false);
+    expect(appearance.iconFilename).toBe("icon.png");
   });
 
   it("updates macOS window backgrounds from the registry during live theme changes", () => {

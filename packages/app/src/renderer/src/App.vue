@@ -221,7 +221,13 @@ onBeforeUnmount(() => {
         </template>
       </div>
     </main>
-    <StatusBar :store="store" :tree-visible="treeVisible" @toggle-tree="treeVisible = !treeVisible" />
+    <StatusBar
+      :store="store"
+      :tree-visible="treeVisible"
+      :is-development="api.initialWindowState.isDevelopment"
+      :worktree-label="api.initialWindowState.worktreeLabel"
+      @toggle-tree="treeVisible = !treeVisible"
+    />
     <QuestionCapture :store="store" :open="capturing" @close="capturing = false" />
   </div>
 </template>

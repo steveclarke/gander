@@ -1,6 +1,8 @@
 import {
   COLOR_THEME_ARGUMENT,
+  DEVELOPMENT_ARGUMENT,
   WINDOW_STYLE_ARGUMENT,
+  WORKTREE_LABEL_ARGUMENT,
   type GanderApi,
   type InitialWindowState,
   type WindowStyle,
@@ -28,7 +30,19 @@ export function initialWindowStateFromArguments(argv: string[]): InitialWindowSt
   const colorTheme = (THEME_IDS as readonly string[]).includes(rawTheme)
     ? rawTheme as ThemeId
     : DEFAULT_THEME_ID;
-  return { windowStyle, colorTheme };
+  let worktreeLabel: string | null = null;
+  try {
+    const encodedWorktreeLabel = argumentValue(WORKTREE_LABEL_ARGUMENT);
+    if (encodedWorktreeLabel) worktreeLabel = decodeURIComponent(encodedWorktreeLabel);
+  } catch {
+    // Treat malformed process input as absent. Main's encoded value is well-formed.
+  }
+  return {
+    windowStyle,
+    colorTheme,
+    isDevelopment: argv.includes(DEVELOPMENT_ARGUMENT),
+    worktreeLabel,
+  };
 }
 
 export function createGanderApi(
@@ -37,6 +51,8 @@ export function createGanderApi(
   initialWindowState: InitialWindowState = {
     windowStyle: "native-titlebar",
     colorTheme: DEFAULT_THEME_ID,
+    isDevelopment: false,
+    worktreeLabel: null,
   },
 ): GanderApi {
   const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>

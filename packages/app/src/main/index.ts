@@ -13,6 +13,7 @@ import { createServiceClient } from "./service-client.js";
 import { registerSettingsIpc } from "./settings-ipc.js";
 import { buildMenuTemplate } from "./menu.js";
 import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.js";
+import { linkedWorktreeLabel } from "./development-context.js";
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
@@ -125,12 +126,20 @@ function installMenu(cfg: GanderConfig): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-// Lives outside the bundle so it survives electron-vite's build untouched. The path is
-// relative to out/main/, which is where this file runs from in dev and after a build alike.
-const appIcon = nativeImage.createFromPath(join(import.meta.dirname, "../../resources/icon.png"));
-
-function createWindow(cfg: GanderConfig): void {
-  const appearance = windowAppearance(process.platform, cfg.settings.workbench.colorTheme);
+async function createWindow(cfg: GanderConfig): Promise<void> {
+  // electron-vite sets this only while its live renderer server is running. Packaged,
+  // unsigned, and E2E builds load the built renderer and retain the release identity.
+  const isDevelopment = process.env.ELECTRON_RENDERER_URL !== undefined;
+  const worktreeLabel = isDevelopment ? await linkedWorktreeLabel(process.cwd()) : null;
+  const appearance = windowAppearance(
+    process.platform,
+    cfg.settings.workbench.colorTheme,
+    isDevelopment,
+    worktreeLabel,
+  );
+  // Lives outside the bundle so it survives electron-vite's build untouched. The path is
+  // relative to out/main/, which is where this file runs from in dev and after a build alike.
+  const appIcon = nativeImage.createFromPath(join(import.meta.dirname, "../../resources", appearance.iconFilename));
   const win = new BrowserWindow({
     width: 1360, height: 860,
     ...appearance.windowOptions,
@@ -149,6 +158,8 @@ function createWindow(cfg: GanderConfig): void {
   // On macOS the web content paints beneath the traffic lights. Reveal only the themed
   // first frame so the system never exposes its default light backing surface.
   if (process.platform === "darwin") win.once("ready-to-show", () => win.show());
+  // Unpackaged runs show Electron's own icon in the dock; this is the only way to override it.
+  if (!appIcon.isEmpty()) app.dock?.setIcon(appIcon);
   // The renderer's whole input is arbitrary repo content — Monaco link-detects URLs inside
   // reviewed files — so a window this preload is attached to must never be allowed to
   // navigate away or spawn a same-preload child window. Electron would otherwise carry the
@@ -196,9 +207,6 @@ try {
 }
 
 app.whenReady().then(async () => {
-  // Unpackaged runs show Electron's own icon in the dock; this is the only way to override it.
-  if (!appIcon.isEmpty()) app.dock?.setIcon(appIcon);
-
   let cfg: GanderConfig;
   try {
     cfg = await bootstrap();
@@ -208,7 +216,7 @@ app.whenReady().then(async () => {
     return;
   }
   installMenu(cfg);
-  createWindow(cfg);
+  await createWindow(cfg);
 
   try {
     const stop = await startOpenServer({ socketPath: socketPath(), onTarget: deliver });
