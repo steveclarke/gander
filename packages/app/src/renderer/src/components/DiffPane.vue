@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { languageForPath } from "../languages.js";
 import { setupMonacoWorkers } from "../monaco.js";
 import type { Store } from "../store.js";
+import { Check, TriangleAlert } from "lucide-vue-next";
 
 const props = defineProps<{ store: Store }>();
 const host = ref<HTMLElement | null>(null);
@@ -118,11 +119,13 @@ onBeforeUnmount(dispose);
         :class="{ on: current.checked }"
         @click="store.setChecked(current.path, !current.checked)"
       >
-        {{ current.checked ? "✓ Reviewed" : "Mark reviewed" }}
+        <Check v-if="current.checked" :size="14" :stroke-width="3" />
+        <span>{{ current.checked ? "Reviewed" : "Mark reviewed" }}</span>
       </button>
     </header>
     <div v-if="current.changedSince" class="banner">
-      ⚠ Changed since your review — un-checked automatically. Re-review and mark again.
+      <TriangleAlert :size="14" />
+      <span>Changed since your review — un-checked automatically. Re-review and mark again.</span>
     </div>
     <div v-if="isBinary" class="binary-note">Binary file — diff cannot be displayed.</div>
     <div v-else ref="host" class="editor" />
@@ -181,6 +184,9 @@ onBeforeUnmount(dispose);
 }
 .check {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid var(--border);
   background: #22262e;
   color: var(--text);
@@ -199,6 +205,9 @@ onBeforeUnmount(dispose);
   background: rgba(63, 185, 80, 0.15);
 }
 .banner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   background: rgba(210, 153, 34, 0.08);
   color: var(--yellow);
   padding: 7px 14px;

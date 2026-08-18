@@ -55,3 +55,13 @@ settings page itself.
 
 Refreshing a pull request happened only on a 30-second poll and on window focus,
 with no button. Addressed in 0120cd0.
+
+## Text labels on icon-sized controls — Addressed
+
+The Fetch origin button paired a small icon with a text label, which reads as
+cramped rather than clear. Toolbar controls should be icon-only with a tooltip,
+following VS Code's toolbar grammar.
+
+Addressed by adopting Lucide (`lucide-vue-next`) as the icon set and replacing
+the emoji and Unicode glyphs throughout: repository, pull request, add, refresh,
+tree chevrons, checkbox marks, and the changed-since banner.

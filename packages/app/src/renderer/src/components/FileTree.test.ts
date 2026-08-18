@@ -114,7 +114,7 @@ describe("FileTree", () => {
 
     // collapse "app"
     await dirRow(wrapper, "app").trigger("click");
-    expect(dirRow(wrapper, "app").find(".chev").text()).toBe("▶");
+    expect(dirRow(wrapper, "app").find(".chev").classes()).toContain("lucide-chevron-right");
     expect(wrapper.text()).not.toContain("member.rb"); // collapsed: app's children are hidden
 
     // switch PR within the same repo the way store.openPr does: reassign `view` directly, no null in between
@@ -125,7 +125,7 @@ describe("FileTree", () => {
     ]);
     await nextTick();
 
-    expect(dirRow(wrapper, "app").find(".chev").text()).toBe("▼");
+    expect(dirRow(wrapper, "app").find(".chev").classes()).toContain("lucide-chevron-down");
     expect(wrapper.text()).toContain("member.rb");
   });
 });
