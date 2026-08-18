@@ -37,14 +37,45 @@ export async function listOpenPrs(repoId: string, token: string, fetchImpl: type
   }));
 }
 
+/**
+ * Where `gh` is, for an app that was not started from a shell.
+ *
+ * A GUI launch inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin` — none of the places a
+ * package manager installs to — so looking the binary up on PATH finds nothing on a
+ * machine where the reviewer's own terminal runs `gh` perfectly well.
+ */
+const GH_PATHS = ["gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/home/linuxbrew/.linuxbrew/bin/gh"];
+
+/** Whether a token GitHub will accept, and who it belongs to — for the settings pane. */
+export async function checkGithubToken(token: string, fetchImpl: typeof fetch = fetch): Promise<{ ok: true; login: string } | { ok: false; reason: string }> {
+  const apiUrl = (process.env.GANDER_GITHUB_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, "");
+  let res: Response;
+  try {
+    res = await fetchImpl(`${apiUrl}/user`, {
+      headers: { Authorization: `Bearer ${token.trim()}`, Accept: "application/vnd.github+json" },
+    });
+  } catch (err) {
+    return { ok: false, reason: `Could not reach GitHub: ${(err as Error).message}` };
+  }
+  if (res.status === 401) return { ok: false, reason: "GitHub rejected that token." };
+  if (!res.ok) return { ok: false, reason: `GitHub answered ${res.status}` };
+  const body = (await res.json()) as { login?: unknown };
+  return { ok: true, login: typeof body.login === "string" ? body.login : "an account" };
+}
+
 export async function resolveGithubToken(configToken?: string, execFileImpl: ExecFileFn = runGhAuthToken): Promise<string> {
   // An explicit process override must win in automation, where consulting a developer's
   // gh session would make a local fake depend on credentials it neither needs nor should see.
   if (process.env.GANDER_GITHUB_TOKEN) return process.env.GANDER_GITHUB_TOKEN;
-  try {
-    const { stdout } = await execFileImpl("gh", ["auth", "token"]);
-    if (stdout.trim()) return stdout.trim();
-  } catch { /* gh missing or not logged in — fall through */ }
+  // The configured token first among the real sources: someone who has entered one has
+  // said which credential to use, and spawning a process to second-guess that is slower
+  // and less predictable.
   if (configToken) return configToken;
-  throw new Error("No GitHub token: log in with `gh auth login`, set GANDER_GITHUB_TOKEN, or add githubToken to the config file");
+  for (const gh of GH_PATHS) {
+    try {
+      const { stdout } = await execFileImpl(gh, ["auth", "token"]);
+      if (stdout.trim()) return stdout.trim();
+    } catch { /* not there, or not logged in — try the next */ }
+  }
+  throw new Error("No GitHub token. Add one in Settings → Connection, or log in with `gh auth login` and restart Gander.");
 }

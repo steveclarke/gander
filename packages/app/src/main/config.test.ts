@@ -11,12 +11,11 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "gander-cfg-")); cfgPath = j
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("config", () => {
-  it("throws a descriptive error when the file is missing", () => {
-    expect(() => loadConfig(cfgPath)).toThrow(/config file not found/i);
-  });
-  it("throws when required keys are absent", () => {
+  it("fills in what a half-written config leaves out", () => {
+    // Missing halves of the connection are a state the app can show and the reviewer can
+    // fix in settings. Refusing to start over one only hides the way to fix it.
     writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://x" }));
-    expect(() => loadConfig(cfgPath)).toThrow(/serviceToken/);
+    expect(loadConfig(cfgPath).serviceToken).toBe("");
   });
   it("round-trips repos through save/load", () => {
     saveConfig({ serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas" }] }, cfgPath);
@@ -149,5 +148,27 @@ describe("config", () => {
     saveConfig(cfg, cfgPath);
     const raw = JSON.parse(readFileSync(cfgPath, "utf8")) as Record<string, unknown>;
     expect(raw["futureFeatureFlag"]).toBe("on-by-default-in-a-later-version");
+  });
+
+  it("starts unconfigured when there is no file, and that config survives a save", () => {
+    const path = join(dir, "absent", "config.json");
+    const first = loadConfig(path);
+    expect(first.serviceUrl).toBe("");
+    expect(first.serviceToken).toBe("");
+    expect(first.repos).toEqual([]);
+
+    // The app writes the config on ordinary actions — a zoom change, opening a pull
+    // request. An unconfigured one has to come back, not fail the next launch.
+    first.zoomLevel = 1;
+    saveConfig(first, path);
+    const second = loadConfig(path);
+    expect(second.zoomLevel).toBe(1);
+    expect(second.serviceUrl).toBe("");
+  });
+
+  it("still rejects a file that exists and is wrong", () => {
+    const path = join(dir, "broken.json");
+    writeFileSync(path, JSON.stringify({ serviceUrl: "not a url", serviceToken: "t" }));
+    expect(() => loadConfig(path)).toThrow(/Invalid config/);
   });
 });

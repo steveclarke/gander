@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
-import { Braces, Palette, Settings2, SlidersHorizontal, Type, X } from "lucide-vue-next";
+import { Braces, Palette, Plug, Settings2, SlidersHorizontal, Type, X } from "lucide-vue-next";
 import type { EditorSettingsStore } from "../editor-settings-store.js";
 import { settingsFromJson, settingsToJson, type AppSettings } from "../../../settings.js";
 import EditorSettings from "./EditorSettings.vue";
 import SettingsJsonEditor from "./SettingsJsonEditor.vue";
 import WorkbenchSettings from "./WorkbenchSettings.vue";
+import ConnectionSettings from "./ConnectionSettings.vue";
 
-const props = defineProps<{ store: EditorSettingsStore }>();
-const emit = defineEmits<{ close: [] }>();
+type Category = "workbench" | "editor" | "connection";
+
+const props = defineProps<{ store: EditorSettingsStore; initialCategory?: Category }>();
+const emit = defineEmits<{ close: []; connected: [] }>();
 
 const mode = shallowRef<"ui" | "json">("ui");
-const category = shallowRef<"workbench" | "editor">("workbench");
+const category = shallowRef<Category>(props.initialCategory ?? "workbench");
 const saveState = shallowRef<"idle" | "saving" | "saved" | "error">("idle");
 const jsonSource = shallowRef(settingsToJson(props.store.settings));
 const jsonError = shallowRef<string | null>(null);
@@ -95,7 +98,7 @@ onBeforeUnmount(() => {
         <Settings2 :size="20" />
         <div>
           <h1 id="settings-title">Settings</h1>
-          <p>Changes are saved automatically.</p>
+          <p>{{ category === "connection" ? "Connection is saved when it answers." : "Changes are saved automatically." }}</p>
         </div>
       </div>
       <div class="title-actions">
@@ -142,11 +145,22 @@ onBeforeUnmount(() => {
         >
           <Type :size="15" />Editor
         </button>
+        <button
+          class="category"
+          :class="{ active: category === 'connection' }"
+          :aria-current="category === 'connection' ? 'page' : undefined"
+          @click="category = 'connection'"
+        >
+          <Plug :size="15" />Connection
+        </button>
       </nav>
 
       <div class="content">
         <template v-if="mode === 'ui'">
           <WorkbenchSettings v-if="category === 'workbench'" :store="store" @saved="onUiSaved" />
+          <!-- Connection is not part of the settings document, so it saves itself rather
+               than reporting through the document's automatic save. -->
+          <ConnectionSettings v-else-if="category === 'connection'" @connected="emit('connected')" />
           <EditorSettings v-else :store="store" @saved="onUiSaved" />
         </template>
         <div v-else class="json-view">
@@ -166,8 +180,9 @@ onBeforeUnmount(() => {
     </div>
 
     <footer class="settings-status">
-      <span :class="{ error: jsonError || store.error }" role="status" aria-live="polite">{{ status }}</span>
-      <span v-if="mode === 'json'" class="format">Only public application settings are shown.</span>
+      <span v-if="category !== 'connection' || mode === 'json'" :class="{ error: jsonError || store.error }" role="status" aria-live="polite">{{ status }}</span>
+      <span v-else />
+      <span v-if="mode === 'json'" class="format">Only public application settings are shown — not the connection.</span>
     </footer>
   </section>
 </template>
