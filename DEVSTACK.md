@@ -14,6 +14,7 @@ process-compose, with ports allocated by outport.
 | Status | `bin/dev status` (add `--json` for machine-readable) |
 | Logs | `bin/dev logs service` |
 | Restart one process | `bin/dev restart service` |
+| Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Check the live MCP endpoint | `bin/mcp check` |
 | Debug the live MCP endpoint | `bin/mcp tui` or `bin/mcp inspect` |
 | End-to-end tests | `pnpm test:e2e` |
@@ -62,7 +63,7 @@ checkout.
 
 | Path | Contents |
 |------|----------|
-| `.env` | Allocated port, service URL, generated dev token |
+| `.env` | Allocated port, service URL, generated dev token, app socket path |
 | `.pc_env` | The same values plus `PC_SOCKET_PATH`, read by process-compose at startup |
 | `.gander/config.json` | Repo-local app config — registered repos |
 | `.gander/gander.db` | Review state (checkoffs, snapshots) |
@@ -107,6 +108,27 @@ checkout never reaches another stack. `.gander/` keeps the registered repos and
 SQLite review state local to that worktree. Outport also allocates the two
 ports used by MCP Inspector's web client and MCP Apps sandbox, so interactive
 inspectors can run in more than one worktree at once.
+
+## Opening a review from the command line
+
+`bin/gander` hands a review to the app already running for this checkout:
+
+```bash
+bin/gander --repo owner/name                          # the repository
+bin/gander --repo owner/name --pr 42                  # a pull request in it
+bin/gander --pr https://github.com/owner/name/pull/42 # the same, from a URL
+```
+
+A repository the app has not seen is registered on the spot. The command prints
+what was opened, or the reason it could not be.
+
+Delivery is over a Unix socket at `GANDER_APP_SOCKET`, allocated per checkout by
+outport, so a command run in a worktree reaches that worktree's window and no
+other. Electron's single-instance lock cannot make that distinction — it keys on
+the user data directory, which every checkout shares so they can reuse each
+other's clones.
+
+The app has to be running: `bin/dev -D` first, then the command.
 
 ## Testing and debugging MCP
 

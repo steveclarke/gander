@@ -40,11 +40,12 @@ async function main(): Promise<void> {
   const databasePath = join(root, "gander.db");
   const userDataPath = join(root, "user-data");
   const raceMarkerPath = join(root, "concurrent-race-requests");
-  const [persistence, race] = await Promise.all([
+  const [persistence, race, launcher] = await Promise.all([
     repoFixture("acme/persistence", "Persist reviewed files"),
     repoFixture("acme/race", "Open without corrupting the clone"),
+    repoFixture("acme/launcher", "Open from the command line"),
   ]);
-  const fixtures = [persistence, race];
+  const fixtures = [persistence, race, launcher];
   const storage = openStorage(databasePath);
   const service = buildServer({ storage, token: SERVICE_TOKEN, version: "e2e" });
   const github = Fastify({ logger: false });
@@ -104,6 +105,10 @@ async function main(): Promise<void> {
       GANDER_E2E_PERSISTENCE_URL: persistence.url,
       GANDER_E2E_RACE_URL: race.url,
       GANDER_E2E_RACE_MARKER: raceMarkerPath,
+      GANDER_E2E_LAUNCHER_REPO: launcher.repoId,
+      // Where the app listens with no allocated socket in the environment: beside the
+      // suite's own user data, so this run cannot reach a development app.
+      GANDER_E2E_APP_SOCKET: join(userDataPath, "app.sock"),
       GIT_CONFIG_COUNT: String(fixtures.length),
     });
     fixtures.forEach((fixture, index) => {
@@ -118,8 +123,8 @@ async function main(): Promise<void> {
       if (!stdout.includes(fixture.headSha)) throw new Error(`Git URL redirect failed for ${fixture.repoId}`);
     }
 
-    const launcher = new Launcher(join(import.meta.dirname, "wdio.conf.ts"), {});
-    const exitCode = await launcher.run();
+    const wdio = new Launcher(join(import.meta.dirname, "wdio.conf.ts"), {});
+    const exitCode = await wdio.run();
     if (exitCode !== 0) process.exitCode = exitCode ?? 1;
   } finally {
     await Promise.allSettled([service.close(), github.close()]);
