@@ -2,8 +2,17 @@ packages:
   - "packages/*"
 allowBuilds:
   better-sqlite3: true
+  edgedriver: false
   electron: true
+  electron-chromedriver: true
   esbuild: true
+  geckodriver: false
 minimumReleaseAgeExclude:
   - '@vue/language-core@3.3.10'
   - vue-tsc@3.3.10
+  - '@wdio/config@9.31.1'
+  - '@wdio/protocols@9.31.1'
+  - '@wdio/types@9.31.1'
+  - '@wdio/utils@9.31.1'
+  - webdriver@9.31.1
+  - webdriverio@9.31.1

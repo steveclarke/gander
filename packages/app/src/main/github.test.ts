@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { listOpenPrs, resolveGithubToken } from "./github.js";
 
 const ghPr = {
@@ -7,6 +7,13 @@ const ghPr = {
 };
 
 describe("listOpenPrs", () => {
+  const originalApiUrl = process.env.GANDER_GITHUB_API_URL;
+  beforeEach(() => { delete process.env.GANDER_GITHUB_API_URL; });
+  afterEach(() => {
+    if (originalApiUrl === undefined) delete process.env.GANDER_GITHUB_API_URL;
+    else process.env.GANDER_GITHUB_API_URL = originalApiUrl;
+  });
+
   it("maps the GitHub REST shape to PrSummary", async () => {
     const fakeFetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
       expect(String(url)).toBe("https://api.github.com/repos/acme/atlas/pulls?state=open&per_page=100&page=1");
@@ -21,6 +28,15 @@ describe("listOpenPrs", () => {
   it("surfaces API errors loudly with status and body", async () => {
     const fakeFetch = (async () => new Response("rate limited", { status: 403 })) as typeof fetch;
     await expect(listOpenPrs("acme/atlas", "tok", fakeFetch)).rejects.toThrow(/403.*rate limited/s);
+  });
+
+  it("uses the configured API base for a local GitHub fake", async () => {
+    process.env.GANDER_GITHUB_API_URL = "http://127.0.0.1:43123/";
+    const fakeFetch = (async (url: RequestInfo | URL) => {
+      expect(String(url)).toBe("http://127.0.0.1:43123/repos/acme/atlas/pulls?state=open&per_page=100&page=1");
+      return new Response(JSON.stringify([ghPr]), { status: 200 });
+    }) as typeof fetch;
+    await listOpenPrs("acme/atlas", "local-token", fakeFetch);
   });
 
   it("treats null body as empty string", async () => {
@@ -64,13 +80,16 @@ describe("listOpenPrs", () => {
 });
 
 describe("resolveGithubToken", () => {
-  it("falls back to env when gh is unavailable", async () => {
-    const origPath = process.env.PATH;
+  const originalToken = process.env.GANDER_GITHUB_TOKEN;
+  beforeEach(() => { delete process.env.GANDER_GITHUB_TOKEN; });
+  afterEach(() => {
+    if (originalToken === undefined) delete process.env.GANDER_GITHUB_TOKEN;
+    else process.env.GANDER_GITHUB_TOKEN = originalToken;
+  });
+
+  it("prefers the explicit environment token without consulting gh", async () => {
     process.env.GANDER_GITHUB_TOKEN = "env-tok";
-    process.env.PATH = "/nonexistent"; // makes `gh` unfindable for this test
-    try {
-      expect(await resolveGithubToken()).toBe("env-tok");
-    } finally { delete process.env.GANDER_GITHUB_TOKEN; process.env.PATH = origPath; }
+    expect(await resolveGithubToken(undefined, async () => { throw new Error("gh must not run"); })).toBe("env-tok");
   });
 
   it("returns the trimmed output of `gh auth token` when it succeeds", async () => {
@@ -83,28 +102,14 @@ describe("resolveGithubToken", () => {
   });
 
   it("falls back to configToken when gh and the env var are both unavailable", async () => {
-    const origEnv = process.env.GANDER_GITHUB_TOKEN;
-    delete process.env.GANDER_GITHUB_TOKEN;
     const fakeExecFile = async () => { throw new Error("gh not found"); };
-    try {
-      expect(await resolveGithubToken("config-tok", fakeExecFile)).toBe("config-tok");
-    } finally {
-      if (origEnv === undefined) delete process.env.GANDER_GITHUB_TOKEN;
-      else process.env.GANDER_GITHUB_TOKEN = origEnv;
-    }
+    expect(await resolveGithubToken("config-tok", fakeExecFile)).toBe("config-tok");
   });
 
   it("throws naming all three sources when no token is available anywhere", async () => {
-    const origEnv = process.env.GANDER_GITHUB_TOKEN;
-    delete process.env.GANDER_GITHUB_TOKEN;
     const fakeExecFile = async () => { throw new Error("gh not found"); };
-    try {
-      await expect(resolveGithubToken(undefined, fakeExecFile)).rejects.toThrow(
-        /gh auth login.*GANDER_GITHUB_TOKEN.*config file/s,
-      );
-    } finally {
-      if (origEnv === undefined) delete process.env.GANDER_GITHUB_TOKEN;
-      else process.env.GANDER_GITHUB_TOKEN = origEnv;
-    }
+    await expect(resolveGithubToken(undefined, fakeExecFile)).rejects.toThrow(
+      /gh auth login.*GANDER_GITHUB_TOKEN.*config file/s,
+    );
   });
 });

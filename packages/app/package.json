@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "typecheck": "vue-tsc --noEmit"
+    "test:e2e": "pnpm build && tsx e2e/run.ts",
+    "typecheck": "vue-tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json"
   },
   "dependencies": {
     "@gander/shared": "workspace:*",
@@ -20,9 +21,17 @@
     "@types/node": "^22.0.0",
     "@vitejs/plugin-vue": "^5.2.0",
     "@vue/test-utils": "^2.4.11",
+    "@wdio/cli": "9.29.1",
+    "@wdio/electron-service": "10.2.0",
+    "@wdio/globals": "9.29.1",
+    "@wdio/local-runner": "9.29.1",
+    "@wdio/mocha-framework": "9.29.1",
+    "@wdio/spec-reporter": "9.29.1",
     "electron": "^33.0.0",
+    "electron-chromedriver": "33.4.11",
     "electron-vite": "^3.0.0",
     "fastify": "^5.12.0",
+    "tsx": "4.22.4",
     "typescript": "5.9.3",
     "vite": "^6.4.3",
     "vue-tsc": "^3.3.10"
