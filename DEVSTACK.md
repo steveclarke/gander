@@ -175,7 +175,7 @@ Run it in the repository being reviewed, not in this one. Three tools appear:
 
 | Tool | Purpose |
 |------|---------|
-| `get_review_questions` | Open questions for a repo + branch (or pull request number), with file and line |
+| `get_review_questions` | Questions for a repo + branch (or pull request number), with reply threads and counts for every state; addressed and resolved questions can be included explicitly |
 | `reply_to_question` | Adds an agent reply to a question without changing its lifecycle state |
 | `mark_question_addressed` | Flags one as acted on, with an optional commit ref and note |
 

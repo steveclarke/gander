@@ -156,12 +156,14 @@ describe("storage", () => {
 
     it("refuses to re-address a question the reviewer already resolved", () => {
       const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
-      storage.markQuestionAddressed(q.id, { commitRef: null, note: null });
+      storage.markQuestionAddressed(q.id, { commitRef: "abc1234", note: "Dropped the retry" });
       storage.putFileState("acme/atlas", 7, {
         checked: true, path: "a.rb", baseHash: "b", headHash: "h",
         baseContent: "o", headContent: "n", machine: "m",
       });
-      expect(storage.listQuestions("acme/atlas", 7)[0]!.state).toBe("resolved");
+      expect(storage.listQuestions("acme/atlas", 7)[0]).toMatchObject({
+        state: "resolved", commitRef: "abc1234", note: "Dropped the retry",
+      });
       expect(storage.markQuestionAddressed(q.id, { commitRef: null, note: null })).toBeNull();
     });
 

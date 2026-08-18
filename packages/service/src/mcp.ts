@@ -31,6 +31,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       description:
         "Questions the reviewer has left on a pull request, with the file and line each one is about. " +
         "Derive repo and branch from the working directory. Returns open questions by default — those are the ones still needing work. " +
+        "The response always counts open, addressed, and resolved questions so hidden states are visible. " +
         "The response names the branch, title, and stack position of the pull request the questions belong to: check it matches the checkout being worked in, " +
         "because a stacked pull request's sibling is a different branch with different questions.",
       inputSchema: {
@@ -38,18 +39,23 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         branch: z.string().optional().describe("The working branch. Use this when the pull request number is unknown."),
         prNumber: z.number().int().positive().optional().describe("Pull request number, if known."),
         includeAddressed: z.boolean().optional().describe("Also return questions already marked addressed. Defaults to false."),
+        includeResolved: z.boolean().optional().describe("Also return questions the reviewer has resolved. Defaults to false."),
       },
     },
-    async ({ repo, branch, prNumber, includeAddressed }) => {
+    async ({ repo, branch, prNumber, includeAddressed, includeResolved }) => {
       const resolved = resolvePr(repo, prNumber, branch);
       if (typeof resolved === "string") return { content: [{ type: "text", text: resolved }], isError: true };
 
       const context = storage.getPrContext(repo, resolved);
       const members = context?.stackId == null ? [] : storage.listStackMembers(repo, context.stackId);
-      const wanted = includeAddressed === true ? ["open", "addressed"] : ["open"];
-      const questions = storage
-        .listQuestions(repo, resolved)
-        .filter((q) => wanted.includes(q.state))
+      const wanted = new Set(["open"]);
+      if (includeAddressed === true) wanted.add("addressed");
+      if (includeResolved === true) wanted.add("resolved");
+      const allQuestions = storage.listQuestions(repo, resolved);
+      const questionCounts: Record<"open" | "addressed" | "resolved", number> = { open: 0, addressed: 0, resolved: 0 };
+      for (const question of allQuestions) questionCounts[question.state] += 1;
+      const questions = allQuestions
+        .filter((q) => wanted.has(q.state))
         .map((q) => ({
           id: q.id,
           file: q.path,
@@ -62,11 +68,29 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
             text: reply.text,
             createdAt: reply.createdAt,
           })),
+          ...(q.state === "open" ? {} : { commitRef: q.commitRef, note: q.note }),
           capturedAtSha: q.headSha,
           // The branch may have moved since the reviewer read it, in which case the line
           // number is the one they saw, not necessarily the one there now.
           lineMayHaveMoved: q.headSha !== null && context !== null && q.headSha !== context.headSha,
         }));
+
+      const hiddenStates = (["addressed", "resolved"] as const)
+        .filter((state) => !wanted.has(state) && questionCounts[state] > 0);
+      let message: string;
+      if (questions.length === 0 && hiddenStates.length > 0) {
+        const includeFlag = { addressed: "includeAddressed", resolved: "includeResolved" } as const;
+        const hiddenCount = hiddenStates.reduce((total, state) => total + questionCounts[state], 0);
+        const hidden = hiddenStates
+          .map((state) => `${questionCounts[state]} ${state} question${questionCounts[state] === 1 ? "" : "s"}`)
+          .join(" and ");
+        const flags = hiddenStates.map((state) => `${includeFlag[state]}: true`).join(" and ");
+        message = `No ${[...wanted].join(" or ")} questions returned. ${hidden} ${hiddenCount === 1 ? "is" : "are"} hidden; pass ${flags} to retrieve ${hiddenCount === 1 ? "it" : "them"}.`;
+      } else if (questions.length === 0 && allQuestions.length === 0) {
+        message = "No questions exist for this pull request.";
+      } else {
+        message = `Returned ${questions.length} of ${allQuestions.length} question${allQuestions.length === 1 ? "" : "s"} on this pull request.`;
+      }
 
       const payload = {
         repo,
@@ -75,6 +99,8 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         branch: context?.headRef ?? null,
         title: context?.title ?? null,
         headSha: context?.headSha ?? null,
+        questionCounts,
+        message,
         stack: context?.stackSize == null || context.stackPosition == null
           ? null
           : {
