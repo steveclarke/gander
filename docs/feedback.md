@@ -12,14 +12,15 @@ Reference points: GitHub Desktop's clone dialog lists the signed-in account's
 repositories; the same data is available from the GitHub API the app already
 authenticates against.
 
-## No progress indication while a pull request opens
+## Progress indication is present but not noticeable
 
 Selecting a pull request takes several seconds — fetching its refs, diffing, and
-loading review state — with no spinner, disabled control, or status text. The
-window looks idle and unresponsive.
+loading review state. The top bar does show "Working…" during it, in small faint
+text at the opposite end of the bar from the menu that was just clicked, and it
+reads as idle.
 
 This is the same gap that produced the clone race fixed in b575f50: with nothing
-on screen to indicate work in progress, the control invites a second click.
+noticeable on screen, the control invites a second click.
 
 ## Launch does not restore the last review
 
