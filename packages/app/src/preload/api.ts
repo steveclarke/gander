@@ -1,14 +1,49 @@
-import type { GanderApi } from "../api.js";
+import {
+  COLOR_THEME_ARGUMENT,
+  WINDOW_STYLE_ARGUMENT,
+  type GanderApi,
+  type InitialWindowState,
+  type WindowStyle,
+} from "../api.js";
 import type { OpenTarget } from "@gander/shared";
+import { DEFAULT_THEME_ID, THEME_IDS, type ThemeId } from "../themes.js";
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>;
 type Subscribe = (channel: string, listener: (...args: any[]) => void) => () => void;
 
-export function createGanderApi(invoke: Invoke, subscribe: Subscribe): GanderApi {
+export function initialWindowStateFromArguments(argv: string[]): InitialWindowState {
+  const argumentValue = (prefix: string): string | undefined =>
+    argv.filter((argument) => argument.startsWith(prefix)).at(-1)?.slice(prefix.length);
+  const rawWindowStyle = argumentValue(WINDOW_STYLE_ARGUMENT);
+  const windowStyle: WindowStyle = rawWindowStyle === "integrated-titlebar"
+    ? "integrated-titlebar"
+    : "native-titlebar";
+  let rawTheme = "";
+  try {
+    rawTheme = decodeURIComponent(argumentValue(COLOR_THEME_ARGUMENT) ?? "");
+  } catch {
+    // A malformed user-supplied process argument must not prevent the preload bridge
+    // from loading. Main's validated argument still wins when it is appended later.
+  }
+  const colorTheme = (THEME_IDS as readonly string[]).includes(rawTheme)
+    ? rawTheme as ThemeId
+    : DEFAULT_THEME_ID;
+  return { windowStyle, colorTheme };
+}
+
+export function createGanderApi(
+  invoke: Invoke,
+  subscribe: Subscribe,
+  initialWindowState: InitialWindowState = {
+    windowStyle: "native-titlebar",
+    colorTheme: DEFAULT_THEME_ID,
+  },
+): GanderApi {
   const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
     invoke(`gander:${channel}`, ...args) as Promise<T>;
 
   return {
+    initialWindowState,
     listRepos: () => call("listRepos"),
     addRepo: (url) => call("addRepo", url),
     listPrs: (repoId) => call("listPrs", repoId),

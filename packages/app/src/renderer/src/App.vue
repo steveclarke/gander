@@ -17,7 +17,8 @@ import { effectiveTreeTypography } from "../../settings.js";
 import "./theme.css";
 
 const store = createStore(api);
-const editorSettings = createEditorSettingsStore(api);
+const editorSettings = createEditorSettingsStore(api, api.initialWindowState.colorTheme);
+const integratedTitleBar = api.initialWindowState.windowStyle === "integrated-titlebar";
 let unsubscribeOpenTarget: (() => void) | null = null;
 let unsubscribeOpenSettings: (() => void) | null = null;
 
@@ -151,6 +152,7 @@ onBeforeUnmount(() => {
       :store="store"
       :questions="questionCount"
       :settings-active="activeSurface === 'settings'"
+      :integrated-title-bar="integratedTitleBar"
       @toggle-questions="drawerOpen = !drawerOpen"
       @toggle-settings="toggleSettings"
     />

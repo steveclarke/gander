@@ -9,6 +9,7 @@ export function registerSettingsIpc(
   ipc: SettingsIpc,
   cfg: GanderConfig,
   persist: (config: GanderConfig) => void = saveConfig,
+  onSettingsChanged: (settings: AppSettings) => void = () => {},
 ): void {
   ipc.handle("gander:getSettings", async () => cfg.settings);
   ipc.handle("gander:updateSettings", async (_event, value: unknown): Promise<AppSettings> => {
@@ -17,6 +18,7 @@ export function registerSettingsIpc(
     // receives the write error and the previous in-memory settings remain authoritative.
     persist({ ...cfg, settings });
     cfg.settings = settings;
+    onSettingsChanged(settings);
     return settings;
   });
 }

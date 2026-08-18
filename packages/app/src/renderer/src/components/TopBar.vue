@@ -4,7 +4,12 @@ import type { Store } from "../store.js";
 import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw, Settings } from "lucide-vue-next";
 import SwitcherDropdown from "./SwitcherDropdown.vue";
 
-const props = defineProps<{ store: Store; questions: number; settingsActive: boolean }>();
+const props = defineProps<{
+  store: Store;
+  questions: number;
+  settingsActive: boolean;
+  integratedTitleBar: boolean;
+}>();
 const emit = defineEmits<{ toggleQuestions: []; toggleSettings: [] }>();
 
 const repoOpen = ref(false);
@@ -73,10 +78,16 @@ const currentRepoLabel = computed(() =>
 );
 const currentPr = computed(() => props.store.view?.pr ?? null);
 const progress = computed(() => props.store.progress());
+const TITLE_BAR_INSET = 78;
+const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET : 0);
 </script>
 
 <template>
-  <div class="topbar">
+  <div
+    class="topbar"
+    :class="{ 'integrated-titlebar': integratedTitleBar }"
+    :style="{ paddingLeft: titleBarInset ? `${titleBarInset}px` : undefined }"
+  >
     <div
       class="seg seg-repo"
       role="button"
@@ -150,7 +161,7 @@ const progress = computed(() => props.store.progress());
     </div>
   </div>
 
-  <SwitcherDropdown :open="repoOpen" :left="0" :width="320" @close="closeAll">
+  <SwitcherDropdown :open="repoOpen" :left="titleBarInset" :width="320" @close="closeAll">
     <div class="sw-h">REPOSITORIES</div>
     <div
       v-for="repo in store.repos"
@@ -181,7 +192,7 @@ const progress = computed(() => props.store.progress());
     </form>
   </SwitcherDropdown>
 
-  <SwitcherDropdown :open="reviewOpen" :left="190" :width="460" @close="closeAll">
+  <SwitcherDropdown :open="reviewOpen" :left="190 + titleBarInset" :width="460" @close="closeAll">
     <div class="sw-h">OPEN PULL REQUESTS</div>
     <div v-if="store.prs.length === 0" class="sw-empty">No open pull requests</div>
     <div
@@ -203,6 +214,16 @@ const progress = computed(() => props.store.progress());
 
 <style scoped>
 .topbar { display: flex; align-items: stretch; background: var(--panel-background); border-bottom: 1px solid var(--workbench-border); height: 50px; }
+.topbar.integrated-titlebar {
+  user-select: none;
+  -webkit-app-region: drag;
+}
+.integrated-titlebar .seg,
+.integrated-titlebar .right,
+.integrated-titlebar button,
+.integrated-titlebar [role="button"] {
+  -webkit-app-region: no-drag;
+}
 .seg { display: flex; align-items: center; gap: 10px; padding: 0 14px; min-width: 0; border-right: 1px solid var(--workbench-border); cursor: pointer; position: relative; }
 .seg:hover { background: var(--hover-background); }
 .seg:focus-visible, .sw-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

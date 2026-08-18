@@ -1,8 +1,30 @@
 import { describe, expect, it, vi } from "vitest";
-import { createGanderApi } from "./api.js";
+import { createGanderApi, initialWindowStateFromArguments } from "./api.js";
 import { DEFAULT_APP_SETTINGS } from "../settings.js";
 
 describe("preload API", () => {
+  it("exposes only main-selected window style and validated initial theme", () => {
+    const state = initialWindowStateFromArguments([
+      "--gander-window-style=integrated-titlebar",
+      "--gander-color-theme=Gander%20Dark",
+    ]);
+    const api = createGanderApi(vi.fn(), vi.fn(), state);
+
+    expect(api.initialWindowState).toEqual({
+      windowStyle: "integrated-titlebar",
+      colorTheme: "Gander Dark",
+    });
+    expect(initialWindowStateFromArguments([
+      "--gander-window-style=integrated-titlebar",
+      "--gander-color-theme=Gander%20Dark",
+      "--gander-window-style=anything",
+      "--gander-color-theme=%",
+    ])).toEqual({
+      windowStyle: "native-titlebar",
+      colorTheme: "Catppuccin Mocha",
+    });
+  });
+
   it("routes typed settings calls through their namespaced IPC channels", async () => {
     const invoke = vi.fn(async () => ({ editor: { fontFamily: "monospace", fontSize: 16 } }));
     const api = createGanderApi(invoke, vi.fn());
