@@ -1,0 +1,17 @@
+# One service, one volume, one secret. See docs/deploy.md.
+services:
+  gander:
+    build:
+      context: .
+      dockerfile: packages/service/Dockerfile
+    restart: unless-stopped
+    environment:
+      # No default. The service refuses to start without it.
+      GANDER_TOKEN: ${GANDER_TOKEN:?set GANDER_TOKEN in .env}
+    ports:
+      - "${GANDER_PUBLISH_PORT:-8390}:8390"
+    volumes:
+      - gander-data:/data
+
+volumes:
+  gander-data:

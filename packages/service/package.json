@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "start": "tsx src/main.ts",
     "dev": "tsx src/main.ts",
     "typecheck": "tsc --noEmit"
   },
