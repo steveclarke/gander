@@ -247,7 +247,9 @@ describe("Gander end to end", () => {
       "file.mystery": "_file",
     };
     for (const [file, icon] of Object.entries(expectedIcons)) {
-      await expect(treeRow(file).$(".file-icon")).toHaveAttribute("data-icon-id", icon);
+      const image = treeRow(file).$(".file-icon");
+      await expect(image).toHaveAttribute("data-icon-id", icon);
+      await browser.waitUntil(async () => await image.getProperty("naturalWidth") === 16);
     }
 
     const src = treeRow("src");
