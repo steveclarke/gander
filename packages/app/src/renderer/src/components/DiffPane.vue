@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { languageForPath } from "../languages.js";
 import { setupMonacoWorkers } from "../monaco.js";
 import type { Store } from "../store.js";
+import { currentLine, pendingReveal } from "../selection.js";
 import { Check, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
 
 const props = defineProps<{ store: Store }>();
@@ -33,9 +34,25 @@ const baseBinary = computed(() => current.value !== null && current.value.baseCo
 const headBinary = computed(() => current.value !== null && current.value.headContent === null && current.value.headHash !== null);
 const isBinary = computed(() => baseBinary.value || headBinary.value);
 
+/** The editor holding the head revision: the diff editor's right-hand side, or the full file. */
+function headEditor(): monaco.editor.ICodeEditor | null {
+  if (!editor) return null;
+  return "getModifiedEditor" in editor ? editor.getModifiedEditor() : editor;
+}
+
+function trackCursor(): void {
+  const ed = headEditor();
+  if (!ed) return;
+  currentLine.value = ed.getPosition()?.lineNumber ?? null;
+  ed.onDidChangeCursorPosition((e) => { currentLine.value = e.position.lineNumber; });
+}
+
 function dispose(): void {
   editor?.dispose();
   editor = null;
+  // A line number from a file that is no longer on screen would stamp the next
+  // question with a line the reader never looked at.
+  currentLine.value = null;
   for (const model of models) model.dispose();
   models = [];
 }
@@ -59,6 +76,7 @@ function render(): void {
     });
     diff.setModel({ original, modified });
     editor = diff;
+    trackCursor();
   } else {
     const model = monaco.editor.createModel(file.headContent ?? "", lang);
     models = [model];
@@ -68,7 +86,9 @@ function render(): void {
       automaticLayout: true,
       theme: "vs-dark",
     });
+    trackCursor();
   }
+  reveal();
 }
 
 // The editor must only be torn down and rebuilt when the content it displays actually
@@ -104,7 +124,21 @@ onMounted(() => {
 // flush: "post" — the binary/text split below is a v-if/v-else, so the `host` element is
 // created or destroyed by that same content change. The default pre-flush timing would run
 // render() before Vue patches the DOM, handing it a stale or absent host element.
+/** Jump to a line the reader picked in the questions drawer, unfolding it if it is hidden. */
+function reveal(): void {
+  const line = pendingReveal.value;
+  const ed = headEditor();
+  if (line === null || !ed) return;
+  pendingReveal.value = null;
+  ed.revealLineInCenter(line);
+  ed.setPosition({ lineNumber: line, column: 1 });
+  ed.focus();
+}
+
 watch(renderKey, render, { flush: "post" });
+// A jump into the file already on screen needs no rebuild; render() handles the case
+// where the drawer also switched files, by calling reveal() once the editor exists.
+watch(pendingReveal, (line) => { if (line !== null) reveal(); }, { flush: "post" });
 onBeforeUnmount(dispose);
 </script>
 

@@ -27,8 +27,10 @@ async function connect(token = "test-token"): Promise<Client> {
   return client;
 }
 
+// The SDK's CallToolResult content is a wide union; every assertion here is about the
+// text block a tool returns, so narrow once instead of at each call site.
 const textOf = (result: { content?: unknown }): string => {
-  const [first] = (result.content ?? []) as Array<{ type: string; text: string }>;
+  const [first] = (result.content ?? []) as Array<{ type: string; text?: string }>;
   return first?.text ?? "";
 };
 
@@ -63,7 +65,7 @@ describe("MCP endpoint", () => {
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
     });
-    const payload = JSON.parse(textOf(result)) as { prNumber: number; questions: Array<{ file: string; line: number; text: string }> };
+    const payload = JSON.parse(textOf(result as { content?: unknown })) as { prNumber: number; questions: Array<{ file: string; line: number; text: string }> };
     expect(payload.prNumber).toBe(7);
     expect(payload.questions).toEqual([{ id: expect.any(Number), file: "a.rb", line: 12, text: "Why the retry here?", state: "open" }]);
     await client.close();
@@ -76,16 +78,16 @@ describe("MCP endpoint", () => {
     storage.markQuestionAddressed(done.id, { commitRef: "abc", note: null });
 
     const client = await connect();
-    const openOnly = JSON.parse(textOf(await client.callTool({
+    const openOnly = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
-    }))) as { questions: unknown[] };
+    })) as { content?: unknown })) as { questions: unknown[] };
     expect(openOnly.questions).toHaveLength(1);
 
-    const both = JSON.parse(textOf(await client.callTool({
+    const both = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing", includeAddressed: true },
-    }))) as { questions: unknown[] };
+    })) as { content?: unknown })) as { questions: unknown[] };
     expect(both.questions).toHaveLength(2);
     await client.close();
   });
@@ -109,7 +111,7 @@ describe("MCP endpoint", () => {
     const client = await connect();
     const result = await client.callTool({ name: "mark_question_addressed", arguments: { id: 999 } });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("not open");
+    expect(textOf(result as { content?: unknown })).toContain("not open");
     await client.close();
   });
 
@@ -120,7 +122,7 @@ describe("MCP endpoint", () => {
       arguments: { repo: "acme/atlas", branch: "never-opened" },
     });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("has to be opened in Gander once");
+    expect(textOf(result as { content?: unknown })).toContain("has to be opened in Gander once");
     await client.close();
   });
 

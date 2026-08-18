@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { MessageSquare, Trash2, X } from "lucide-vue-next";
 import type { Store } from "../store.js";
+import { revealLine } from "../selection.js";
 
 const props = defineProps<{ store: Store }>();
 defineEmits<{ close: [] }>();
@@ -11,6 +12,12 @@ const questions = computed(() => props.store.view?.questions ?? []);
 function fileName(path: string | null): string {
   if (path === null) return "This pull request";
   return path.split("/").pop() ?? path;
+}
+
+function goTo(q: { path: string | null; line: number | null }): void {
+  if (q.path === null) return;
+  props.store.select(q.path);
+  if (q.line !== null) revealLine(q.line);
 }
 </script>
 
@@ -32,8 +39,8 @@ function fileName(path: string | null): string {
     <ul v-else>
       <li v-for="q in questions" :key="q.id" :class="{ current: q.path === store.selectedPath }">
         <div class="row">
-          <button class="file" :disabled="q.path === null" @click="q.path && store.select(q.path)">
-            {{ fileName(q.path) }}
+          <button class="file" :disabled="q.path === null" @click="goTo(q)">
+            {{ fileName(q.path) }}<span v-if="q.line !== null" class="line">:{{ q.line }}</span>
           </button>
           <span class="state" :class="q.state">{{ q.state }}</span>
           <button class="del" aria-label="Delete question" title="Delete question" @click="store.deleteQuestion(q.id)">
@@ -41,6 +48,10 @@ function fileName(path: string | null): string {
           </button>
         </div>
         <p class="text">{{ q.text }}</p>
+        <p v-if="q.note || q.commitRef" class="answer">
+          <span v-if="q.note">{{ q.note }}</span>
+          <code v-if="q.commitRef">{{ q.commitRef }}</code>
+        </p>
       </li>
     </ul>
   </aside>
@@ -68,5 +79,8 @@ li.current { background: rgba(77,159,236,.08); }
 .state.resolved { color: var(--green); }
 .del { margin-left: auto; background: none; border: none; color: var(--faint); cursor: pointer; display: flex; flex: none; }
 .del:hover { color: var(--red); }
+.line { color: var(--faint); }
+.answer { margin: 6px 0 0; display: flex; align-items: baseline; gap: 7px; font-size: 11.5px; color: var(--faint); }
+.answer code { font: 10.5px var(--mono); background: #262b34; border-radius: 4px; padding: 1px 5px; flex: none; }
 .text { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>

@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
 import type { Store } from "../store.js";
+import { currentLine } from "../selection.js";
 
 const props = defineProps<{ store: Store; open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
 const text = ref("");
 const box = ref<HTMLTextAreaElement | null>(null);
+// Held at the moment the box opens: focusing the textarea takes the cursor out of the
+// editor, and the line the reader was on is the one the question is about.
+const capturedLine = ref<number | null>(null);
 
 watch(() => props.open, async (open) => {
   if (!open) return;
+  capturedLine.value = props.store.selectedPath === null ? null : currentLine.value;
   text.value = "";
   await nextTick();
   box.value?.focus();
@@ -20,7 +25,7 @@ async function submit(): Promise<void> {
   if (!body) return;
   // Captured against the file being read. A question with no file selected is a
   // note about the pull request as a whole.
-  await props.store.addQuestion(body, props.store.selectedPath);
+  await props.store.addQuestion(body, props.store.selectedPath, capturedLine.value);
   emit("close");
 }
 </script>
@@ -31,6 +36,7 @@ async function submit(): Promise<void> {
       <label>
         Question on
         <b>{{ store.selectedPath ?? "this pull request" }}</b>
+        <template v-if="capturedLine !== null"> · line {{ capturedLine }}</template>
       </label>
       <!-- Enter submits, Shift+Enter breaks the line: capture must cost one keystroke. -->
       <textarea
