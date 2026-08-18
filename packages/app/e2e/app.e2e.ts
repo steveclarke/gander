@@ -281,15 +281,35 @@ describe("Gander end to end", () => {
       style.fontFamily.includes("Courier New") && style.fontSize === "18.5px" && style.rowHeight === 22,
     )).toBe(true);
 
+    const persistentAdd = await $("button[aria-label='Add question (N)']");
+    await expect(persistentAdd).toBeDisplayed();
+    await expect(persistentAdd).toHaveAttribute("title", "Add question (N)");
+
+    const lineAdd = await $(".gander-line-question");
+    await lineAdd.waitForDisplayed();
+    const lineLabel = await lineAdd.getAttribute("aria-label");
+    const anchoredLine = lineLabel?.match(/line (\d+)/)?.[1];
+    expect(anchoredLine).toBeDefined();
+    await lineAdd.click();
+    await expect($("#question-target")).toHaveText(expect.stringContaining(`a.rb · line ${anchoredLine}`));
+    const anchoredQuestion = await $("textarea[placeholder='What needs answering or changing here?']");
+    await anchoredQuestion.setValue("Keep this on the first line.");
+    await browser.keys("Enter");
+    await $("button[aria-label='Questions']").click();
+    await expect($(".message.original .text")).toHaveText("Keep this on the first line.");
+    await expect($(".row .file")).toHaveText(`a.rb:${anchoredLine}`);
+    await expect($(".drawer button[aria-label='Add question (N)']")).toBeDisplayed();
+    await $("button[aria-label='Close questions']").click();
+
     await browser.keys("n");
     const question = await $("textarea[placeholder='What needs answering or changing here?']");
     await question.waitForDisplayed();
     await question.setValue("Why does this need to happen here?");
     await browser.keys("Enter");
     await $("button[aria-label='Questions']").click();
-    await expect($(".message.original .text")).toHaveText("Why does this need to happen here?");
+    await expect($(".drawer li:last-child .message.original .text")).toHaveText("Why does this need to happen here?");
 
-    const reply = await $(".reply-form input");
+    const reply = await $(".drawer li:last-child .reply-form input");
     await reply.setValue("Because both callers share this path.");
     await browser.keys("Enter");
     await expect($(".message.reply .author")).toHaveText("REVIEWER");

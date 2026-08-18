@@ -14,6 +14,8 @@ import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./lay
 import { X } from "lucide-vue-next";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
 import { effectiveTreeTypography } from "../../settings.js";
+import { currentLine } from "./selection.js";
+import type { QuestionTarget } from "./selection.js";
 import "./theme.css";
 
 const store = createStore(api);
@@ -37,7 +39,7 @@ onMounted(async () => {
 });
 
 const unconfigured = ref(false);
-const capturing = ref(false);
+const questionTarget = shallowRef<QuestionTarget | null>(null);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const activeSurface = shallowRef<"review" | "settings">("review");
@@ -86,6 +88,14 @@ const questionsSize = computed({
 });
 const questionCount = computed(() => store.view?.questions.length ?? 0);
 
+function openQuestion(target?: QuestionTarget): void {
+  if (!store.view) return;
+  questionTarget.value = target ?? {
+    path: store.selectedPath,
+    line: store.selectedPath === null ? null : currentLine.value,
+  };
+}
+
 // Monaco takes keyboard input through a hidden textarea, so clicking a line to position
 // the cursor makes the diff the focused "text field" — and a naive typing check hands it
 // every keystroke, including the one that opens capture. Every editor in this app is
@@ -112,7 +122,7 @@ function onKey(e: KeyboardEvent): void {
     e.preventDefault();
     // Monaco would otherwise still handle it and flash "Cannot edit in read-only editor".
     e.stopPropagation();
-    capturing.value = true;
+    openQuestion();
   }
 }
 window.addEventListener("keydown", onKey, true);
@@ -155,6 +165,7 @@ onBeforeUnmount(() => {
       :integrated-title-bar="integratedTitleBar"
       @toggle-questions="drawerOpen = !drawerOpen"
       @toggle-settings="toggleSettings"
+      @add-question="openQuestion()"
     />
     <div v-if="store.error" class="error-banner">
       <span>{{ store.error }}</span>
@@ -197,7 +208,12 @@ onBeforeUnmount(() => {
           <!-- Docked right, questions sit beside the diff; docked bottom, under both the
                diff and the tree, which is what gives the diff the full window width. -->
           <div class="workspace" :class="questionsDock">
-            <DiffPane :store="store" :editor-settings="editorSettings.settings.editor" class="diff" />
+            <DiffPane
+              :store="store"
+              :editor-settings="editorSettings.settings.editor"
+              class="diff"
+              @add-question="openQuestion"
+            />
             <template v-if="drawerOpen">
               <Splitter
                 v-model="questionsSize"
@@ -215,6 +231,7 @@ onBeforeUnmount(() => {
                   ? { width: `${questionsWidth}px` }
                   : { height: `${questionsHeight}px` }"
                 @close="drawerOpen = false"
+                @add-question="openQuestion()"
               />
             </template>
           </div>
@@ -228,7 +245,7 @@ onBeforeUnmount(() => {
       :worktree-label="api.initialWindowState.worktreeLabel"
       @toggle-tree="treeVisible = !treeVisible"
     />
-    <QuestionCapture :store="store" :open="capturing" @close="capturing = false" />
+    <QuestionCapture :store="store" :target="questionTarget" @close="questionTarget = null" />
   </div>
 </template>
 

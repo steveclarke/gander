@@ -12,6 +12,7 @@ export function diffEditorOptions(settings: EditorSettings): editor.IStandaloneD
   return {
     renderSideBySide: false,
     readOnly: true,
+    glyphMargin: true,
     automaticLayout: true,
     hideUnchangedRegions: { enabled: true },
     ...editorFontOptions(settings),
@@ -21,6 +22,7 @@ export function diffEditorOptions(settings: EditorSettings): editor.IStandaloneD
 export function codeEditorOptions(settings: EditorSettings): editor.IStandaloneEditorConstructionOptions {
   return {
     readOnly: true,
+    glyphMargin: true,
     automaticLayout: true,
     ...editorFontOptions(settings),
   };

@@ -1,5 +1,10 @@
 import { ref } from "vue";
 
+export interface QuestionTarget {
+  path: string | null;
+  line: number | null;
+}
+
 /**
  * Where the reader's cursor is in the diff, and where they want to go next.
  *

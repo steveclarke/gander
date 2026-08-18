@@ -1,20 +1,16 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
 import type { Store } from "../store.js";
-import { currentLine } from "../selection.js";
+import type { QuestionTarget } from "../selection.js";
 
-const props = defineProps<{ store: Store; open: boolean }>();
+const props = defineProps<{ store: Store; target: QuestionTarget | null }>();
 const emit = defineEmits<{ close: [] }>();
 
 const text = ref("");
 const box = ref<HTMLTextAreaElement | null>(null);
-// Held at the moment the box opens: focusing the textarea takes the cursor out of the
-// editor, and the line the reader was on is the one the question is about.
-const capturedLine = ref<number | null>(null);
 
-watch(() => props.open, async (open) => {
-  if (!open) return;
-  capturedLine.value = props.store.selectedPath === null ? null : currentLine.value;
+watch(() => props.target, async (target) => {
+  if (target === null) return;
   text.value = "";
   await nextTick();
   box.value?.focus();
@@ -23,24 +19,25 @@ watch(() => props.open, async (open) => {
 async function submit(): Promise<void> {
   const body = text.value.trim();
   if (!body) return;
-  // Captured against the file being read. A question with no file selected is a
-  // note about the pull request as a whole.
-  await props.store.addQuestion(body, props.store.selectedPath, capturedLine.value);
+  // The target is fixed before the textarea takes focus. In particular, a gutter click
+  // must keep the line it named even if Monaco's cursor or the selected file moves.
+  await props.store.addQuestion(body, props.target?.path ?? null, props.target?.line ?? null);
   emit("close");
 }
 </script>
 
 <template>
-  <div v-if="open" class="capture" @click.self="$emit('close')">
-    <form class="panel" @submit.prevent="submit">
-      <label>
+  <div v-if="target" class="capture" @click.self="$emit('close')">
+    <form class="panel" role="dialog" aria-modal="true" aria-labelledby="question-target" @submit.prevent="submit">
+      <label id="question-target" for="question-text">
         Question on
-        <b>{{ store.selectedPath ?? "this pull request" }}</b>
-        <template v-if="capturedLine !== null"> · line {{ capturedLine }}</template>
+        <b>{{ target.path ?? "this pull request" }}</b>
+        <template v-if="target.line !== null"> · line {{ target.line }}</template>
       </label>
       <!-- Enter submits, Shift+Enter breaks the line: capture must cost one keystroke. -->
       <textarea
         ref="box"
+        id="question-text"
         v-model="text"
         rows="3"
         placeholder="What needs answering or changing here?"

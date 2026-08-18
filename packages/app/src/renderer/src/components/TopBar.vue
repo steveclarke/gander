@@ -10,7 +10,7 @@ const props = defineProps<{
   settingsActive: boolean;
   integratedTitleBar: boolean;
 }>();
-const emit = defineEmits<{ toggleQuestions: []; toggleSettings: [] }>();
+const emit = defineEmits<{ toggleQuestions: []; toggleSettings: []; addQuestion: [] }>();
 
 const repoOpen = ref(false);
 const reviewOpen = ref(false);
@@ -128,6 +128,16 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
     <div class="spacer" />
     <div class="right">
       <button
+        v-if="store.view"
+        class="add-question"
+        aria-label="Add question (N)"
+        title="Add question (N)"
+        @click="emit('addQuestion')"
+      >
+        <Plus :size="15" aria-hidden="true" />
+        <span>Question</span>
+      </button>
+      <button
         class="fetch"
         :class="{ active: settingsActive }"
         aria-label="Editor settings"
@@ -242,6 +252,16 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
 .right { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
 .progress { font-size: 12px; color: var(--muted-foreground); background: var(--badge-background); border-radius: 10px; padding: 2px 10px; white-space: nowrap; }
 .progress b { color: var(--success); }
+.add-question {
+  display: flex; align-items: center; gap: 5px;
+  min-height: 28px; padding: 0 9px;
+  background: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+  color: var(--accent-foreground); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.add-question:hover { filter: brightness(1.08); }
+.add-question:focus-visible, .fetch:focus-visible {
+  outline: 2px solid var(--workbench-foreground); outline-offset: 2px;
+}
 /* Icon-only, sized to stay a comfortable pointer target at any zoom level. */
 .fetch {
   display: flex; align-items: center; justify-content: center;
