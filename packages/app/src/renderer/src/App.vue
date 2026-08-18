@@ -24,26 +24,53 @@ let unsubscribeOpenSettings: (() => void) | null = null;
 onMounted(async () => {
   // Registered first, so commands arriving while the app restores its last review are not dropped.
   unsubscribeOpenTarget = api.onOpenTarget((target) => { void store.openTarget(target); });
-  unsubscribeOpenSettings = api.onOpenSettings(openSettings);
+  unsubscribeOpenSettings = api.onOpenSettings(() => openSettings());
   void editorSettings.load();
-  await store.checkService();
+  // An installed app starts with no connection at all. Knowing that here is what lets the
+  // window say where to set one instead of showing an empty review that cannot be filled.
+  await refreshConnectionState();
   await store.loadRepos();
   const target = await api.initialTarget();
   if (target !== null) await store.openTarget(target);
   else await store.restoreLastReview();
 });
 
+const unconfigured = ref(false);
 const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const activeSurface = shallowRef<"review" | "settings">("review");
+// Which section the settings surface opens on. The prompt about a missing service leads
+// straight to the one that fixes it, rather than to whatever was showing last.
+const settingsCategory = shallowRef<"workbench" | "editor" | "connection">("workbench");
 
-function openSettings(): void {
+// A connection just saved is worth checking now: the status bar's poll is 30 seconds
+// away, and until it runs the window contradicts what the settings pane just said.
+async function onConnected(): Promise<void> {
+  await refreshConnectionState();
+  await store.loadRepos();
+}
+
+async function refreshConnectionState(): Promise<void> {
+  unconfigured.value = (await api.getConnection()).url === "";
+  await store.checkService();
+}
+
+function openSettings(category: "workbench" | "editor" | "connection" = "workbench"): void {
+  settingsCategory.value = category;
   activeSurface.value = "settings";
+}
+
+function closeSettings(): void {
+  activeSurface.value = "review";
+  void refreshConnectionState();
 }
 
 function toggleSettings(): void {
   activeSurface.value = activeSurface.value === "settings" ? "review" : "settings";
+  // Read back on the way out as well as on the save: the review surface must never
+  // claim there is no service while the status bar says it is connected.
+  if (activeSurface.value === "review") void refreshConnectionState();
 }
 
 // v-model needs something assignable, and which dimension the questions splitter drags
@@ -135,11 +162,18 @@ onBeforeUnmount(() => {
       <SettingsPane
         v-if="activeSurface === 'settings'"
         :store="editorSettings"
-        @close="activeSurface = 'review'"
+        :initial-category="settingsCategory"
+        @connected="onConnected"
+        @close="closeSettings"
       />
       <div v-show="activeSurface === 'review'" class="review-surface">
         <p v-if="store.busy && !store.view" class="empty working">
           <span class="spinner" />Opening pull request…
+        </p>
+        <p v-else-if="unconfigured" class="empty">
+          No review service yet.
+          <button class="link" type="button" @click="openSettings('connection')">Set its URL and token</button>
+          to start reviewing.
         </p>
         <p v-else-if="!store.view" class="empty">Pick a repository, then a pull request.</p>
         <template v-else>
@@ -195,6 +229,7 @@ onBeforeUnmount(() => {
 .error-banner span { flex: 1; }
 .error-banner button { background: none; border: none; color: inherit; cursor: pointer; display: flex; flex: none; }
 .empty { color: var(--faint-foreground); padding: 2rem; }
+.empty .link { border: 0; padding: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
 .working { display: flex; align-items: center; gap: 10px; }
 .spinner {
   width: 14px; height: 14px; border-radius: 50%;

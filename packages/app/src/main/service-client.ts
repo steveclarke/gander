@@ -19,9 +19,18 @@ const SnapshotSchema = z.object({
   headContent: z.string().nullable(),
 });
 
-export function createServiceClient(baseUrl: string, token: string): ServiceClient {
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+/**
+ * Where to reach the service, read on every request rather than captured once: the
+ * reviewer can enter or change the connection in settings while the app is running, and
+ * a client built at startup would go on talking to the old address until a restart.
+ */
+export type Connection = () => { url: string; token: string };
+
+export function createServiceClient(connection: Connection): ServiceClient {
   const req = async (method: string, path: string, body?: unknown): Promise<unknown> => {
+    const { url: baseUrl, token } = connection();
+    if (baseUrl === "") throw new Error("No Gander service configured — set the service URL and token in Settings");
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
     let res: Response;
     try {
       res = await fetch(`${baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -40,7 +49,7 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
     const parsed = schema.safeParse(data);
     if (!parsed.success) {
       const problem = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
-      throw new Error(`Gander service at ${baseUrl}${path} returned data that failed validation: ${problem}`);
+      throw new Error(`Gander service at ${connection().url}${path} returned data that failed validation: ${problem}`);
     }
     return parsed.data;
   }
@@ -70,8 +79,10 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
       await req("DELETE", `/api/reviews/${enc(repoId)}/${prNumber}/questions/${id}`);
     },
     healthy: async () => {
+      const { url } = connection();
+      if (url === "") return false;
       try {
-        const res = await fetch(`${baseUrl}/healthz`);
+        const res = await fetch(`${url}/healthz`);
         return res.ok;
       } catch {
         return false;
