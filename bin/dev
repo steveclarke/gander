@@ -9,12 +9,12 @@ main() {
   load_worktree_env
 
   case "${1:-}" in
-    -D)        shift; process-compose up -D "$@" ;;
+    -D)        shift; process-compose up --config "$SCRIPT_ROOT/process-compose.yml" -D "$@" ;;
     stop)      process-compose down ;;
     status)    show_status "${2:-}" ;;
     logs)      process-compose process logs "${2:?specify a service}" ;;
     restart)   process-compose process restart "${2:?specify a service}" ;;
-    *)         process-compose up "$@" ;;
+    *)         process-compose up --config "$SCRIPT_ROOT/process-compose.yml" "$@" ;;
   esac
 }
 

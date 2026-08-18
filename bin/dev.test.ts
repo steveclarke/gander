@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { platform } from "node:process";
@@ -83,6 +83,21 @@ esac
 afterEach(() => rmSync(tmpRoot, { recursive: true, force: true }));
 
 describe.skipIf(platform === "win32")("bin/dev", () => {
+  it("starts the dev stack from the process-compose config when Docker Compose is also present", () => {
+    writeFileSync(join(repo, "compose.yml"), "services:\n  gander:\n    image: gander\n");
+    writeFileSync(join(repo, "process-compose.yml"), "processes:\n  service:\n    command: true\n");
+
+    const result = run();
+
+    expect(result.status, result.output).toBe(0);
+    expect(readFileSync(argsFile, "utf8")).toBe([
+      "up",
+      "--config",
+      join(realpathSync(repo), "process-compose.yml"),
+      "",
+    ].join("\n"));
+  });
+
   it("loads the worktree environment and returns JSON status", () => {
     const result = run("status", "--json");
 
