@@ -12,6 +12,13 @@
 | `social/` | OG image and platform avatars. |
 | `fonts/` | Bricolage Grotesque variable font and its licence note. |
 
+`svg/app-icon.svg` and `svg/app-icon-square.svg` are the icon masters: a white
+mark on a solid navy field. Everything in `favicon/` and every avatar in
+`social/` comes from the square one, and `packages/app/resources/icon.png` from
+the rounded one. They exist because the mark's cheek is negative space — dropped
+straight onto a transparent icon canvas, the eye and cheek fill with whatever
+sits behind the icon.
+
 ## How the masters were built
 
 The mark came out of Recraft's Vector model in its "Geometric Logo" style. The

@@ -1,6 +1,8 @@
-# Gander
+<p align="center">
+  <img src="brand/svg/logo-horizontal-color.svg" width="280" alt="Gander">
+</p>
 
-A desktop app for reviewing code diffs, branches, and pull requests.
+<p align="center">A desktop app for reviewing code diffs, branches, and pull requests.</p>
 
 ## Getting started
 
