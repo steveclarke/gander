@@ -9,7 +9,7 @@ const runGhAuthToken: ExecFileFn = (file, args) => execFileAsync(file, args);
 
 interface GhPr {
   number: number; title: string; body: string | null; draft: boolean;
-  base: { ref: string; sha: string }; head: { sha: string };
+  base: { ref: string; sha: string }; head: { ref: string; sha: string };
 }
 
 const PER_PAGE = 100;
@@ -28,7 +28,7 @@ export async function listOpenPrs(repoId: string, token: string, fetchImpl: type
   }
   return all.map((p) => ({
     number: p.number, title: p.title, body: p.body ?? "", draft: p.draft,
-    baseRef: p.base.ref, baseSha: p.base.sha, headSha: p.head.sha,
+    baseRef: p.base.ref, baseSha: p.base.sha, headRef: p.head.ref, headSha: p.head.sha,
   }));
 }
 

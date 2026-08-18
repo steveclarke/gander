@@ -7,6 +7,7 @@ export interface ServiceClient {
   listQuestions(repoId: string, prNumber: number): Promise<Question[]>;
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<Question>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<void>;
+  setHeadRef(repoId: string, prNumber: number, headRef: string): Promise<void>;
 }
 
 export function createServiceClient(baseUrl: string, token: string): ServiceClient {
@@ -54,6 +55,9 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
     },
     deleteQuestion: async (repoId, prNumber, id) => {
       await req("DELETE", `/api/reviews/${enc(repoId)}/${prNumber}/questions/${id}`);
+    },
+    setHeadRef: async (repoId, prNumber, headRef) => {
+      await req("PUT", `/api/reviews/${enc(repoId)}/${prNumber}/head-ref`, { headRef });
     },
   };
 }

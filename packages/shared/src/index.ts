@@ -45,6 +45,10 @@ export const QuestionSchema = z.object({
   line: z.number().int().positive().nullable(),
   text: z.string().min(1),
   state: QuestionStateSchema,
+  /** Commit an agent named when it marked the question addressed. */
+  commitRef: z.string().nullable(),
+  /** One-line note an agent left when it marked the question addressed. */
+  note: z.string().nullable(),
   createdAt: z.string(),
 });
 export type Question = z.infer<typeof QuestionSchema>;
@@ -56,12 +60,20 @@ export const NewQuestionSchema = z.object({
 });
 export type NewQuestion = z.infer<typeof NewQuestionSchema>;
 
+export const MarkAddressedSchema = z.object({
+  commitRef: z.string().min(1).nullable(),
+  note: z.string().min(1).nullable(),
+});
+export type MarkAddressed = z.infer<typeof MarkAddressedSchema>;
+
 export interface PrSummary {
   number: number;
   title: string;
   body: string;
   draft: boolean;
   baseRef: string;
+  /** The pull request's own branch. Lets the service resolve branch -> PR for agents. */
+  headRef: string;
   baseSha: string;
   headSha: string;
 }

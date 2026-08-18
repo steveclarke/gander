@@ -45,6 +45,20 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
     },
   );
 
+  app.put<{ Params: { repoId: string; prNumber: string }; Body: { headRef?: unknown } }>(
+    "/api/reviews/:repoId/:prNumber/head-ref",
+    async (req, reply) => {
+      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      if (prNumber === undefined) return;
+      const headRef = req.body?.headRef;
+      if (typeof headRef !== "string" || headRef.length === 0) {
+        return reply.code(400).send({ error: "headRef must be a non-empty string" });
+      }
+      opts.storage.setHeadRef(req.params.repoId, prNumber, headRef);
+      return reply.code(204).send();
+    },
+  );
+
   app.get<{ Params: { repoId: string; prNumber: string } }>(
     "/api/reviews/:repoId/:prNumber/questions",
     async (req, reply) => {

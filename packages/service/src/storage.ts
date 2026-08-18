@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, NewQuestion, PutFileState, Question, ReviewState } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, NewQuestion, PutFileState, Question, ReviewState } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   repo_id TEXT NOT NULL,
   pr_number INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  head_ref TEXT,
   UNIQUE(repo_id, pr_number)
 );
 CREATE TABLE IF NOT EXISTS file_states (
@@ -27,6 +28,9 @@ CREATE TABLE IF NOT EXISTS questions (
   line INTEGER,
   text TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'open',
+  commit_ref TEXT,
+  note TEXT,
+  addressed_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS questions_by_review ON questions(review_id);
@@ -36,18 +40,43 @@ export interface Storage {
   getReview(repoId: string, prNumber: number): ReviewState;
   putFileState(repoId: string, prNumber: number, input: PutFileState): FileCheckoff;
   getSnapshot(repoId: string, prNumber: number, path: string): { baseContent: string | null; headContent: string | null } | null;
+  /** Records which branch a pull request is on, so an agent can ask by branch instead of number. */
+  setHeadRef(repoId: string, prNumber: number, headRef: string): void;
+  findPrByHeadRef(repoId: string, headRef: string): number | null;
+  markQuestionAddressed(id: number, input: MarkAddressed): Question | null;
   listQuestions(repoId: string, prNumber: number): Question[];
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Question;
   deleteQuestion(repoId: string, prNumber: number, id: number): boolean;
   close(): void;
 }
 
-interface QuestionRow { id: number; path: string | null; line: number | null; text: string; state: string; created_at: string }
+interface QuestionRow { id: number; path: string | null; line: number | null; text: string; state: string; commit_ref: string | null; note: string | null; created_at: string }
 
 const rowToQuestion = (r: QuestionRow): Question => ({
   id: r.id, path: r.path, line: r.line, text: r.text,
-  state: r.state as Question["state"], createdAt: r.created_at,
+  state: r.state as Question["state"],
+  commitRef: r.commit_ref, note: r.note,
+  createdAt: r.created_at,
 });
+
+const QUESTION_COLUMNS = "id, path, line, text, state, commit_ref, note, created_at";
+
+/**
+ * CREATE TABLE IF NOT EXISTS silently does nothing to a table that already exists, so a
+ * database written by an earlier version keeps its old column set and the first insert
+ * against a new column fails at the user's desk while every test — which starts from an
+ * empty file — stays green. Each column is added only if the live table lacks it.
+ */
+function migrate(db: Database.Database): void {
+  const addColumn = (table: string, column: string, type: string): void => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  };
+  addColumn("questions", "commit_ref", "TEXT");
+  addColumn("questions", "note", "TEXT");
+  addColumn("questions", "addressed_at", "TEXT");
+  addColumn("reviews", "head_ref", "TEXT");
+}
 
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
 const unpack = (b: Buffer | null): string | null => (b === null ? null : gunzipSync(b).toString("utf8"));
@@ -56,6 +85,7 @@ export function openStorage(dbPath: string): Storage {
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
+  migrate(db);
 
   const reviewId = (repoId: string, prNumber: number): number => {
     db.prepare("INSERT OR IGNORE INTO reviews (repo_id, pr_number) VALUES (?, ?)").run(repoId, prNumber);
@@ -87,6 +117,9 @@ export function openStorage(dbPath: string): Storage {
             base_content = excluded.base_content, head_content = excluded.head_content,
             checked_at = excluded.checked_at, machine = excluded.machine
         `).run(rid, input.path, input.baseHash, input.headHash, pack(input.baseContent), pack(input.headContent), input.machine);
+        // Re-checking a file is the reviewer confirming the agent's work: its addressed
+        // questions become resolved. Open questions survive — they were never answered.
+        db.prepare("UPDATE questions SET state = 'resolved' WHERE review_id = ? AND path = ? AND state = 'addressed'").run(rid, input.path);
       } else {
         // Bare un-check: snapshot and hashes are retained as the delta base.
         db.prepare(`
@@ -105,9 +138,32 @@ export function openStorage(dbPath: string): Storage {
       return { baseContent: unpack(row.base_content), headContent: unpack(row.head_content) };
     },
 
+    setHeadRef(repoId, prNumber, headRef) {
+      const rid = reviewId(repoId, prNumber);
+      db.prepare("UPDATE reviews SET head_ref = ? WHERE id = ?").run(headRef, rid);
+    },
+
+    findPrByHeadRef(repoId, headRef) {
+      // Newest first: a branch name can be reused after its pull request closes.
+      const row = db.prepare("SELECT pr_number FROM reviews WHERE repo_id = ? AND head_ref = ? ORDER BY pr_number DESC LIMIT 1").get(repoId, headRef) as { pr_number: number } | undefined;
+      return row?.pr_number ?? null;
+    },
+
+    markQuestionAddressed(id, input) {
+      // Only an open question can be addressed. Re-addressing a resolved one would
+      // undo the reviewer's own act, and the spec puts resolution solely in their hands.
+      const changed = db.prepare(`
+        UPDATE questions
+        SET state = 'addressed', commit_ref = ?, note = ?, addressed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE id = ? AND state = 'open'
+      `).run(input.commitRef, input.note, id).changes;
+      if (changed === 0) return null;
+      return rowToQuestion(db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(id) as QuestionRow);
+    },
+
     listQuestions(repoId, prNumber) {
       const rid = reviewId(repoId, prNumber);
-      const rows = db.prepare("SELECT id, path, line, text, state, created_at FROM questions WHERE review_id = ? ORDER BY id").all(rid) as QuestionRow[];
+      const rows = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE review_id = ? ORDER BY id`).all(rid) as QuestionRow[];
       return rows.map(rowToQuestion);
     },
 
@@ -116,7 +172,7 @@ export function openStorage(dbPath: string): Storage {
       const { lastInsertRowid } = db
         .prepare("INSERT INTO questions (review_id, path, line, text) VALUES (?, ?, ?, ?)")
         .run(rid, input.path, input.line, input.text);
-      const row = db.prepare("SELECT id, path, line, text, state, created_at FROM questions WHERE id = ?").get(lastInsertRowid) as QuestionRow;
+      const row = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(lastInsertRowid) as QuestionRow;
       return rowToQuestion(row);
     },
 

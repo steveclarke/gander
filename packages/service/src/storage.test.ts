@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { openStorage, type Storage } from "./storage.js";
 
 let dir: string;
@@ -104,6 +105,54 @@ describe("storage", () => {
       expect(storage.listQuestions("acme/atlas", 8).map((q) => q.text)).toEqual(["on eight"]);
     });
 
+    it("an agent marks a question addressed with a commit and note", () => {
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?" });
+      const marked = storage.markQuestionAddressed(q.id, { commitRef: "abc1234", note: "Dropped the retry" });
+      expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", note: "Dropped the retry" });
+    });
+
+    it("refuses to re-address a question the reviewer already resolved", () => {
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?" });
+      storage.markQuestionAddressed(q.id, { commitRef: null, note: null });
+      storage.putFileState("acme/atlas", 7, {
+        checked: true, path: "a.rb", baseHash: "b", headHash: "h",
+        baseContent: "o", headContent: "n", machine: "m",
+      });
+      expect(storage.listQuestions("acme/atlas", 7)[0]!.state).toBe("resolved");
+      expect(storage.markQuestionAddressed(q.id, { commitRef: null, note: null })).toBeNull();
+    });
+
+    it("re-checking a file resolves its addressed questions and leaves open ones alone", () => {
+      const answered = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "answered" });
+      const unanswered = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "still open" });
+      const elsewhere = storage.addQuestion("acme/atlas", 7, { path: "b.rb", line: null, text: "other file" });
+      storage.markQuestionAddressed(answered.id, { commitRef: "c1", note: null });
+      storage.markQuestionAddressed(elsewhere.id, { commitRef: "c2", note: null });
+
+      storage.putFileState("acme/atlas", 7, {
+        checked: true, path: "a.rb", baseHash: "b", headHash: "h",
+        baseContent: "o", headContent: "n", machine: "m",
+      });
+
+      const byId = new Map(storage.listQuestions("acme/atlas", 7).map((q) => [q.id, q.state]));
+      expect(byId.get(answered.id)).toBe("resolved");
+      expect(byId.get(unanswered.id)).toBe("open");
+      // A different file's checkoff must not resolve anything here.
+      expect(byId.get(elsewhere.id)).toBe("addressed");
+    });
+
+    it("resolves a branch to its pull request", () => {
+      storage.setHeadRef("acme/atlas", 7, "feat/thing");
+      expect(storage.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(7);
+      expect(storage.findPrByHeadRef("acme/atlas", "no-such-branch")).toBeNull();
+    });
+
+    it("resolves a reused branch name to the newest pull request on it", () => {
+      storage.setHeadRef("acme/atlas", 7, "feat/thing");
+      storage.setHeadRef("acme/atlas", 9, "feat/thing");
+      expect(storage.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(9);
+    });
+
     it("deletes only within its own review", () => {
       const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "keep me" });
       // The same id offered against a different pull request must not delete it.
@@ -111,6 +160,43 @@ describe("storage", () => {
       expect(storage.listQuestions("acme/atlas", 7)).toHaveLength(1);
       expect(storage.deleteQuestion("acme/atlas", 7, q.id)).toBe(true);
       expect(storage.listQuestions("acme/atlas", 7)).toEqual([]);
+    });
+  });
+
+  describe("migration from an earlier schema", () => {
+    it("adds the columns a database written before question states is missing", () => {
+      // A database exactly as the previous version left it: questions without
+      // commit_ref/note/addressed_at, reviews without head_ref.
+      const oldPath = join(dir, "old.db");
+      const old = new Database(oldPath);
+      old.exec(`
+        CREATE TABLE reviews (id INTEGER PRIMARY KEY, repo_id TEXT NOT NULL, pr_number INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), UNIQUE(repo_id, pr_number));
+        CREATE TABLE file_states (id INTEGER PRIMARY KEY, review_id INTEGER NOT NULL REFERENCES reviews(id),
+          path TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0, base_hash TEXT, head_hash TEXT,
+          base_content BLOB, head_content BLOB, checked_at TEXT, machine TEXT, UNIQUE(review_id, path));
+        CREATE TABLE questions (id INTEGER PRIMARY KEY, review_id INTEGER NOT NULL REFERENCES reviews(id),
+          path TEXT, line INTEGER, text TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'open',
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+        INSERT INTO reviews (repo_id, pr_number) VALUES ('acme/atlas', 7);
+        INSERT INTO questions (review_id, path, text) VALUES (1, 'a.rb', 'captured before the upgrade');
+      `);
+      old.close();
+
+      const upgraded = openStorage(oldPath);
+      try {
+        // The question written by the old version is still there and reads back whole.
+        expect(upgraded.listQuestions("acme/atlas", 7)).toMatchObject([
+          { path: "a.rb", text: "captured before the upgrade", state: "open", commitRef: null, note: null },
+        ]);
+        // And the new columns work rather than throwing on first write.
+        const id = upgraded.listQuestions("acme/atlas", 7)[0]!.id;
+        expect(upgraded.markQuestionAddressed(id, { commitRef: "abc", note: "done" })?.state).toBe("addressed");
+        upgraded.setHeadRef("acme/atlas", 7, "feat/thing");
+        expect(upgraded.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(7);
+      } finally {
+        upgraded.close();
+      }
     });
   });
 });

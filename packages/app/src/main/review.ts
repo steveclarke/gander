@@ -78,6 +78,9 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
 
     const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
     await deps.git.fetchPr(clone, prNumber, pr.baseRef);
+    // Recorded here so an agent working in a checkout of this branch can ask the service
+    // for its questions by branch name, without the service needing GitHub credentials.
+    await deps.service.setHeadRef(repoId, prNumber, pr.headRef);
     const head = await deps.git.resolveRef(clone, `refs/gander/pr/${prNumber}`);
     const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
     const mergeBase = await deps.git.mergeBase(clone, base, head);

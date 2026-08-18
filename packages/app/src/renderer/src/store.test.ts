@@ -4,7 +4,7 @@ import type { GanderApi } from "./api.js";
 import { createStore } from "./store.js";
 
 const prView = (checkedPaths: string[] = []): PrView => ({
-  pr: { number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headSha: "b" },
+  pr: { number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", headSha: "b" },
   files: [
     { path: "a.rb", status: "M", baseContent: "o", headContent: "n", baseHash: "b1", headHash: "h1", checked: checkedPaths.includes("a.rb"), changedSince: false },
     { path: "b.rb", status: "A", baseContent: null, headContent: "x", baseHash: null, headHash: "h2", checked: checkedPaths.includes("b.rb"), changedSince: false },
@@ -16,7 +16,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
   return {
     listRepos: async () => [{ repoId: "acme/atlas", url: "u" }],
     addRepo: async (url) => ({ repoId: "acme/new", url }),
-    listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headSha: "b" }],
+    listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", headSha: "b" }],
     openPr: async () => prView(),
     setChecked: async (_r, _n, path) => prView([path]),
     setCheckedMany: async (_r, _n, paths) => prView(paths),

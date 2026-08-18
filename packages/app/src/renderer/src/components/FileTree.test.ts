@@ -11,7 +11,7 @@ const file = (path: string, checked = false): PrFile =>
 
 function prView(prNumber: number, files: PrFile[]): PrView {
   return {
-    pr: { number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headSha: "b" },
+    pr: { number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", headSha: "b" },
     files,
     questions: [],
   };
