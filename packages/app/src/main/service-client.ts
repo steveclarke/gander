@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 import { FileCheckoffSchema, QuestionSchema, ReviewStateSchema, type FileCheckoff, type NewQuestion, type PutFileState, type Question, type ReviewState } from "@gander/shared";
 
 export interface ServiceClient {
@@ -8,7 +8,13 @@ export interface ServiceClient {
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<Question>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<void>;
   setHeadRef(repoId: string, prNumber: number, headRef: string): Promise<void>;
+  getSnapshot(repoId: string, prNumber: number, path: string): Promise<{ baseContent: string | null; headContent: string | null }>;
 }
+
+const SnapshotSchema = z.object({
+  baseContent: z.string().nullable(),
+  headContent: z.string().nullable(),
+});
 
 export function createServiceClient(baseUrl: string, token: string): ServiceClient {
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -55,6 +61,10 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
     },
     deleteQuestion: async (repoId, prNumber, id) => {
       await req("DELETE", `/api/reviews/${enc(repoId)}/${prNumber}/questions/${id}`);
+    },
+    getSnapshot: async (repoId, prNumber, path) => {
+      const url = `/api/reviews/${enc(repoId)}/${prNumber}/snapshot?path=${enc(path)}`;
+      return validate(SnapshotSchema, url, await req("GET", url));
     },
     setHeadRef: async (repoId, prNumber, headRef) => {
       await req("PUT", `/api/reviews/${enc(repoId)}/${prNumber}/head-ref`, { headRef });

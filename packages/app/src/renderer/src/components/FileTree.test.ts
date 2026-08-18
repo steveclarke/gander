@@ -38,6 +38,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async selectRepo() {},
     async openPr() {},
     async refresh() {},
+    async reviewedSnapshot() { return null; },
     async addQuestion() {},
     async deleteQuestion() {},
     async setChecked(path: string, checked: boolean) {

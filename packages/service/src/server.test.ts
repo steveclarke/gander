@@ -114,4 +114,27 @@ describe("service API", () => {
       expect((await server.inject({ method: "GET", url })).statusCode).toBe(401);
     });
   });
+
+  describe("snapshot", () => {
+    const url = "/api/reviews/acme%2Fatlas/7/snapshot";
+
+    it("returns the content stored when the file was checked", async () => {
+      await server.inject({
+        method: "PUT", url: "/api/reviews/acme%2Fatlas/7/files", headers: AUTH,
+        payload: { checked: true, path: "app/models/org.rb", baseHash: "b", headHash: "h", baseContent: "old", headContent: "reviewed", machine: "m" },
+      });
+      const res = await server.inject({ method: "GET", url: `${url}?path=app%2Fmodels%2Forg.rb`, headers: AUTH });
+      expect(res.json()).toEqual({ baseContent: "old", headContent: "reviewed" });
+    });
+
+    it("reports a never-reviewed file as empty rather than failing", async () => {
+      const res = await server.inject({ method: "GET", url: `${url}?path=untouched.rb`, headers: AUTH });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ baseContent: null, headContent: null });
+    });
+
+    it("requires a path", async () => {
+      expect((await server.inject({ method: "GET", url, headers: AUTH })).statusCode).toBe(400);
+    });
+  });
 });

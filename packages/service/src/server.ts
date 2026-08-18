@@ -46,6 +46,22 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
     },
   );
 
+  app.get<{ Params: { repoId: string; prNumber: string }; Querystring: { path?: string } }>(
+    "/api/reviews/:repoId/:prNumber/snapshot",
+    async (req, reply) => {
+      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      if (prNumber === undefined) return;
+      const path = req.query.path;
+      // A path is a query parameter, not a route segment: file paths contain slashes.
+      if (typeof path !== "string" || path.length === 0) {
+        return reply.code(400).send({ error: "path query parameter is required" });
+      }
+      const snapshot = opts.storage.getSnapshot(req.params.repoId, prNumber, path);
+      // Null means the file was never reviewed — an ordinary state, not an error.
+      return snapshot ?? { baseContent: null, headContent: null };
+    },
+  );
+
   app.put<{ Params: { repoId: string; prNumber: string }; Body: { headRef?: unknown } }>(
     "/api/reviews/:repoId/:prNumber/head-ref",
     async (req, reply) => {

@@ -9,6 +9,7 @@ export interface GanderApi {
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
+  reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<PrView>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
 }

@@ -5,11 +5,20 @@ import { languageForPath } from "../languages.js";
 import { setupMonacoWorkers } from "../monaco.js";
 import type { Store } from "../store.js";
 import { currentLine, pendingReveal } from "../selection.js";
-import { Check, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
+import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
 
 const props = defineProps<{ store: Store }>();
 const host = ref<HTMLElement | null>(null);
-const view = ref<"diff" | "full">("diff");
+const view = ref<"diff" | "full" | "since">("diff");
+
+// The file as it stood when the reviewer last checked it. Fetched lazily — it costs a
+// round trip to the service and only the delta tab needs it.
+const snapshot = ref<string | null>(null);
+const snapshotFor = ref<string | null>(null);
+
+// Only offered once the file has actually moved since it was reviewed. Before that
+// the tab would render an empty diff and mean nothing.
+const canShowDelta = computed(() => current.value?.changedSince === true);
 let editor: monaco.editor.IStandaloneDiffEditor | monaco.editor.IStandaloneCodeEditor | null = null;
 let models: monaco.editor.ITextModel[] = [];
 
@@ -77,6 +86,22 @@ function render(): void {
     diff.setModel({ original, modified });
     editor = diff;
     trackCursor();
+  } else if (view.value === "since") {
+    // What has landed since the reviewer last signed this file off: their stored
+    // snapshot on the left, the current head on the right.
+    const original = monaco.editor.createModel(snapshot.value ?? "", lang);
+    const modified = monaco.editor.createModel(file.headContent ?? "", lang);
+    models = [original, modified];
+    const diff = monaco.editor.createDiffEditor(host.value, {
+      renderSideBySide: false,
+      readOnly: true,
+      automaticLayout: true,
+      hideUnchangedRegions: { enabled: true },
+      theme: "vs-dark",
+    });
+    diff.setModel({ original, modified });
+    editor = diff;
+    trackCursor();
   } else {
     const model = monaco.editor.createModel(file.headContent ?? "", lang);
     models = [model];
@@ -114,8 +139,21 @@ function render(): void {
 const renderKey = computed(() => {
   const file = current.value;
   if (!file) return null;
-  return `${file.path}#${file.baseHash ?? ""}#${file.headHash ?? ""}#${view.value}`;
+  // The snapshot is part of what the delta tab renders, so it belongs in the key too.
+  return `${file.path}#${file.baseHash ?? ""}#${file.headHash ?? ""}#${view.value}#${snapshotFor.value ?? ""}`;
 });
+
+// Fetch the snapshot when the delta tab is opened, once per file.
+watch([() => current.value?.path, view], async ([path]) => {
+  if (view.value !== "since" || !path) return;
+  if (snapshotFor.value === path) return;
+  snapshot.value = await props.store.reviewedSnapshot(path);
+  snapshotFor.value = path;
+}, { immediate: true });
+
+// A file that has not moved since review has nothing to show here; fall back rather
+// than leave the reader on an empty tab after switching files.
+watch(canShowDelta, (can) => { if (!can && view.value === "since") view.value = "diff"; });
 
 onMounted(() => {
   setupMonacoWorkers();
@@ -156,6 +194,17 @@ onBeforeUnmount(dispose);
           @click="view = 'diff'"
         >
           <FileDiff :size="15" />
+        </button>
+        <button
+          v-if="canShowDelta"
+          role="tab"
+          :aria-selected="view === 'since'"
+          :class="{ active: view === 'since' }"
+          aria-label="Changes since your review"
+          title="Changes since your review"
+          @click="view = 'since'"
+        >
+          <FileClock :size="15" />
         </button>
         <button
           role="tab"

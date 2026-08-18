@@ -22,6 +22,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     setCheckedMany: async (_r, _n, paths) => prView(paths),
     refreshPr: async () => prView(),
     lastReview: async () => null,
+    reviewedSnapshot: async () => null,
     addQuestion: async () => prView(),
     deleteQuestion: async () => prView(),
     ...overrides,

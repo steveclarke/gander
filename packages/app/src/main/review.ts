@@ -16,6 +16,8 @@ export interface Reviewer {
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<PrView>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
+  /** The file as it stood when the reviewer last checked it — the base for the delta view. */
+  reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
 }
 
 interface CacheEntry { view: PrView; headSha: string; }
@@ -160,6 +162,9 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       const view = requireOpen(repoId, prNumber);
       view.questions = [...view.questions, await deps.service.addQuestion(repoId, prNumber, input)];
       return view;
+    },
+    async reviewedSnapshot(repoId, prNumber, path) {
+      return (await deps.service.getSnapshot(repoId, prNumber, path)).headContent;
     },
     async deleteQuestion(repoId, prNumber, id) {
       const view = requireOpen(repoId, prNumber);

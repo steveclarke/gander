@@ -20,6 +20,7 @@ export interface Store {
   refresh(): Promise<void>;
   setChecked(path: string, checked: boolean): Promise<void>;
   setCheckedMany(paths: string[], checked: boolean): Promise<void>;
+  reviewedSnapshot(path: string): Promise<string | null>;
   addQuestion(text: string, path: string | null, line: number | null): Promise<void>;
   deleteQuestion(id: number): Promise<void>;
   select(path: string): void;
@@ -91,6 +92,10 @@ export function createStore(api: GanderApi): Store {
         if (!store.currentRepoId || !store.view) throw new Error("no PR open");
         store.view = await api.setCheckedMany(store.currentRepoId, store.view.pr.number, paths, checked);
       });
+    },
+    async reviewedSnapshot(path: string) {
+      if (!store.currentRepoId || !store.view) return null;
+      return api.reviewedSnapshot(store.currentRepoId, store.view.pr.number, path);
     },
     async addQuestion(text: string, path: string | null, line: number | null) {
       await guard(async () => {
