@@ -1,0 +1,25 @@
+name: gander
+
+services:
+  service:
+    env_var: GANDER_PORT
+    env_file:
+      - .env
+      - .pc_env
+
+computed:
+  # The app's serviceUrl and the readiness probe both read this. Built from the
+  # port rather than ${service.url:direct}, which resolves empty for a service
+  # with no .test hostname — and this service wants none, it is loopback only.
+  GANDER_SERVICE_URL:
+    value: "http://127.0.0.1:${service.port}"
+    env_file:
+      - .env
+      - .pc_env
+
+  # process-compose reads .pc_env before anything else. Setting this both enables
+  # UDS mode and gives each worktree its own control socket, so `bin/dev status`
+  # in one checkout never talks to another checkout's stack.
+  PC_SOCKET_PATH:
+    value: "/tmp/process-compose-${project_name}${instance:+-${instance}}.sock"
+    env_file: .pc_env

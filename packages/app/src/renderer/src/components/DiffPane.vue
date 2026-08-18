@@ -4,10 +4,21 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { languageForPath } from "../languages.js";
 import { setupMonacoWorkers } from "../monaco.js";
 import type { Store } from "../store.js";
+import { currentLine, pendingReveal } from "../selection.js";
+import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
 
 const props = defineProps<{ store: Store }>();
 const host = ref<HTMLElement | null>(null);
-const view = ref<"diff" | "full">("diff");
+const view = ref<"diff" | "full" | "since">("diff");
+
+// The file as it stood when the reviewer last checked it. Fetched lazily — it costs a
+// round trip to the service and only the delta tab needs it.
+const snapshot = ref<string | null>(null);
+const snapshotFor = ref<string | null>(null);
+
+// Only offered once the file has actually moved since it was reviewed. Before that
+// the tab would render an empty diff and mean nothing.
+const canShowDelta = computed(() => current.value?.changedSince === true);
 let editor: monaco.editor.IStandaloneDiffEditor | monaco.editor.IStandaloneCodeEditor | null = null;
 let models: monaco.editor.ITextModel[] = [];
 
@@ -21,6 +32,8 @@ const dirName = computed(() => {
   return parts.length ? `${parts.join("/")}/` : "";
 });
 const baseName = computed(() => current.value?.path.split("/").pop() ?? "");
+// The branch the pull request targets — "master" as often as "main".
+const baseRef = computed(() => props.store.view?.pr.baseRef ?? "the base branch");
 
 // git.ts hashes a binary blob's raw bytes but withholds its content, so `content === null`
 // paired with a real hash (as opposed to a null hash, which means "absent at this revision")
@@ -30,9 +43,25 @@ const baseBinary = computed(() => current.value !== null && current.value.baseCo
 const headBinary = computed(() => current.value !== null && current.value.headContent === null && current.value.headHash !== null);
 const isBinary = computed(() => baseBinary.value || headBinary.value);
 
+/** The editor holding the head revision: the diff editor's right-hand side, or the full file. */
+function headEditor(): monaco.editor.ICodeEditor | null {
+  if (!editor) return null;
+  return "getModifiedEditor" in editor ? editor.getModifiedEditor() : editor;
+}
+
+function trackCursor(): void {
+  const ed = headEditor();
+  if (!ed) return;
+  currentLine.value = ed.getPosition()?.lineNumber ?? null;
+  ed.onDidChangeCursorPosition((e) => { currentLine.value = e.position.lineNumber; });
+}
+
 function dispose(): void {
   editor?.dispose();
   editor = null;
+  // A line number from a file that is no longer on screen would stamp the next
+  // question with a line the reader never looked at.
+  currentLine.value = null;
   for (const model of models) model.dispose();
   models = [];
 }
@@ -56,6 +85,23 @@ function render(): void {
     });
     diff.setModel({ original, modified });
     editor = diff;
+    trackCursor();
+  } else if (view.value === "since") {
+    // What has landed since the reviewer last signed this file off: their stored
+    // snapshot on the left, the current head on the right.
+    const original = monaco.editor.createModel(snapshot.value ?? "", lang);
+    const modified = monaco.editor.createModel(file.headContent ?? "", lang);
+    models = [original, modified];
+    const diff = monaco.editor.createDiffEditor(host.value, {
+      renderSideBySide: false,
+      readOnly: true,
+      automaticLayout: true,
+      hideUnchangedRegions: { enabled: true },
+      theme: "vs-dark",
+    });
+    diff.setModel({ original, modified });
+    editor = diff;
+    trackCursor();
   } else {
     const model = monaco.editor.createModel(file.headContent ?? "", lang);
     models = [model];
@@ -65,7 +111,9 @@ function render(): void {
       automaticLayout: true,
       theme: "vs-dark",
     });
+    trackCursor();
   }
+  reveal();
 }
 
 // The editor must only be torn down and rebuilt when the content it displays actually
@@ -91,8 +139,24 @@ function render(): void {
 const renderKey = computed(() => {
   const file = current.value;
   if (!file) return null;
-  return `${file.path}#${file.baseHash ?? ""}#${file.headHash ?? ""}#${view.value}`;
+  // The delta tab renders the snapshot, which arrives a round trip after the tab is
+  // clicked. Holding the key back until it is in hand avoids building the diff against
+  // an empty original first, which reads as the whole file having been added.
+  if (view.value === "since" && snapshotFor.value !== file.path) return null;
+  return `${file.path}#${file.baseHash ?? ""}#${file.headHash ?? ""}#${view.value}#${snapshotFor.value ?? ""}`;
 });
+
+// Fetch the snapshot when the delta tab is opened, once per file.
+watch([() => current.value?.path, view], async ([path]) => {
+  if (view.value !== "since" || !path) return;
+  if (snapshotFor.value === path) return;
+  snapshot.value = await props.store.reviewedSnapshot(path);
+  snapshotFor.value = path;
+}, { immediate: true });
+
+// A file that has not moved since review has nothing to show here; fall back rather
+// than leave the reader on an empty tab after switching files.
+watch(canShowDelta, (can) => { if (!can && view.value === "since") view.value = "diff"; });
 
 onMounted(() => {
   setupMonacoWorkers();
@@ -101,7 +165,21 @@ onMounted(() => {
 // flush: "post" — the binary/text split below is a v-if/v-else, so the `host` element is
 // created or destroyed by that same content change. The default pre-flush timing would run
 // render() before Vue patches the DOM, handing it a stale or absent host element.
+/** Jump to a line the reader picked in the questions drawer, unfolding it if it is hidden. */
+function reveal(): void {
+  const line = pendingReveal.value;
+  const ed = headEditor();
+  if (line === null || !ed) return;
+  pendingReveal.value = null;
+  ed.revealLineInCenter(line);
+  ed.setPosition({ lineNumber: line, column: 1 });
+  ed.focus();
+}
+
 watch(renderKey, render, { flush: "post" });
+// A jump into the file already on screen needs no rebuild; render() handles the case
+// where the drawer also switched files, by calling reveal() once the editor exists.
+watch(pendingReveal, (line) => { if (line !== null) reveal(); }, { flush: "post" });
 onBeforeUnmount(dispose);
 </script>
 
@@ -109,20 +187,51 @@ onBeforeUnmount(dispose);
   <section v-if="current" class="pane">
     <header class="filehead">
       <span class="path"><span class="dir">{{ dirName }}</span>{{ baseName }}</span>
-      <div class="tabs">
-        <button :class="{ active: view === 'diff' }" @click="view = 'diff'">vs main</button>
-        <button :class="{ active: view === 'full' }" @click="view = 'full'">full file</button>
+      <div class="tabs" role="tablist">
+        <button
+          role="tab"
+          :aria-selected="view === 'diff'"
+          :class="{ active: view === 'diff' }"
+          :aria-label="`Changes against ${baseRef}`"
+          :title="`Changes against ${baseRef}`"
+          @click="view = 'diff'"
+        >
+          <FileDiff :size="15" />
+        </button>
+        <button
+          v-if="canShowDelta"
+          role="tab"
+          :aria-selected="view === 'since'"
+          :class="{ active: view === 'since' }"
+          aria-label="Changes since your review"
+          title="Changes since your review"
+          @click="view = 'since'"
+        >
+          <FileClock :size="15" />
+        </button>
+        <button
+          role="tab"
+          :aria-selected="view === 'full'"
+          :class="{ active: view === 'full' }"
+          aria-label="Full file"
+          title="Full file"
+          @click="view = 'full'"
+        >
+          <FileText :size="15" />
+        </button>
       </div>
       <button
         class="check"
         :class="{ on: current.checked }"
         @click="store.setChecked(current.path, !current.checked)"
       >
-        {{ current.checked ? "✓ Reviewed" : "Mark reviewed" }}
+        <Check v-if="current.checked" :size="14" :stroke-width="3" />
+        <span>{{ current.checked ? "Reviewed" : "Mark reviewed" }}</span>
       </button>
     </header>
     <div v-if="current.changedSince" class="banner">
-      ⚠ Changed since your review — un-checked automatically. Re-review and mark again.
+      <TriangleAlert :size="14" />
+      <span>Changed since your review — un-checked automatically. Re-review and mark again.</span>
     </div>
     <div v-if="isBinary" class="binary-note">Binary file — diff cannot be displayed.</div>
     <div v-else ref="host" class="editor" />
@@ -166,14 +275,16 @@ onBeforeUnmount(dispose);
   flex: none;
 }
 .tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
   background: none;
   border: none;
   color: var(--dim);
-  font-size: 11.5px;
-  padding: 3px 10px;
   border-radius: 5px;
   cursor: pointer;
-  white-space: nowrap;
 }
 .tabs button.active {
   background: #2c3340;
@@ -181,6 +292,9 @@ onBeforeUnmount(dispose);
 }
 .check {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   border: 1px solid var(--border);
   background: #22262e;
   color: var(--text);
@@ -199,6 +313,9 @@ onBeforeUnmount(dispose);
   background: rgba(63, 185, 80, 0.15);
 }
 .banner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   background: rgba(210, 153, 34, 0.08);
   color: var(--yellow);
   padding: 7px 14px;

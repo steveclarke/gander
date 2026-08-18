@@ -2,6 +2,7 @@
 import { computed, reactive, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
+import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
 
 const props = defineProps<{ store: Store; nodes?: TreeNode[]; depth?: number }>();
 
@@ -13,6 +14,16 @@ const nodes = computed(() => props.nodes ?? buildTree(props.store.view?.files ??
 // dirState flat-maps and sorts the whole subtree under a directory. The template calls it
 // twice per dir row (class binding + aria-checked) — memoize it once per node per render
 // instead of walking the subtree on every call.
+// FileTree renders itself recursively, so every level would otherwise re-scan the whole
+// question list per row.
+const questionCounts = computed(() => {
+  const map = new Map<string, number>();
+  for (const q of props.store.view?.questions ?? []) {
+    if (q.path !== null) map.set(q.path, (map.get(q.path) ?? 0) + 1);
+  }
+  return map;
+});
+
 const dirStates = computed(() => {
   const map = new Map<string, "all" | "some" | "none">();
   for (const node of nodes.value) if (node.type === "dir") map.set(node.path, dirState(node));
@@ -47,9 +58,7 @@ function fileName(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
-function stateGlyph(state: "all" | "some" | "none"): string {
-  return state === "some" ? "–" : "✓";
-}
+
 </script>
 
 <template>
@@ -64,7 +73,7 @@ function stateGlyph(state: "all" | "some" | "none"): string {
         @click="toggleCollapsed(node.path)"
         @keydown.enter.space.prevent="toggleCollapsed(node.path)"
       >
-        <span class="chev">{{ collapsed.has(node.path) ? "▶" : "▼" }}</span>
+        <component :is="collapsed.has(node.path) ? ChevronRight : ChevronDown" class="chev" :size="14" />
         <span
           class="cb"
           :class="{ on: dirStateFor(node) === 'all', part: dirStateFor(node) === 'some' }"
@@ -73,7 +82,10 @@ function stateGlyph(state: "all" | "some" | "none"): string {
           tabindex="0"
           @click.stop="checkDir(node)"
           @keydown.enter.space.stop.prevent="checkDir(node)"
-        >{{ stateGlyph(dirStateFor(node)) }}</span>
+        >
+          <Minus v-if="dirStateFor(node) === 'some'" :size="12" :stroke-width="3" />
+          <Check v-else :size="12" :stroke-width="3" />
+        </span>
         <span class="fname">{{ node.name }}</span>
       </div>
       <FileTree
@@ -100,9 +112,15 @@ function stateGlyph(state: "all" | "some" | "none"): string {
           tabindex="0"
           @click.stop="toggleFile(node.file.path, node.file.checked)"
           @keydown.enter.space.stop.prevent="toggleFile(node.file.path, node.file.checked)"
-        >✓</span>
+        ><Check :size="12" :stroke-width="3" /></span>
         <span class="fname">{{ fileName(node.file.path) }}</span>
-        <span v-if="node.file.changedSince" class="delta-mark" title="Changed since your review">●</span>
+        <MessageSquare
+          v-if="questionCounts.get(node.file.path)"
+          class="qmark"
+          :size="12"
+          :title="`${questionCounts.get(node.file.path)} question(s) on this file`"
+        />
+        <span v-if="node.file.changedSince" class="delta-mark" title="Changed since your review" />
         <span class="st" :class="node.file.status">{{ node.file.status }}</span>
       </div>
     </template>
@@ -114,7 +132,7 @@ function stateGlyph(state: "all" | "some" | "none"): string {
 .tnode { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 0; cursor: pointer; white-space: nowrap; }
 .tnode:hover { background: #232833; }
 .tnode.sel { background: rgba(77, 159, 236, 0.14); box-shadow: inset 2px 0 0 var(--accent); }
-.tnode .chev { width: 14px; flex: none; text-align: center; color: var(--faint); font-size: 9px; }
+.tnode .chev { flex: none; color: var(--faint); }
 .tnode .fname { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; }
 .tnode.isdir .fname { font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--dim); }
 .tnode .st { margin-left: auto; font: 11px var(--mono); flex: none; }
@@ -126,5 +144,6 @@ function stateGlyph(state: "all" | "some" | "none"): string {
 .cb.on { border-color: var(--green); color: var(--green); }
 .cb.part { border-color: var(--green); color: var(--green); }
 .tnode.checked .fname { color: var(--faint); }
-.delta-mark { color: var(--yellow); font-size: 10px; flex: none; }
+.qmark { color: var(--accent); flex: none; }
+.delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); flex: none; }
 </style>

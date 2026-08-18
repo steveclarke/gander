@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "type": "module",
   "main": "./out/main/index.js",
-  "scripts": { "dev": "electron-vite dev", "build": "electron-vite build", "typecheck": "vue-tsc --noEmit" },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "vue-tsc --noEmit"
+  },
   "dependencies": {
     "@gander/shared": "workspace:*",
+    "lucide-vue-next": "^1.0.0",
     "monaco-editor": "^0.52.0",
     "vue": "^3.5.0",
     "zod": "^4.4.3"

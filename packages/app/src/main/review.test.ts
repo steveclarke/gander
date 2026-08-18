@@ -18,7 +18,7 @@ let storage: Storage; let server: FastifyInstance; let reviewer: Reviewer; let p
 async function currentPr(fx: FixtureRepo): Promise<PrSummary> {
   const headSha = await fx.git(["rev-parse", "refs/pull/1/head"]);
   const baseSha = await fx.git(["rev-parse", "main"]);
-  return { number: 1, title: "Feature", body: "", draft: false, baseRef: "main", baseSha, headSha };
+  return { number: 1, title: "Feature", body: "", draft: false, baseRef: "main", baseSha, headRef: "feature", stack: null, headSha };
 }
 
 beforeEach(async () => {

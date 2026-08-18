@@ -2,7 +2,7 @@
 
 ## Where the work is
 
-`m1-walking-skeleton`, 30 commits ahead of `master`. Not yet merged.
+M1 is merged to `master`.
 
 - Spec: `docs/superpowers/specs/2026-08-15-gander-design.md` (approved, binding)
 - Plan: `docs/superpowers/plans/2026-08-15-m1-walking-skeleton.md` (all 11 tasks complete)
@@ -28,36 +28,35 @@ is the base for the M2 delta view.
 
 ## Running it locally
 
-Two processes. Service first:
-
 ```
-GANDER_TOKEN=gander-local-dev GANDER_DB=$HOME/.local/share/gander/gander.db GANDER_PORT=8390 pnpm --filter @gander/service dev
-```
-
-Then the app:
-
-```
-pnpm --filter @gander/app dev
+bin/setup
+bin/dev
 ```
 
-Config lives at `~/.config/gander/config.json` — service URL, token, and the
-list of registered repos.
+See `DEVSTACK.md`. Config and review state are repo-local, under `.gander/`.
 
-## Not in M1
+## Questions
 
-Carried into M2 planning:
+Reviewing while an agent works elsewhere in the repository is what the app is
+for, so questions came in immediately after M1 rather than waiting for a
+milestone boundary.
 
-- Questions drawer and the MCP endpoint
-- The "since my ✓" delta tab
+Pressing `n` over a file captures a question against it, stamped with the line
+being read. Questions carry three states: `open` when captured, `addressed` when
+an agent has acted on one, and `resolved` when the reviewer re-checks the file.
+Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`
+for registration.
+
+Each opened pull request records its own branch, which is how the service maps an
+agent's working branch to a pull request without holding GitHub credentials.
+
+## Still open
+
 - Local branch/worktree viewer (stateless, no review state)
-- Three spec items the M1 plan omitted: the Fetch origin segment, the file-tree
-  toggle, and the status bar showing service reachability and last fetch
-- Sticky `store.error` — errors currently clear too eagerly
-- Progress feedback during a first clone. Its absence caused repeated clicks on
-  an unresponsive button, which surfaced the clone race fixed in b575f50.
-- End-to-end tests. M1 has no harness driving the real Electron window; every
-  layer below it is tested. The clone race was invisible to the whole suite
+- End-to-end tests. There is still no harness driving the real Electron window;
+  every layer below it is tested. The clone race was invisible to the whole suite
   because no test ever clicked twice.
+- Packaging: signing, notarization, and the Homebrew cask.
 
 ## Open decision
 

@@ -1,4 +1,4 @@
-import type { FileCheckoff, PrFile, PrSummary, PrView } from "@gander/shared";
+import type { FileCheckoff, NewQuestion, PrFile, PrSummary, PrView } from "@gander/shared";
 import type { GitEngine } from "./git.js";
 import type { ServiceClient } from "./service-client.js";
 
@@ -14,6 +14,10 @@ export interface Reviewer {
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
+  addQuestion(repoId: string, prNumber: number, input: Omit<NewQuestion, "headSha">): Promise<PrView>;
+  deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
+  /** The file as it stood when the reviewer last checked it — the base for the delta view. */
+  reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
 }
 
 interface CacheEntry { view: PrView; headSha: string; }
@@ -70,28 +74,56 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     return files;
   }
 
+  async function recordContext(repoId: string, prNumber: number, pr: PrSummary, all: PrSummary[]): Promise<void> {
+    const write = (p: PrSummary): Promise<void> => deps.service.setPrContext(repoId, p.number, {
+      headRef: p.headRef,
+      title: p.title,
+      headSha: p.headSha,
+      stackId: p.stack?.id ?? null,
+      stackSize: p.stack?.size ?? null,
+      stackPosition: p.stack?.position ?? null,
+    });
+
+    // Every member of the stack is recorded, not just the one being opened. An agent
+    // stands on one branch of a stack and asks about it; if only the reviewed pull
+    // request were known, that lookup would come back empty and the agent would be left
+    // guessing pull request numbers to find the questions.
+    const siblings = pr.stack === null ? [] : all.filter((p) => p.stack?.id === pr.stack?.id && p.number !== pr.number);
+    await Promise.all([write(pr), ...siblings.map(write)]);
+  }
+
   async function openPr(repoId: string, prNumber: number): Promise<PrView> {
-    const pr = (await deps.listPrs(repoId)).find((p) => p.number === prNumber);
+    const all = await deps.listPrs(repoId);
+    const pr = all.find((p) => p.number === prNumber);
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
 
     const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
     await deps.git.fetchPr(clone, prNumber, pr.baseRef);
+    // Recorded here so an agent working in a checkout of this branch can ask the service
+    // for its questions by branch name, without the service needing GitHub credentials —
+    // and so the answer can name which pull request, and which member of a stack, it is.
+    await recordContext(repoId, prNumber, pr, all);
     const head = await deps.git.resolveRef(clone, `refs/gander/pr/${prNumber}`);
     const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
     const mergeBase = await deps.git.mergeBase(clone, base, head);
 
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
-    const view: PrView = { pr, files };
+    const questions = await deps.service.listQuestions(repoId, prNumber);
+    const view: PrView = { pr, files, questions };
     cache.set(key(repoId, prNumber), { view, headSha: head });
     return view;
   }
 
   async function refreshPr(repoId: string, prNumber: number): Promise<PrView> {
-    const pr = (await deps.listPrs(repoId)).find((p) => p.number === prNumber);
+    const all = await deps.listPrs(repoId);
+    const pr = all.find((p) => p.number === prNumber);
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
 
     const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
     await deps.git.fetchPr(clone, prNumber, pr.baseRef);
+    // Kept current on every refresh: it is what tells an agent that a question's line
+    // number predates the commits now on the branch.
+    await recordContext(repoId, prNumber, pr, all);
     const head = await deps.git.resolveRef(clone, `refs/gander/pr/${prNumber}`);
 
     const cached = cache.get(key(repoId, prNumber));
@@ -101,7 +133,8 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       // checked/changedSince against the blob content and hashes we already have cached.
       const state = await deps.service.getReview(repoId, prNumber);
       const files = applyServiceState(cached.view.files, state);
-      const view: PrView = { pr, files };
+      const questions = await deps.service.listQuestions(repoId, prNumber);
+      const view: PrView = { pr, files, questions };
       cache.set(key(repoId, prNumber), { view, headSha: head });
       return view;
     }
@@ -110,7 +143,8 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
     const mergeBase = await deps.git.mergeBase(clone, base, head);
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
-    const view: PrView = { pr, files };
+    const questions = await deps.service.listQuestions(repoId, prNumber);
+    const view: PrView = { pr, files, questions };
     cache.set(key(repoId, prNumber), { view, headSha: head });
     return view;
   }
@@ -139,9 +173,29 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     return view;
   }
 
+  function requireOpen(repoId: string, prNumber: number): PrView {
+    const entry = cache.get(key(repoId, prNumber));
+    if (!entry) throw new Error(`PR #${prNumber} on ${repoId} must be opened first`);
+    return entry.view;
+  }
+
   return {
     openPr,
     refreshPr,
+    async addQuestion(repoId, prNumber, input) {
+      const view = requireOpen(repoId, prNumber);
+      view.questions = [...view.questions, await deps.service.addQuestion(repoId, prNumber, { ...input, headSha: view.pr.headSha })];
+      return view;
+    },
+    async reviewedSnapshot(repoId, prNumber, path) {
+      return (await deps.service.getSnapshot(repoId, prNumber, path)).headContent;
+    },
+    async deleteQuestion(repoId, prNumber, id) {
+      const view = requireOpen(repoId, prNumber);
+      await deps.service.deleteQuestion(repoId, prNumber, id);
+      view.questions = view.questions.filter((q) => q.id !== id);
+      return view;
+    },
     setChecked: (repoId, prNumber, path, checked) => applyChecked(repoId, prNumber, [path], checked),
     setCheckedMany: (repoId, prNumber, paths, checked) => applyChecked(repoId, prNumber, paths, checked),
   };

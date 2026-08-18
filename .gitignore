@@ -4,3 +4,9 @@ out/
 *.db
 *.log
 .DS_Store
+
+# devstack / outport
+.env
+.pc_env
+.pc/
+.gander/

@@ -84,4 +84,57 @@ describe("service API", () => {
     const res = await server.inject({ method: "GET", url: "/api/reviews/acme%252Fweird%25repo/7", headers: AUTH });
     expect(res.statusCode).toBeLessThan(500);
   });
+
+  describe("questions", () => {
+    const url = "/api/reviews/acme%2Fatlas/7/questions";
+
+    it("creates, lists, and deletes a question", async () => {
+      const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: 3, text: "Why?", headSha: "sha-1" } });
+      expect(created.statusCode).toBe(201);
+      const id = created.json().id as number;
+
+      const listed = await server.inject({ method: "GET", url, headers: AUTH });
+      expect(listed.json()).toHaveLength(1);
+
+      const deleted = await server.inject({ method: "DELETE", url: `${url}/${id}`, headers: AUTH });
+      expect(deleted.statusCode).toBe(204);
+      expect((await server.inject({ method: "GET", url, headers: AUTH })).json()).toEqual([]);
+    });
+
+    it("rejects an empty question rather than storing a blank note", async () => {
+      const res = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: null, text: "", headSha: null } });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("404s on deleting a question that is not there", async () => {
+      expect((await server.inject({ method: "DELETE", url: `${url}/999`, headers: AUTH })).statusCode).toBe(404);
+    });
+
+    it("requires the bearer token", async () => {
+      expect((await server.inject({ method: "GET", url })).statusCode).toBe(401);
+    });
+  });
+
+  describe("snapshot", () => {
+    const url = "/api/reviews/acme%2Fatlas/7/snapshot";
+
+    it("returns the content stored when the file was checked", async () => {
+      await server.inject({
+        method: "PUT", url: "/api/reviews/acme%2Fatlas/7/files", headers: AUTH,
+        payload: { checked: true, path: "app/models/org.rb", baseHash: "b", headHash: "h", baseContent: "old", headContent: "reviewed", machine: "m" },
+      });
+      const res = await server.inject({ method: "GET", url: `${url}?path=app%2Fmodels%2Forg.rb`, headers: AUTH });
+      expect(res.json()).toEqual({ baseContent: "old", headContent: "reviewed" });
+    });
+
+    it("reports a never-reviewed file as empty rather than failing", async () => {
+      const res = await server.inject({ method: "GET", url: `${url}?path=untouched.rb`, headers: AUTH });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ baseContent: null, headContent: null });
+    });
+
+    it("requires a path", async () => {
+      expect((await server.inject({ method: "GET", url, headers: AUTH })).statusCode).toBe(400);
+    });
+  });
 });

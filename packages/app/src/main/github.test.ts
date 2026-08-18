@@ -15,7 +15,7 @@ describe("listOpenPrs", () => {
     }) as typeof fetch;
 
     const prs = await listOpenPrs("acme/atlas", "tok", fakeFetch);
-    expect(prs).toEqual([{ number: 987, title: "Late-fee automation", body: "Adds calculator", draft: true, baseRef: "main", baseSha: "aaa111", headSha: "bbb222" }]);
+    expect(prs).toEqual([{ number: 987, title: "Late-fee automation", body: "Adds calculator", draft: true, baseRef: "main", baseSha: "aaa111", headSha: "bbb222", stack: null }]);
   });
 
   it("surfaces API errors loudly with status and body", async () => {

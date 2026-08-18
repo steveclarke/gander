@@ -11,8 +11,9 @@ const file = (path: string, checked = false): PrFile =>
 
 function prView(prNumber: number, files: PrFile[]): PrView {
   return {
-    pr: { number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headSha: "b" },
+    pr: { number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
     files,
+    questions: [],
   };
 }
 
@@ -30,12 +31,21 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     view,
     selectedPath: view.files[0]!.path,
     error: null,
+    serviceReachable: true,
+    lastFetchAt: null,
     busy: false,
     async loadRepos() {},
+    async restoreLastReview() {},
+    async checkService() {},
+    dismissError() {},
     async addRepo() {},
     async selectRepo() {},
     async openPr() {},
     async refresh() {},
+    async fetchNow() {},
+    async reviewedSnapshot() { return null; },
+    async addQuestion() {},
+    async deleteQuestion() {},
     async setChecked(path: string, checked: boolean) {
       calls.setChecked.push([path, checked]);
     },
@@ -113,7 +123,7 @@ describe("FileTree", () => {
 
     // collapse "app"
     await dirRow(wrapper, "app").trigger("click");
-    expect(dirRow(wrapper, "app").find(".chev").text()).toBe("▶");
+    expect(dirRow(wrapper, "app").find(".chev").classes()).toContain("lucide-chevron-right");
     expect(wrapper.text()).not.toContain("member.rb"); // collapsed: app's children are hidden
 
     // switch PR within the same repo the way store.openPr does: reassign `view` directly, no null in between
@@ -124,7 +134,7 @@ describe("FileTree", () => {
     ]);
     await nextTick();
 
-    expect(dirRow(wrapper, "app").find(".chev").text()).toBe("▼");
+    expect(dirRow(wrapper, "app").find(".chev").classes()).toContain("lucide-chevron-down");
     expect(wrapper.text()).toContain("member.rb");
   });
 });

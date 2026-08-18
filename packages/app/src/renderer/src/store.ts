@@ -9,15 +9,28 @@ export interface Store {
   view: PrView | null;
   selectedPath: string | null;
   error: string | null;
+  /** Whether the review service answered its last health check. */
+  serviceReachable: boolean;
+  /** When the pull request was last fetched from origin, as an ISO string. */
+  lastFetchAt: string | null;
   /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
   busy: boolean;
   loadRepos(): Promise<void>;
+  checkService(): Promise<void>;
+  dismissError(): void;
+  /** Reopen the pull request that was open when the app last closed. */
+  restoreLastReview(): Promise<void>;
   addRepo(url: string): Promise<void>;
   selectRepo(repoId: string): Promise<void>;
   openPr(prNumber: number): Promise<void>;
   refresh(): Promise<void>;
+  /** The reviewer pressing Fetch origin: same work as refresh, but it clears a stale error. */
+  fetchNow(): Promise<void>;
   setChecked(path: string, checked: boolean): Promise<void>;
   setCheckedMany(paths: string[], checked: boolean): Promise<void>;
+  reviewedSnapshot(path: string): Promise<string | null>;
+  addQuestion(text: string, path: string | null, line: number | null): Promise<void>;
+  deleteQuestion(id: number): Promise<void>;
   select(path: string): void;
   progress(): { done: number; total: number };
 }
@@ -30,6 +43,8 @@ export function createStore(api: GanderApi): Store {
     view: null,
     selectedPath: null,
     error: null,
+    serviceReachable: true,
+    lastFetchAt: null,
     busy: false,
 
     async loadRepos() {
@@ -37,32 +52,55 @@ export function createStore(api: GanderApi): Store {
         store.repos = await api.listRepos();
       });
     },
+    async checkService() {
+      store.serviceReachable = await api.serviceHealthy();
+    },
+    dismissError() {
+      store.error = null;
+    },
+    async restoreLastReview() {
+      const last = await api.lastReview();
+      if (!last) return;
+      // A repository can be removed from the config, or a pull request merged and its
+      // refs gone, between one launch and the next. Neither is an error worth a banner
+      // on startup — the app just opens on the empty state instead.
+      if (!store.repos.some((r) => r.repoId === last.repoId)) return;
+      await store.selectRepo(last.repoId);
+      if (store.error) { store.error = null; return; }
+      await store.openPr(last.prNumber);
+      if (store.error) store.error = null;
+    },
     async addRepo(url: string) {
-      await withBusy(() => guard(async () => {
+      await userAction(() => withBusy(() => guard(async () => {
         await api.addRepo(url);
         store.repos = await api.listRepos();
-      }));
+      })));
     },
     async selectRepo(repoId: string) {
-      await withBusy(() => guard(async () => {
+      await userAction(() => withBusy(() => guard(async () => {
         store.prs = await api.listPrs(repoId);
         store.currentRepoId = repoId;
         store.view = null;
         store.selectedPath = null;
-      }));
+      })));
     },
     async openPr(prNumber: number) {
-      await withBusy(() => guard(async () => {
+      await userAction(() => withBusy(() => guard(async () => {
         if (!store.currentRepoId) throw new Error("no repo selected");
         store.view = await api.openPr(store.currentRepoId, prNumber);
         store.selectedPath = store.view.files[0]?.path ?? null;
-      }));
+        store.lastFetchAt = new Date().toISOString();
+      })));
     },
     async refresh() {
       await withBusy(() => guard(async () => {
         if (!store.currentRepoId || !store.view) return;
         store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+        store.lastFetchAt = new Date().toISOString();
       }));
+    },
+    async fetchNow() {
+      await userAction(() => store.refresh());
     },
     async setChecked(path: string, checked: boolean) {
       await guard(async () => {
@@ -76,6 +114,22 @@ export function createStore(api: GanderApi): Store {
         store.view = await api.setCheckedMany(store.currentRepoId, store.view.pr.number, paths, checked);
       });
     },
+    async reviewedSnapshot(path: string) {
+      if (!store.currentRepoId || !store.view) return null;
+      return api.reviewedSnapshot(store.currentRepoId, store.view.pr.number, path);
+    },
+    async addQuestion(text: string, path: string | null, line: number | null) {
+      await guard(async () => {
+        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
+        store.view = await api.addQuestion(store.currentRepoId, store.view.pr.number, { path, line, text });
+      });
+    },
+    async deleteQuestion(id: number) {
+      await guard(async () => {
+        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
+        store.view = await api.deleteQuestion(store.currentRepoId, store.view.pr.number, id);
+      });
+    },
     select(path: string) {
       store.selectedPath = path;
     },
@@ -85,13 +139,22 @@ export function createStore(api: GanderApi): Store {
     },
   });
 
+  // An error stays on screen until the reviewer dismisses it or starts something new.
+  // Clearing it on any success meant the 30-second poll wiped failures before they
+  // could be read — the app looked fine while nothing had actually worked.
   async function guard(fn: () => Promise<void>): Promise<void> {
     try {
       await fn();
-      store.error = null;
     } catch (err) {
       store.error = (err as Error).message;
     }
+  }
+
+  // Wraps the actions the reviewer starts themselves. Those do clear the previous
+  // error: they are the reviewer saying "try again".
+  async function userAction(fn: () => Promise<void>): Promise<void> {
+    store.error = null;
+    await fn();
   }
 
   async function withBusy(fn: () => Promise<void>): Promise<void> {
