@@ -50,6 +50,9 @@ git push origin master --tags
 gh release create "$TAG" --title "Gander v${VERSION}" --notes "Gander v${VERSION}"
 
 echo "==> Building, signing, and notarizing"
+# Emptied first: the upload below globs dist/, and artifacts left by an earlier version
+# would be uploaded to this release as if they belonged to it.
+rm -rf packages/app/dist
 export APPLE_KEYCHAIN_PROFILE="outport-notarize"
 pnpm --filter @gander/app run dist:mac
 
