@@ -34,6 +34,28 @@ export const PutFileStateSchema = z.discriminatedUnion("checked", [
 ]);
 export type PutFileState = z.infer<typeof PutFileStateSchema>;
 
+export const QuestionStateSchema = z.enum(["open", "addressed", "resolved"]);
+export type QuestionState = z.infer<typeof QuestionStateSchema>;
+
+export const QuestionSchema = z.object({
+  id: z.number().int().positive(),
+  /** null for a note about the pull request as a whole rather than one file. */
+  path: z.string().nullable(),
+  /** 1-based line in the head revision, stamped when a line was selected at capture. */
+  line: z.number().int().positive().nullable(),
+  text: z.string().min(1),
+  state: QuestionStateSchema,
+  createdAt: z.string(),
+});
+export type Question = z.infer<typeof QuestionSchema>;
+
+export const NewQuestionSchema = z.object({
+  path: z.string().min(1).nullable(),
+  line: z.number().int().positive().nullable(),
+  text: z.string().min(1),
+});
+export type NewQuestion = z.infer<typeof NewQuestionSchema>;
+
 export interface PrSummary {
   number: number;
   title: string;
@@ -57,7 +79,7 @@ export interface PrFile {
   changedSince: boolean;
 }
 
-export interface PrView { pr: PrSummary; files: PrFile[]; }
+export interface PrView { pr: PrSummary; files: PrFile[]; questions: Question[]; }
 
 /** "https://github.com/o/r(.git)" | "git@github.com:o/r(.git)" -> "o/r" */
 export function repoIdFromUrl(url: string): string {

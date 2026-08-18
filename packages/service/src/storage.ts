@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, PutFileState, ReviewState } from "@gander/shared";
+import type { FileCheckoff, NewQuestion, PutFileState, Question, ReviewState } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -20,14 +20,34 @@ CREATE TABLE IF NOT EXISTS file_states (
   checked_at TEXT, machine TEXT,
   UNIQUE(review_id, path)
 );
+CREATE TABLE IF NOT EXISTS questions (
+  id INTEGER PRIMARY KEY,
+  review_id INTEGER NOT NULL REFERENCES reviews(id),
+  path TEXT,
+  line INTEGER,
+  text TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS questions_by_review ON questions(review_id);
 `;
 
 export interface Storage {
   getReview(repoId: string, prNumber: number): ReviewState;
   putFileState(repoId: string, prNumber: number, input: PutFileState): FileCheckoff;
   getSnapshot(repoId: string, prNumber: number, path: string): { baseContent: string | null; headContent: string | null } | null;
+  listQuestions(repoId: string, prNumber: number): Question[];
+  addQuestion(repoId: string, prNumber: number, input: NewQuestion): Question;
+  deleteQuestion(repoId: string, prNumber: number, id: number): boolean;
   close(): void;
 }
+
+interface QuestionRow { id: number; path: string | null; line: number | null; text: string; state: string; created_at: string }
+
+const rowToQuestion = (r: QuestionRow): Question => ({
+  id: r.id, path: r.path, line: r.line, text: r.text,
+  state: r.state as Question["state"], createdAt: r.created_at,
+});
 
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
 const unpack = (b: Buffer | null): string | null => (b === null ? null : gunzipSync(b).toString("utf8"));
@@ -83,6 +103,27 @@ export function openStorage(dbPath: string): Storage {
       const row = db.prepare("SELECT base_content, head_content FROM file_states WHERE review_id = ? AND path = ?").get(rid, path) as { base_content: Buffer | null; head_content: Buffer | null } | undefined;
       if (!row) return null;
       return { baseContent: unpack(row.base_content), headContent: unpack(row.head_content) };
+    },
+
+    listQuestions(repoId, prNumber) {
+      const rid = reviewId(repoId, prNumber);
+      const rows = db.prepare("SELECT id, path, line, text, state, created_at FROM questions WHERE review_id = ? ORDER BY id").all(rid) as QuestionRow[];
+      return rows.map(rowToQuestion);
+    },
+
+    addQuestion(repoId, prNumber, input) {
+      const rid = reviewId(repoId, prNumber);
+      const { lastInsertRowid } = db
+        .prepare("INSERT INTO questions (review_id, path, line, text) VALUES (?, ?, ?, ?)")
+        .run(rid, input.path, input.line, input.text);
+      const row = db.prepare("SELECT id, path, line, text, state, created_at FROM questions WHERE id = ?").get(lastInsertRowid) as QuestionRow;
+      return rowToQuestion(row);
+    },
+
+    deleteQuestion(repoId, prNumber, id) {
+      // Scoped to the review so an id from one pull request cannot delete another's.
+      const rid = reviewId(repoId, prNumber);
+      return db.prepare("DELETE FROM questions WHERE id = ? AND review_id = ?").run(id, rid).changes > 0;
     },
 
     close() { db.close(); },

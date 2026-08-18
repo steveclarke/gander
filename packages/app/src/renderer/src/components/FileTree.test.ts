@@ -13,6 +13,7 @@ function prView(prNumber: number, files: PrFile[]): PrView {
   return {
     pr: { number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headSha: "b" },
     files,
+    questions: [],
   };
 }
 
@@ -37,6 +38,8 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async selectRepo() {},
     async openPr() {},
     async refresh() {},
+    async addQuestion() {},
+    async deleteQuestion() {},
     async setChecked(path: string, checked: boolean) {
       calls.setChecked.push([path, checked]);
     },

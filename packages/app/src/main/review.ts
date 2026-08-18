@@ -1,4 +1,4 @@
-import type { FileCheckoff, PrFile, PrSummary, PrView } from "@gander/shared";
+import type { FileCheckoff, NewQuestion, PrFile, PrSummary, PrView } from "@gander/shared";
 import type { GitEngine } from "./git.js";
 import type { ServiceClient } from "./service-client.js";
 
@@ -14,6 +14,8 @@ export interface Reviewer {
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
+  addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<PrView>;
+  deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
 }
 
 interface CacheEntry { view: PrView; headSha: string; }
@@ -81,7 +83,8 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const mergeBase = await deps.git.mergeBase(clone, base, head);
 
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
-    const view: PrView = { pr, files };
+    const questions = await deps.service.listQuestions(repoId, prNumber);
+    const view: PrView = { pr, files, questions };
     cache.set(key(repoId, prNumber), { view, headSha: head });
     return view;
   }
@@ -101,7 +104,8 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       // checked/changedSince against the blob content and hashes we already have cached.
       const state = await deps.service.getReview(repoId, prNumber);
       const files = applyServiceState(cached.view.files, state);
-      const view: PrView = { pr, files };
+      const questions = await deps.service.listQuestions(repoId, prNumber);
+      const view: PrView = { pr, files, questions };
       cache.set(key(repoId, prNumber), { view, headSha: head });
       return view;
     }
@@ -110,7 +114,8 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
     const mergeBase = await deps.git.mergeBase(clone, base, head);
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
-    const view: PrView = { pr, files };
+    const questions = await deps.service.listQuestions(repoId, prNumber);
+    const view: PrView = { pr, files, questions };
     cache.set(key(repoId, prNumber), { view, headSha: head });
     return view;
   }
@@ -139,9 +144,26 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     return view;
   }
 
+  function requireOpen(repoId: string, prNumber: number): PrView {
+    const entry = cache.get(key(repoId, prNumber));
+    if (!entry) throw new Error(`PR #${prNumber} on ${repoId} must be opened first`);
+    return entry.view;
+  }
+
   return {
     openPr,
     refreshPr,
+    async addQuestion(repoId, prNumber, input) {
+      const view = requireOpen(repoId, prNumber);
+      view.questions = [...view.questions, await deps.service.addQuestion(repoId, prNumber, input)];
+      return view;
+    },
+    async deleteQuestion(repoId, prNumber, id) {
+      const view = requireOpen(repoId, prNumber);
+      await deps.service.deleteQuestion(repoId, prNumber, id);
+      view.questions = view.questions.filter((q) => q.id !== id);
+      return view;
+    },
     setChecked: (repoId, prNumber, path, checked) => applyChecked(repoId, prNumber, [path], checked),
     setCheckedMany: (repoId, prNumber, paths, checked) => applyChecked(repoId, prNumber, paths, checked),
   };

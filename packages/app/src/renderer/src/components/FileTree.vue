@@ -2,7 +2,7 @@
 import { computed, reactive, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
-import { Check, ChevronDown, ChevronRight, Minus } from "lucide-vue-next";
+import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
 
 const props = defineProps<{ store: Store; nodes?: TreeNode[]; depth?: number }>();
 
@@ -14,6 +14,16 @@ const nodes = computed(() => props.nodes ?? buildTree(props.store.view?.files ??
 // dirState flat-maps and sorts the whole subtree under a directory. The template calls it
 // twice per dir row (class binding + aria-checked) — memoize it once per node per render
 // instead of walking the subtree on every call.
+// FileTree renders itself recursively, so every level would otherwise re-scan the whole
+// question list per row.
+const questionCounts = computed(() => {
+  const map = new Map<string, number>();
+  for (const q of props.store.view?.questions ?? []) {
+    if (q.path !== null) map.set(q.path, (map.get(q.path) ?? 0) + 1);
+  }
+  return map;
+});
+
 const dirStates = computed(() => {
   const map = new Map<string, "all" | "some" | "none">();
   for (const node of nodes.value) if (node.type === "dir") map.set(node.path, dirState(node));
@@ -104,6 +114,12 @@ function fileName(path: string): string {
           @keydown.enter.space.stop.prevent="toggleFile(node.file.path, node.file.checked)"
         ><Check :size="12" :stroke-width="3" /></span>
         <span class="fname">{{ fileName(node.file.path) }}</span>
+        <MessageSquare
+          v-if="questionCounts.get(node.file.path)"
+          class="qmark"
+          :size="12"
+          :title="`${questionCounts.get(node.file.path)} question(s) on this file`"
+        />
         <span v-if="node.file.changedSince" class="delta-mark" title="Changed since your review" />
         <span class="st" :class="node.file.status">{{ node.file.status }}</span>
       </div>
@@ -128,5 +144,6 @@ function fileName(path: string): string {
 .cb.on { border-color: var(--green); color: var(--green); }
 .cb.part { border-color: var(--green); color: var(--green); }
 .tnode.checked .fname { color: var(--faint); }
+.qmark { color: var(--accent); flex: none; }
 .delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); flex: none; }
 </style>

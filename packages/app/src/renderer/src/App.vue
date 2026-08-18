@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
 import TopBar from "./components/TopBar.vue";
 import FileTree from "./components/FileTree.vue";
 import DiffPane from "./components/DiffPane.vue";
+import QuestionCapture from "./components/QuestionCapture.vue";
+import QuestionsDrawer from "./components/QuestionsDrawer.vue";
 import "./theme.css";
 
 const store = createStore(api);
@@ -12,6 +14,23 @@ onMounted(async () => {
   await store.loadRepos();
   await store.restoreLastReview();
 });
+
+const capturing = ref(false);
+const drawerOpen = ref(false);
+const questionCount = computed(() => store.view?.questions.length ?? 0);
+
+// `n` captures a question, from anywhere that isn't a text field — Monaco is read-only,
+// so the diff itself never swallows the key.
+function onKey(e: KeyboardEvent): void {
+  const target = e.target as HTMLElement | null;
+  const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable === true;
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "n" && store.view) {
+    e.preventDefault();
+    capturing.value = true;
+  }
+}
+window.addEventListener("keydown", onKey);
 
 const POLL_MS = 30_000;
 let refreshing = false;
@@ -30,12 +49,13 @@ window.addEventListener("focus", onFocus);
 onBeforeUnmount(() => {
   clearInterval(timer);
   window.removeEventListener("focus", onFocus);
+  window.removeEventListener("keydown", onKey);
 });
 </script>
 
 <template>
   <div class="app">
-    <TopBar :store="store" />
+    <TopBar :store="store" :questions="questionCount" @toggle-questions="drawerOpen = !drawerOpen" />
     <div v-if="store.error" class="error-banner">{{ store.error }}</div>
     <main class="body">
       <p v-if="store.busy && !store.view" class="empty working">
@@ -45,8 +65,10 @@ onBeforeUnmount(() => {
       <template v-else>
         <FileTree :store="store" class="tree" />
         <DiffPane :store="store" class="diff" />
+        <QuestionsDrawer v-if="drawerOpen" :store="store" class="drawer" @close="drawerOpen = false" />
       </template>
     </main>
+    <QuestionCapture :store="store" :open="capturing" @close="capturing = false" />
   </div>
 </template>
 
@@ -63,6 +85,7 @@ onBeforeUnmount(() => {
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 .body { display: grid; grid-template-columns: 264px 1fr; min-height: 0; }
+.body:has(.drawer) { grid-template-columns: 264px 1fr 320px; }
 .tree { border-right: 1px solid var(--border); overflow: hidden auto; }
 .diff { min-width: 0; overflow: hidden; }
 </style>

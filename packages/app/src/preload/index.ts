@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld("gander", {
   setChecked: invoke("setChecked"),
   setCheckedMany: invoke("setCheckedMany"),
   refreshPr: invoke("refreshPr"),
+  addQuestion: invoke("addQuestion"),
+  deleteQuestion: invoke("deleteQuestion"),
 });

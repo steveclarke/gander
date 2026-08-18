@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Store } from "../store.js";
-import { ChevronDown, FolderGit2, GitPullRequest, Plus, RefreshCw } from "lucide-vue-next";
+import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw } from "lucide-vue-next";
 import SwitcherDropdown from "./SwitcherDropdown.vue";
 
-const props = defineProps<{ store: Store }>();
+const props = defineProps<{ store: Store; questions: number }>();
+defineEmits<{ toggleQuestions: [] }>();
 
 const repoOpen = ref(false);
 const reviewOpen = ref(false);
@@ -113,6 +114,16 @@ const progress = computed(() => props.store.progress());
       <button
         v-if="store.view"
         class="fetch"
+        aria-label="Questions"
+        title="Questions (press n to capture one)"
+        @click="$emit('toggleQuestions')"
+      >
+        <MessageSquare :size="16" />
+        <span v-if="questions" class="badge">{{ questions }}</span>
+      </button>
+      <button
+        v-if="store.view"
+        class="fetch"
         :disabled="store.busy"
         aria-label="Fetch origin"
         title="Fetch origin — also runs every 30 seconds and whenever the window regains focus"
@@ -203,6 +214,13 @@ const progress = computed(() => props.store.progress());
 }
 .fetch:hover:not(:disabled) { background: rgba(255,255,255,.06); }
 .fetch:disabled { cursor: default; color: var(--faint); }
+.fetch { position: relative; }
+.badge {
+  position: absolute; top: -5px; right: -5px;
+  min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px; background: var(--accent); color: #0d1117;
+  font: 700 9.5px var(--mono); display: flex; align-items: center; justify-content: center;
+}
 .fetch .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .fetch .spin { animation: none; } }

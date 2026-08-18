@@ -9,6 +9,7 @@ const prView = (checkedPaths: string[] = []): PrView => ({
     { path: "a.rb", status: "M", baseContent: "o", headContent: "n", baseHash: "b1", headHash: "h1", checked: checkedPaths.includes("a.rb"), changedSince: false },
     { path: "b.rb", status: "A", baseContent: null, headContent: "x", baseHash: null, headHash: "h2", checked: checkedPaths.includes("b.rb"), changedSince: false },
   ],
+  questions: [],
 });
 
 function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
@@ -21,6 +22,8 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     setCheckedMany: async (_r, _n, paths) => prView(paths),
     refreshPr: async () => prView(),
     lastReview: async () => null,
+    addQuestion: async () => prView(),
+    deleteQuestion: async () => prView(),
     ...overrides,
   };
 }

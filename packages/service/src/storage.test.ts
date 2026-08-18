@@ -83,4 +83,34 @@ describe("storage", () => {
     expect(storage.getSnapshot("acme/atlas", 7, "image.png")).toEqual({ baseContent: null, headContent: null });
     expect(storage.getSnapshot("acme/atlas", 7, "never-touched.png")).toBeNull();
   });
+
+  describe("questions", () => {
+    it("stores a question against a file and reads it back as open", () => {
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?" });
+      expect(q).toMatchObject({ path: "a.rb", line: 12, text: "Why the retry here?", state: "open" });
+      expect(storage.listQuestions("acme/atlas", 7)).toEqual([q]);
+    });
+
+    it("keeps a pull-request-level note, which has no file", () => {
+      const q = storage.addQuestion("acme/atlas", 7, { path: null, line: null, text: "Squash before merge" });
+      expect(q.path).toBeNull();
+      expect(storage.listQuestions("acme/atlas", 7)).toHaveLength(1);
+    });
+
+    it("scopes questions to one review", () => {
+      storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "on seven" });
+      storage.addQuestion("acme/atlas", 8, { path: "a.rb", line: null, text: "on eight" });
+      expect(storage.listQuestions("acme/atlas", 7).map((q) => q.text)).toEqual(["on seven"]);
+      expect(storage.listQuestions("acme/atlas", 8).map((q) => q.text)).toEqual(["on eight"]);
+    });
+
+    it("deletes only within its own review", () => {
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "keep me" });
+      // The same id offered against a different pull request must not delete it.
+      expect(storage.deleteQuestion("acme/atlas", 8, q.id)).toBe(false);
+      expect(storage.listQuestions("acme/atlas", 7)).toHaveLength(1);
+      expect(storage.deleteQuestion("acme/atlas", 7, q.id)).toBe(true);
+      expect(storage.listQuestions("acme/atlas", 7)).toEqual([]);
+    });
+  });
 });

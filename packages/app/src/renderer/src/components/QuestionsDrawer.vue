@@ -1,0 +1,72 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { MessageSquare, Trash2, X } from "lucide-vue-next";
+import type { Store } from "../store.js";
+
+const props = defineProps<{ store: Store }>();
+defineEmits<{ close: [] }>();
+
+const questions = computed(() => props.store.view?.questions ?? []);
+
+function fileName(path: string | null): string {
+  if (path === null) return "This pull request";
+  return path.split("/").pop() ?? path;
+}
+</script>
+
+<template>
+  <aside class="drawer">
+    <header>
+      <MessageSquare :size="15" />
+      <span class="title">Questions</span>
+      <span class="count">{{ questions.length }}</span>
+      <button class="close" aria-label="Close questions" title="Close questions" @click="$emit('close')">
+        <X :size="15" />
+      </button>
+    </header>
+
+    <p v-if="questions.length === 0" class="empty">
+      Press <kbd>n</kbd> while a file is selected to capture a question against it.
+    </p>
+
+    <ul v-else>
+      <li v-for="q in questions" :key="q.id" :class="{ current: q.path === store.selectedPath }">
+        <div class="row">
+          <button class="file" :disabled="q.path === null" @click="q.path && store.select(q.path)">
+            {{ fileName(q.path) }}
+          </button>
+          <span class="state" :class="q.state">{{ q.state }}</span>
+          <button class="del" aria-label="Delete question" title="Delete question" @click="store.deleteQuestion(q.id)">
+            <Trash2 :size="13" />
+          </button>
+        </div>
+        <p class="text">{{ q.text }}</p>
+      </li>
+    </ul>
+  </aside>
+</template>
+
+<style scoped>
+.drawer { display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--border); overflow: hidden auto; }
+header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--dim); flex: none; }
+.title { font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+.count { font: 11px var(--mono); background: #262b34; border-radius: 9px; padding: 1px 7px; }
+.close { margin-left: auto; background: none; border: none; color: var(--faint); cursor: pointer; display: flex; }
+.close:hover { color: var(--fg); }
+
+.empty { color: var(--faint); font-size: 12px; padding: 16px 12px; line-height: 1.6; }
+kbd { font: 11px var(--mono); background: #262b34; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+
+ul { list-style: none; margin: 0; padding: 0; }
+li { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+li.current { background: rgba(77,159,236,.08); }
+.row { display: flex; align-items: center; gap: 8px; }
+.file { background: none; border: none; padding: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file:disabled { color: var(--faint); cursor: default; }
+.state { font: 10px var(--mono); color: var(--faint); text-transform: uppercase; letter-spacing: .4px; }
+.state.addressed { color: var(--yellow); }
+.state.resolved { color: var(--green); }
+.del { margin-left: auto; background: none; border: none; color: var(--faint); cursor: pointer; display: flex; flex: none; }
+.del:hover { color: var(--red); }
+.text { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>

@@ -1,0 +1,60 @@
+<script setup lang="ts">
+import { nextTick, ref, watch } from "vue";
+import type { Store } from "../store.js";
+
+const props = defineProps<{ store: Store; open: boolean }>();
+const emit = defineEmits<{ close: [] }>();
+
+const text = ref("");
+const box = ref<HTMLTextAreaElement | null>(null);
+
+watch(() => props.open, async (open) => {
+  if (!open) return;
+  text.value = "";
+  await nextTick();
+  box.value?.focus();
+});
+
+async function submit(): Promise<void> {
+  const body = text.value.trim();
+  if (!body) return;
+  // Captured against the file being read. A question with no file selected is a
+  // note about the pull request as a whole.
+  await props.store.addQuestion(body, props.store.selectedPath);
+  emit("close");
+}
+</script>
+
+<template>
+  <div v-if="open" class="capture" @click.self="$emit('close')">
+    <form class="panel" @submit.prevent="submit">
+      <label>
+        Question on
+        <b>{{ store.selectedPath ?? "this pull request" }}</b>
+      </label>
+      <!-- Enter submits, Shift+Enter breaks the line: capture must cost one keystroke. -->
+      <textarea
+        ref="box"
+        v-model="text"
+        rows="3"
+        placeholder="What needs answering or changing here?"
+        @keydown.enter.exact.prevent="submit"
+        @keydown.esc.prevent="$emit('close')"
+      />
+      <div class="hint">
+        <kbd>Enter</kbd> to save · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line · <kbd>Esc</kbd> to cancel
+      </div>
+    </form>
+  </div>
+</template>
+
+<style scoped>
+.capture { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; z-index: 50; }
+.panel { width: min(620px, 90vw); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
+label { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+label b { color: var(--fg); font-weight: 600; }
+textarea { background: #14161b; border: 1px solid var(--border); border-radius: 7px; color: var(--fg); font: inherit; font-size: 13px; padding: 9px 11px; resize: vertical; }
+textarea:focus { outline: none; border-color: var(--accent); }
+.hint { font-size: 11px; color: var(--faint); }
+kbd { font: 10.5px var(--mono); background: #262b34; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+</style>
