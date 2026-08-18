@@ -20,3 +20,20 @@ window looks idle and unresponsive.
 
 This is the same gap that produced the clone race fixed in b575f50: with nothing
 on screen to indicate work in progress, the control invites a second click.
+
+## Launch does not restore the last review
+
+The app opens with no repository and no pull request selected, so every launch
+starts with two menu selections. Restoring the last reviewed pull request — or
+at minimum the last repository — would remove both.
+
+## Settings surface
+
+Configuration lives in a JSON file (`.gander/config.json`, or
+`~/.config/gander/config.json` outside the dev stack) and has no UI. A settings
+page reading and writing that file is wanted, starting with two entries:
+
+| Setting | Applies to |
+|---------|-----------|
+| Font family | Diff pane |
+| Font size | Diff pane |
