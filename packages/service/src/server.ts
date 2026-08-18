@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { NewQuestionSchema, PutFileStateSchema } from "@gander/shared";
+import { handleMcpRequest } from "./mcp.js";
 import type { Storage } from "./storage.js";
 
 function parsePrNumber(raw: string, reply: FastifyReply): number | undefined {
@@ -17,7 +18,7 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
   app.get("/healthz", async () => ({ ok: true, version: opts.version }));
 
   app.addHook("onRequest", async (req, reply) => {
-    if (!req.url.startsWith("/api/")) return;
+    if (!req.url.startsWith("/api/") && !req.url.startsWith("/mcp")) return;
     if (req.headers.authorization !== `Bearer ${opts.token}`) {
       await reply.code(401).send({ error: "missing or invalid bearer token" });
     }
@@ -96,6 +97,15 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
       return reply.code(204).send();
     },
   );
+
+  // Agents reach the same questions the app writes, over MCP. Same bearer token as
+  // /api — one credential per install, not two.
+  app.all("/mcp", async (req, reply) => {
+    await handleMcpRequest(opts.storage, opts.version, req.raw, reply.raw, req.body);
+    // The transport writes and ends the raw response itself; telling Fastify the reply
+    // is already sent stops it appending a second one.
+    reply.hijack();
+  });
 
   return app;
 }
