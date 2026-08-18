@@ -23,6 +23,21 @@ describe("listOpenPrs", () => {
     await expect(listOpenPrs("acme/atlas", "tok", fakeFetch)).rejects.toThrow(/403.*rate limited/s);
   });
 
+  it("uses the configured API base for a local GitHub fake", async () => {
+    const original = process.env.GANDER_GITHUB_API_URL;
+    process.env.GANDER_GITHUB_API_URL = "http://127.0.0.1:43123/";
+    const fakeFetch = (async (url: RequestInfo | URL) => {
+      expect(String(url)).toBe("http://127.0.0.1:43123/repos/acme/atlas/pulls?state=open&per_page=100&page=1");
+      return new Response(JSON.stringify([ghPr]), { status: 200 });
+    }) as typeof fetch;
+    try {
+      await listOpenPrs("acme/atlas", "local-token", fakeFetch);
+    } finally {
+      if (original === undefined) delete process.env.GANDER_GITHUB_API_URL;
+      else process.env.GANDER_GITHUB_API_URL = original;
+    }
+  });
+
   it("treats null body as empty string", async () => {
     const fakeFetch = (async () => new Response(JSON.stringify([{ ...ghPr, body: null }]), { status: 200 })) as typeof fetch;
     const prs = await listOpenPrs("acme/atlas", "tok", fakeFetch);
@@ -64,13 +79,11 @@ describe("listOpenPrs", () => {
 });
 
 describe("resolveGithubToken", () => {
-  it("falls back to env when gh is unavailable", async () => {
-    const origPath = process.env.PATH;
+  it("prefers the explicit environment token without consulting gh", async () => {
     process.env.GANDER_GITHUB_TOKEN = "env-tok";
-    process.env.PATH = "/nonexistent"; // makes `gh` unfindable for this test
     try {
-      expect(await resolveGithubToken()).toBe("env-tok");
-    } finally { delete process.env.GANDER_GITHUB_TOKEN; process.env.PATH = origPath; }
+      expect(await resolveGithubToken(undefined, async () => { throw new Error("gh must not run"); })).toBe("env-tok");
+    } finally { delete process.env.GANDER_GITHUB_TOKEN; }
   });
 
   it("returns the trimmed output of `gh auth token` when it succeeds", async () => {
