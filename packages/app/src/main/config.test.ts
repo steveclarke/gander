@@ -33,11 +33,20 @@ describe("config", () => {
       serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
       settings: {
         editor: { fontFamily: "'Fira Code', monospace", fontSize: 18.5 },
-        workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+        workbench: {
+          colorTheme: "Gander Dark",
+          iconTheme: "catppuccin-mocha",
+          tree: { fontFamily: "system-ui", fontSize: 14, inheritEditorTypography: false },
+        },
       },
     }, cfgPath);
     expect(loadConfig(cfgPath).settings.editor).toEqual({ fontFamily: "'Fira Code', monospace", fontSize: 18.5 });
     expect(loadConfig(cfgPath).settings.workbench.colorTheme).toBe("Gander Dark");
+    expect(loadConfig(cfgPath).settings.workbench.tree).toEqual({
+      fontFamily: "system-ui",
+      fontSize: 14,
+      inheritEditorTypography: false,
+    });
   });
 
   it("adds the workbench default without discarding an older editor configuration", () => {
@@ -47,7 +56,22 @@ describe("config", () => {
     }));
     expect(loadConfig(cfgPath).settings).toEqual({
       editor: { fontFamily: "Consolas, monospace", fontSize: 19 },
-      workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
+      workbench: DEFAULT_APP_SETTINGS.workbench,
+    });
+  });
+
+  it("adds tree typography defaults without discarding older workbench settings", () => {
+    writeFileSync(cfgPath, JSON.stringify({
+      serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
+      settings: {
+        editor: { fontFamily: "Consolas, monospace", fontSize: 19 },
+        workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+      },
+    }));
+    expect(loadConfig(cfgPath).settings.workbench).toEqual({
+      colorTheme: "Gander Dark",
+      iconTheme: "catppuccin-mocha",
+      tree: DEFAULT_APP_SETTINGS.workbench.tree,
     });
   });
 

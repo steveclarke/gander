@@ -8,6 +8,7 @@ import {
   iconThemeShowsExplorerArrows,
 } from "../icon-theme.js";
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
+import type { EffectiveTreeTypography } from "../../../settings.js";
 import { languageForPath } from "../languages.js";
 import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
 import FileIcon from "./FileIcon.vue";
@@ -15,6 +16,7 @@ import FileIcon from "./FileIcon.vue";
 const props = defineProps<{
   store: Store;
   iconTheme: FileIconThemeId;
+  typography?: EffectiveTreeTypography;
   nodes?: TreeNode[];
   depth?: number;
 }>();
@@ -23,6 +25,9 @@ const collapsed = reactive(new Set<string>());
 
 const depth = computed(() => props.depth ?? 0);
 const nodes = computed(() => props.nodes ?? buildTree(props.store.view?.files ?? []));
+const rootTypographyStyle = computed(() => depth.value === 0 && props.typography
+  ? { fontFamily: props.typography.fontFamily, fontSize: `${props.typography.fontSize}px` }
+  : undefined);
 
 // dirState flat-maps and sorts the whole subtree under a directory. The template calls it
 // twice per dir row (class binding + aria-checked) — memoize it once per node per render
@@ -85,7 +90,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 </script>
 
 <template>
-  <div class="tree" :class="{ root: depth === 0 }">
+  <div class="tree" :class="{ root: depth === 0 }" :style="rootTypographyStyle">
     <template v-for="node in nodes" :key="node.type === 'dir' ? node.path : node.file.path">
       <div
         v-if="node.type === 'dir'"
@@ -162,13 +167,13 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 
 <style scoped>
 .tree.root { padding: 8px 0; }
-.tnode { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 0; cursor: pointer; white-space: nowrap; }
+.tnode { display: flex; align-items: center; gap: 6px; height: 22px; padding: 3px 12px 3px 0; box-sizing: border-box; cursor: pointer; white-space: nowrap; }
 .tnode:hover { background: var(--hover-background); }
 .tnode.sel { background: var(--selection-background); box-shadow: inset 2px 0 0 var(--accent); }
 .tnode .hierarchy-slot { width: 14px; flex: none; }
 .tnode .chev { flex: none; color: var(--faint-foreground); }
-.tnode .fname { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; }
-.tnode.isdir .fname { font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--muted-foreground); }
+.tnode .fname { font: inherit; overflow: hidden; text-overflow: ellipsis; }
+.tnode.isdir .fname { color: var(--muted-foreground); }
 .tnode .st { margin-left: auto; font: 11px var(--mono); flex: none; }
 .st.M { color: var(--warning); }
 .st.A { color: var(--success); }

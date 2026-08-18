@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PrView } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 import { createStore } from "./store.js";
+import { DEFAULT_APP_SETTINGS } from "../../settings.js";
 
 const prView = (checkedPaths: string[] = []): PrView => ({
   pr: { number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
@@ -39,7 +40,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     deleteQuestion: async () => prView(),
     getSettings: async () => ({
       editor: { fontFamily: "monospace", fontSize: 16 },
-      workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
+      workbench: DEFAULT_APP_SETTINGS.workbench,
     }),
     updateSettings: async (settings) => settings,
     onOpenSettings: () => () => {},

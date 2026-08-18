@@ -5,6 +5,12 @@ name: Release (Linux)
 on:
   release:
     types: [published]
+  # So a release whose Linux build failed can be given another one without re-tagging.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to build
+        required: true
 
 jobs:
   appimage:
@@ -14,9 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
 
       - uses: pnpm/action-setup@v4
+        with:
+          # The action reads this from packageManager otherwise, which this repository
+          # does not set: mise pins the toolchain instead.
+          version: 11
       - uses: actions/setup-node@v5
         with:
           # Node 22, not 24: Electron 33's archive extraction truncates silently
@@ -34,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
+          gh release upload "${{ inputs.tag || github.event.release.tag_name }}" \
             packages/app/dist/*.AppImage \
             packages/app/dist/latest-linux.yml \
             --clobber

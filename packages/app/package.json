@@ -1,6 +1,6 @@
 {
   "name": "@gander/app",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
@@ -50,5 +50,6 @@
     "type": "git",
     "url": "https://github.com/steveclarke/gander.git",
     "directory": "packages/app"
-  }
+  },
+  "desktopName": "gander.desktop"
 }

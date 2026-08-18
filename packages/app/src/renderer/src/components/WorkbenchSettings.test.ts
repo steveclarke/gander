@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { reactive } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_APP_SETTINGS, type AppSettings } from "../../../settings.js";
@@ -34,7 +34,7 @@ describe("WorkbenchSettings", () => {
     await select.setValue("Gander Dark");
     expect(update).toHaveBeenCalledWith({
       ...DEFAULT_APP_SETTINGS,
-      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+      workbench: { ...DEFAULT_APP_SETTINGS.workbench, colorTheme: "Gander Dark" },
     });
     expect(wrapper.text()).toContain("Source: Gander");
     expect(wrapper.text()).toContain("Source: Catppuccin Icons for VS Code 1.26.0");
@@ -42,7 +42,55 @@ describe("WorkbenchSettings", () => {
     await iconSelect.trigger("change");
     expect(update).toHaveBeenLastCalledWith({
       ...DEFAULT_APP_SETTINGS,
-      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+      workbench: { ...DEFAULT_APP_SETTINGS.workbench, colorTheme: "Gander Dark" },
     });
+  });
+
+  it("saves independent tree typography and an explicit editor inheritance choice", async () => {
+    const update = vi.fn(async (settings: AppSettings) => {
+      store.settings = settings;
+      return true;
+    });
+    const store: EditorSettingsStore = reactive({
+      settings: DEFAULT_APP_SETTINGS,
+      busy: false,
+      error: null,
+      async load() {},
+      update,
+    });
+    const wrapper = mount(WorkbenchSettings, { props: { store } });
+
+    const family = wrapper.get("input[name='workbench.tree.fontFamily']");
+    const size = wrapper.get("input[name='workbench.tree.fontSize']");
+    const inherit = wrapper.get("input[name='workbench.tree.inheritEditorTypography']");
+    expect((family.element as HTMLInputElement).value).toBe(DEFAULT_APP_SETTINGS.workbench.tree.fontFamily);
+    expect((size.element as HTMLInputElement).value).toBe("13");
+    expect((inherit.element as HTMLInputElement).checked).toBe(false);
+
+    await family.setValue("Inter, system-ui");
+    await family.trigger("change");
+    await flushPromises();
+    await size.setValue("14.5");
+    await size.trigger("change");
+    await flushPromises();
+    expect(update).toHaveBeenLastCalledWith({
+      ...DEFAULT_APP_SETTINGS,
+      workbench: {
+        ...DEFAULT_APP_SETTINGS.workbench,
+        tree: { fontFamily: "Inter, system-ui", fontSize: 14.5, inheritEditorTypography: false },
+      },
+    });
+
+    await inherit.setValue(true);
+    await flushPromises();
+    expect(update).toHaveBeenLastCalledWith({
+      ...DEFAULT_APP_SETTINGS,
+      workbench: {
+        ...DEFAULT_APP_SETTINGS.workbench,
+        tree: { fontFamily: "Inter, system-ui", fontSize: 14.5, inheritEditorTypography: true },
+      },
+    });
+    expect(wrapper.get("input[name='workbench.tree.fontFamily']").attributes("disabled")).toBeDefined();
+    expect(wrapper.get(".preview").attributes("style")).toContain("16px");
   });
 });

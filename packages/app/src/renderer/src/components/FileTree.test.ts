@@ -187,6 +187,25 @@ describe("FileTree", () => {
     expect(wrapper.findAll(".tnode.isdir .chev")).toHaveLength(3);
   });
 
+  it("applies effective typography once at the root so every nested row inherits it", () => {
+    const { store } = fakeStore(prView(1, treeFiles));
+    const wrapper = mount(FileTree, {
+      props: {
+        store,
+        iconTheme: "catppuccin-mocha",
+        typography: { fontFamily: "Inter, system-ui", fontSize: 14.5 },
+      },
+    });
+
+    const trees = wrapper.findAll(".tree");
+    expect(trees[0]!.attributes("style")).toContain("font-family: Inter, system-ui");
+    expect(trees[0]!.attributes("style")).toContain("font-size: 14.5px");
+    for (const nestedTree of trees.slice(1)) {
+      expect(nestedTree.attributes("style")).toBeUndefined();
+    }
+    expect(wrapper.findAll(".tnode .fname")).toHaveLength(wrapper.findAll(".tnode").length);
+  });
+
   it("renders representative Catppuccin file and folder icons with expanded state", async () => {
     const { store } = fakeStore(prView(1, [
       file("Gemfile"),
