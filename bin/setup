@@ -61,12 +61,14 @@ if command -v outport > /dev/null 2>&1; then
 else
   echo "outport not found — falling back to the default port 8390."
   echo "Install: brew install steveclarke/tap/outport"
+  socket_id="$(printf '%s' "$PWD" | cksum | awk '{print $1}')"
   printf '%s\n' \
     'GANDER_PORT=8390' \
     'GANDER_SERVICE_URL=http://127.0.0.1:8390' \
     'MCP_INSPECTOR_CLIENT_PORT=6274' \
     'MCP_INSPECTOR_SANDBOX_PORT=6275' > .env
   cp .env .pc_env
+  printf 'PC_SOCKET_PATH=/tmp/process-compose-gander-%s.sock\n' "$socket_id" >> .pc_env
 fi
 
 # The service token is shared by both processes: the service authenticates with
