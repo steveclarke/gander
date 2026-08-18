@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { FileCheckoffSchema, QuestionSchema, ReviewStateSchema, type FileCheckoff, type NewQuestion, type PrContext, type PutFileState, type Question, type ReviewState } from "@gander/shared";
+import { FileCheckoffSchema, QuestionReplySchema, QuestionSchema, ReviewStateSchema, type FileCheckoff, type NewQuestion, type PrContext, type PutFileState, type Question, type QuestionReply, type ReviewState } from "@gander/shared";
 
 export interface ServiceClient {
   getReview(repoId: string, prNumber: number): Promise<ReviewState>;
   putFileState(repoId: string, prNumber: number, input: PutFileState): Promise<FileCheckoff>;
   listQuestions(repoId: string, prNumber: number): Promise<Question[]>;
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<Question>;
+  addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<QuestionReply>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<void>;
   setPrContext(repoId: string, prNumber: number, context: PrContext): Promise<void>;
   getSnapshot(repoId: string, prNumber: number, path: string): Promise<{ baseContent: string | null; headContent: string | null }>;
@@ -60,6 +61,10 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
     addQuestion: async (repoId, prNumber, input) => {
       const path = `/api/reviews/${enc(repoId)}/${prNumber}/questions`;
       return validate(QuestionSchema, path, await req("POST", path, input));
+    },
+    addReviewerReply: async (repoId, prNumber, id, text) => {
+      const path = `/api/reviews/${enc(repoId)}/${prNumber}/questions/${id}/replies`;
+      return validate(QuestionReplySchema, path, await req("POST", path, { text }));
     },
     deleteQuestion: async (repoId, prNumber, id) => {
       await req("DELETE", `/api/reviews/${enc(repoId)}/${prNumber}/questions/${id}`);

@@ -87,9 +87,10 @@ reviewed", not "unchanged".
 **Question lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
 over MCP, with optional commit ref and note) → `resolved` (reviewer re-checks
 the file). Resolution is always the reviewer's act; no MCP tool may resolve
-anything. The MCP contract is deliberately two tools —
-`get_review_questions` and `mark_question_addressed`. Agents have `git` and `gh`
-for code; this contract carries only the reviewer's questions. Keep it small.
+anything. Replies form a thread without changing that lifecycle. The MCP
+contract is deliberately three tools — `get_review_questions`,
+`reply_to_question`, and `mark_question_addressed`. Agents have `git` and `gh`
+for code; this contract carries only the review conversation. Keep it small.
 
 `GANDER_SERVICE_URL` and `GANDER_TOKEN` override the config file at *connection*
 time, not load time (`resolveServiceConnection` in `main/config.ts`) — otherwise

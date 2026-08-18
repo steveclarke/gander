@@ -15,6 +15,7 @@ export interface Reviewer {
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
   addQuestion(repoId: string, prNumber: number, input: Omit<NewQuestion, "headSha">): Promise<PrView>;
+  addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<PrView>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
   /** The file as it stood when the reviewer last checked it — the base for the delta view. */
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
@@ -189,6 +190,14 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     },
     async reviewedSnapshot(repoId, prNumber, path) {
       return (await deps.service.getSnapshot(repoId, prNumber, path)).headContent;
+    },
+    async addReviewerReply(repoId, prNumber, id, text) {
+      const view = requireOpen(repoId, prNumber);
+      const question = view.questions.find((q) => q.id === id);
+      if (!question) throw new Error(`Question ${id} is not part of PR #${prNumber}`);
+      const reply = await deps.service.addReviewerReply(repoId, prNumber, id, text);
+      question.replies = [...question.replies, reply];
+      return view;
     },
     async deleteQuestion(repoId, prNumber, id) {
       const view = requireOpen(repoId, prNumber);

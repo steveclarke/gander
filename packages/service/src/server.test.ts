@@ -122,6 +122,27 @@ describe("service API", () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it("adds a reviewer reply to the question thread without changing its state", async () => {
+      const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: 3, text: "Why?", headSha: "sha-1" } });
+      const id = created.json().id as number;
+      const reply = await server.inject({
+        method: "POST", url: `${url}/${id}/replies`, headers: AUTH, payload: { text: "It is required by the caller." },
+      });
+
+      expect(reply.statusCode).toBe(201);
+      expect(reply.json()).toMatchObject({ author: "reviewer", text: "It is required by the caller." });
+      expect((await server.inject({ method: "GET", url, headers: AUTH })).json()[0]).toMatchObject({
+        state: "open", replies: [{ author: "reviewer", text: "It is required by the caller." }],
+      });
+    });
+
+    it("rejects blank replies and replies scoped to another review", async () => {
+      const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: null, text: "Why?", headSha: null } });
+      const id = created.json().id as number;
+      expect((await server.inject({ method: "POST", url: `${url}/${id}/replies`, headers: AUTH, payload: { text: "   " } })).statusCode).toBe(400);
+      expect((await server.inject({ method: "POST", url: `/api/reviews/acme%2Fatlas/8/questions/${id}/replies`, headers: AUTH, payload: { text: "Wrong review" } })).statusCode).toBe(404);
+    });
+
     it("404s on deleting a question that is not there", async () => {
       expect((await server.inject({ method: "DELETE", url: `${url}/999`, headers: AUTH })).statusCode).toBe(404);
     });

@@ -129,6 +129,20 @@ describe("Gander end to end", () => {
     await $("button[aria-label='Close settings']").click();
     await expect($(".diff .monaco-editor[data-mount-marker='preserved']")).toBeDisplayed();
 
+    await browser.keys("n");
+    const question = await $("textarea[placeholder='What needs answering or changing here?']");
+    await question.waitForDisplayed();
+    await question.setValue("Why does this need to happen here?");
+    await browser.keys("Enter");
+    await $("button[aria-label='Questions']").click();
+    await expect($(".message.original .text")).toHaveText("Why does this need to happen here?");
+
+    const reply = await $(".reply-form input");
+    await reply.setValue("Because both callers share this path.");
+    await browser.keys("Enter");
+    await expect($(".message.reply .author")).toHaveText("REVIEWER");
+    await expect($(".message.reply .text")).toHaveText("Because both callers share this path.");
+
     const checkbox = await fileCheckbox("a.rb");
     await checkbox.click();
     await expect(checkbox).toHaveAttribute("aria-checked", "true");
@@ -139,6 +153,8 @@ describe("Gander end to end", () => {
     await expect(browser).toHaveTitle("Gander");
     await expect($(".progress")).toHaveText("1/2 reviewed");
     await expect(await fileCheckbox("a.rb")).toHaveAttribute("aria-checked", "true");
+    await $("button[aria-label='Questions']").click();
+    await expect($(".message.reply .text")).toHaveText("Because both callers share this path.");
   });
 
   it("opens a pull request twice quickly with one valid clone", async () => {
