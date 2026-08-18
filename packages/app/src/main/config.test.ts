@@ -78,25 +78,6 @@ describe("config", () => {
     });
   });
 
-  it("migrates the legacy root zoom level unless window.zoomLevel is already explicit", () => {
-    writeFileSync(cfgPath, JSON.stringify({
-      serviceUrl: "", serviceToken: "", repos: [], zoomLevel: 1,
-      settings: {
-        editor: DEFAULT_APP_SETTINGS.editor,
-        workbench: DEFAULT_APP_SETTINGS.workbench,
-      },
-    }));
-    const migrated = loadConfig(cfgPath);
-    expect(migrated.settings.window.zoomLevel).toBe(1);
-    expect(migrated.zoomLevel).toBeUndefined();
-
-    writeFileSync(cfgPath, JSON.stringify({
-      serviceUrl: "", serviceToken: "", repos: [], zoomLevel: 1,
-      settings: { ...DEFAULT_APP_SETTINGS, window: { zoomLevel: -0.5 } },
-    }));
-    expect(loadConfig(cfgPath).settings.window.zoomLevel).toBe(-0.5);
-  });
-
   it.each([
     { editor: { fontFamily: "", fontSize: 16 } },
     { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY, fontSize: 1000 } },
