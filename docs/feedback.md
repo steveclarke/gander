@@ -1,7 +1,8 @@
 # Feedback from use
 
 Observations from reviewing real pull requests in Gander. Each entry is a
-candidate for a milestone; none are commitments yet.
+candidate for a milestone; none are commitments yet. Entries marked **Addressed**
+name the commit that resolved them.
 
 ## Repository registration
 
@@ -12,7 +13,7 @@ Reference points: GitHub Desktop's clone dialog lists the signed-in account's
 repositories; the same data is available from the GitHub API the app already
 authenticates against.
 
-## Progress indication is present but not noticeable
+## Progress indication is present but not noticeable — Addressed
 
 Selecting a pull request takes several seconds — fetching its refs, diffing, and
 loading review state. The top bar does show "Working…" during it, in small faint
@@ -22,11 +23,17 @@ reads as idle.
 This is the same gap that produced the clone race fixed in b575f50: with nothing
 noticeable on screen, the control invites a second click.
 
-## Launch does not restore the last review
+Addressed in 0120cd0: the body area now shows a spinner and "Opening pull
+request…" while the first pull request loads.
+
+## Launch does not restore the last review — Addressed
 
 The app opens with no repository and no pull request selected, so every launch
 starts with two menu selections. Restoring the last reviewed pull request — or
 at minimum the last repository — would remove both.
+
+Addressed in 0120cd0: opening a pull request records it in the config, and the
+next launch reopens it.
 
 ## Settings surface
 
@@ -38,3 +45,13 @@ page reading and writing that file is wanted, starting with two entries:
 |---------|-----------|
 | Font family | Diff pane |
 | Font size | Diff pane |
+
+Partly addressed in 0120cd0: Cmd +/- /0 zoom the whole window and the level
+persists across restarts, which covers reading at a comfortable size. Control of
+the diff font independent of the rest of the interface is still open, as is the
+settings page itself.
+
+## No control for fetching origin — Addressed
+
+Refreshing a pull request happened only on a 30-second poll and on window focus,
+with no button. Addressed in 0120cd0.
