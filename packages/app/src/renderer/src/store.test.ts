@@ -42,10 +42,14 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     deleteQuestion: async () => prView(),
     getSettings: async () => ({
       editor: { fontFamily: "monospace", fontSize: 16 },
+      window: DEFAULT_APP_SETTINGS.window,
       workbench: DEFAULT_APP_SETTINGS.workbench,
     }),
     updateSettings: async (settings) => settings,
     onOpenSettings: () => () => {},
+    getZoomLevel: async () => 0,
+    setZoomLevel: async (level) => level,
+    onZoomChanged: () => () => {},
     ...overrides,
   };
 }

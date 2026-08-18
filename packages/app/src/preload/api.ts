@@ -82,5 +82,8 @@ export function createGanderApi(
     getSettings: () => call("getSettings"),
     updateSettings: (settings) => call("updateSettings", settings),
     onOpenSettings: (listener) => subscribe("gander:openSettings", listener),
+    getZoomLevel: () => call("getZoomLevel"),
+    setZoomLevel: (level) => call("setZoomLevel", level),
+    onZoomChanged: (listener) => subscribe("gander:zoomChanged", (level: number) => listener(level)),
   };
 }

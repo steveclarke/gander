@@ -1,12 +1,11 @@
 import type { MenuItemConstructorOptions } from "electron";
+import { DEFAULT_ZOOM_LEVEL, ZOOM_LEVEL_STEP } from "../zoom.js";
 
 interface MenuActions {
   openSettings(): void;
   setZoom(level: number): void;
   currentZoom(): number;
 }
-
-const ZOOM_STEP = 0.5;
 
 export function buildMenuTemplate(
   platform: NodeJS.Platform,
@@ -52,12 +51,12 @@ export function buildMenuTemplate(
     {
       label: "View",
       submenu: [
-        { label: "Zoom In", accelerator: "CommandOrControl+Plus", click: () => actions.setZoom(actions.currentZoom() + ZOOM_STEP) },
+        { label: "Zoom In", accelerator: "CommandOrControl+Plus", click: () => actions.setZoom(actions.currentZoom() + ZOOM_LEVEL_STEP) },
         // Chromium delivers Cmd+= for an unshifted Cmd+ on most layouts; both are bound
         // so the key next to Backspace works without reaching for Shift.
-        { label: "Zoom In", accelerator: "CommandOrControl+=", visible: false, click: () => actions.setZoom(actions.currentZoom() + ZOOM_STEP) },
-        { label: "Zoom Out", accelerator: "CommandOrControl+-", click: () => actions.setZoom(actions.currentZoom() - ZOOM_STEP) },
-        { label: "Actual Size", accelerator: "CommandOrControl+0", click: () => actions.setZoom(0) },
+        { label: "Zoom In", accelerator: "CommandOrControl+=", visible: false, click: () => actions.setZoom(actions.currentZoom() + ZOOM_LEVEL_STEP) },
+        { label: "Zoom Out", accelerator: "CommandOrControl+-", click: () => actions.setZoom(actions.currentZoom() - ZOOM_LEVEL_STEP) },
+        { label: "Actual Size", accelerator: "CommandOrControl+0", click: () => actions.setZoom(DEFAULT_ZOOM_LEVEL) },
         { type: "separator" },
         { role: "togglefullscreen" },
         { role: "toggleDevTools" },

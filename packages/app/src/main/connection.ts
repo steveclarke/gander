@@ -26,10 +26,13 @@ export async function checkConnection(url: string, token: string): Promise<Conne
   }
   if (!health.ok) return { ok: false, reason: `${base} answered ${health.status} on /healthz` };
 
-  let version = "unknown";
+  let version: string;
   try {
     const body = (await health.json()) as { version?: unknown };
-    if (typeof body.version === "string") version = body.version;
+    if (typeof body.version !== "string" || body.version.trim() === "") {
+      return { ok: false, reason: `${base} is not a Gander service` };
+    }
+    version = body.version;
   } catch {
     return { ok: false, reason: `${base} is not a Gander service` };
   }

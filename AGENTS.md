@@ -99,9 +99,9 @@ time, not load time (`resolveServiceConnection` in `main/config.ts`) — otherwi
 saving config would write a machine-specific allocated port into
 `.gander/config.json`.
 
-SQLite schema changes go through `migrate()` in `storage.ts`:
-`CREATE TABLE IF NOT EXISTS` silently does nothing to an existing table, so new
-columns need `PRAGMA table_info` plus `ALTER TABLE ADD COLUMN`.
+`SCHEMA` in `storage.ts` is the only supported SQLite shape. There is no upgrade
+path for databases created by an earlier build; recreate the sole user's database
+after a schema change.
 
 ## Testing
 

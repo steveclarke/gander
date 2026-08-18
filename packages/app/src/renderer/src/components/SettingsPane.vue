@@ -50,7 +50,7 @@ function onJsonChange(source: string): void {
 
   let settings;
   try {
-    settings = settingsFromJson(source, props.store.settings);
+    settings = settingsFromJson(source);
     jsonError.value = null;
     saveState.value = "saving";
   } catch (error) {

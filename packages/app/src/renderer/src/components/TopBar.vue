@@ -78,6 +78,10 @@ const currentRepoLabel = computed(() =>
 );
 const currentPr = computed(() => props.store.view?.pr ?? null);
 const progress = computed(() => props.store.progress());
+const progressState = computed(() => {
+  if (progress.value.total === 0) return "progress-empty";
+  return progress.value.done === progress.value.total ? "progress-complete" : "progress-partial";
+});
 const TITLE_BAR_INSET = 78;
 const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET : 0);
 </script>
@@ -167,7 +171,7 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
       >
         <RefreshCw :size="16" :class="{ spin: store.busy }" />
       </button>
-      <span class="progress"><b>{{ progress.done }}</b>/{{ progress.total }} reviewed</span>
+      <span class="progress" :class="progressState">{{ progress.done }}/{{ progress.total }} reviewed</span>
     </div>
   </div>
 
@@ -251,7 +255,8 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
 .spacer { flex: 1; }
 .right { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
 .progress { font-size: 12px; color: var(--muted-foreground); background: var(--badge-background); border-radius: 10px; padding: 2px 10px; white-space: nowrap; }
-.progress b { color: var(--success); }
+.progress.progress-empty { color: var(--faint-foreground); }
+.progress.progress-complete { color: var(--success); background: var(--success-background); }
 .add-question {
   display: flex; align-items: center; gap: 5px;
   min-height: 28px; padding: 0 9px;

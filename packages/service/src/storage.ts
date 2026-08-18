@@ -90,29 +90,6 @@ const rowToQuestion = (r: QuestionRow, replies: QuestionReply[] = []): Question 
 
 const QUESTION_COLUMNS = "id, path, line, text, state, head_sha, commit_ref, note, created_at";
 
-/**
- * CREATE TABLE IF NOT EXISTS silently does nothing to a table that already exists, so a
- * database written by an earlier version keeps its old column set and the first insert
- * against a new column fails at the user's desk while every test — which starts from an
- * empty file — stays green. Each column is added only if the live table lacks it.
- */
-function migrate(db: Database.Database): void {
-  const addColumn = (table: string, column: string, type: string): void => {
-    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
-  };
-  addColumn("questions", "commit_ref", "TEXT");
-  addColumn("questions", "note", "TEXT");
-  addColumn("questions", "addressed_at", "TEXT");
-  addColumn("questions", "head_sha", "TEXT");
-  addColumn("reviews", "head_ref", "TEXT");
-  addColumn("reviews", "title", "TEXT");
-  addColumn("reviews", "head_sha", "TEXT");
-  addColumn("reviews", "stack_id", "INTEGER");
-  addColumn("reviews", "stack_size", "INTEGER");
-  addColumn("reviews", "stack_position", "INTEGER");
-}
-
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
 const unpack = (b: Buffer | null): string | null => (b === null ? null : gunzipSync(b).toString("utf8"));
 
@@ -121,7 +98,6 @@ export function openStorage(dbPath: string): Storage {
   db.pragma("foreign_keys = ON");
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
-  migrate(db);
 
   const reviewId = (repoId: string, prNumber: number): number => {
     db.prepare("INSERT OR IGNORE INTO reviews (repo_id, pr_number) VALUES (?, ?)").run(repoId, prNumber);

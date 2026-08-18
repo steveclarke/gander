@@ -5,6 +5,7 @@ import {
   FILE_ICON_THEME_IDS,
   type FileIconThemeId,
 } from "./file-icon-themes.js";
+import { DEFAULT_ZOOM_LEVEL, ZoomLevelSchema } from "./zoom.js";
 
 export const DEFAULT_EDITOR_FONT_FAMILY =
   "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace";
@@ -16,7 +17,7 @@ export const EditorSettingsSchema = z.object({
   // Match Monaco/VS Code: font sizes are numbers (including fractional values)
   // clamped to the editor's supported 6–100 pixel range.
   fontSize: z.number().finite().min(6).max(100),
-});
+}).strict();
 
 export const ThemeIdSchema = z.enum(THEME_IDS);
 export const FileIconThemeIdSchema = z.enum(FILE_ICON_THEME_IDS);
@@ -25,6 +26,14 @@ export const TreeTypographySettingsSchema = z.object({
   fontFamily: z.string().trim().min(1),
   fontSize: z.number().finite().min(6).max(100),
   inheritEditorTypography: z.boolean(),
+}).strict();
+
+export const WindowSettingsSchema = z.object({
+  zoomLevel: ZoomLevelSchema,
+}).strict();
+
+export const DEFAULT_WINDOW_SETTINGS: Readonly<WindowSettings> = Object.freeze({
+  zoomLevel: DEFAULT_ZOOM_LEVEL,
 });
 
 export const DEFAULT_TREE_TYPOGRAPHY_SETTINGS: Readonly<TreeTypographySettings> = Object.freeze({
@@ -35,13 +44,9 @@ export const DEFAULT_TREE_TYPOGRAPHY_SETTINGS: Readonly<TreeTypographySettings> 
 
 export const WorkbenchSettingsSchema = z.object({
   colorTheme: ThemeIdSchema,
-  // Configs written before file icons already have a workbench object, so the
-  // field itself needs a default rather than relying on the object's default.
-  iconTheme: FileIconThemeIdSchema.default(DEFAULT_FILE_ICON_THEME_ID),
-  // Tree typography was added after workbench themes. Preserve older workbench
-  // settings while supplying the VS Code-like Explorer default.
-  tree: TreeTypographySettingsSchema.default(DEFAULT_TREE_TYPOGRAPHY_SETTINGS),
-});
+  iconTheme: FileIconThemeIdSchema,
+  tree: TreeTypographySettingsSchema,
+}).strict();
 
 export const DEFAULT_WORKBENCH_SETTINGS: Readonly<WorkbenchSettings> = Object.freeze({
   colorTheme: DEFAULT_THEME_ID,
@@ -51,14 +56,14 @@ export const DEFAULT_WORKBENCH_SETTINGS: Readonly<WorkbenchSettings> = Object.fr
 
 export const AppSettingsSchema = z.object({
   editor: EditorSettingsSchema,
-  // Existing config files predate workbench settings. Preserve their editor choices
-  // while adding the bundled default instead of rejecting the whole settings object.
-  workbench: WorkbenchSettingsSchema.default(DEFAULT_WORKBENCH_SETTINGS),
-}).passthrough();
+  window: WindowSettingsSchema,
+  workbench: WorkbenchSettingsSchema,
+}).strict();
 
 export const SettingsJsonSchema = z.object({
   "editor.fontFamily": EditorSettingsSchema.shape.fontFamily,
   "editor.fontSize": EditorSettingsSchema.shape.fontSize,
+  "window.zoomLevel": ZoomLevelSchema,
   "workbench.colorTheme": ThemeIdSchema,
   "workbench.iconTheme": FileIconThemeIdSchema,
   "workbench.tree.fontFamily": TreeTypographySettingsSchema.shape.fontFamily,
@@ -67,6 +72,7 @@ export const SettingsJsonSchema = z.object({
 }).strict();
 
 export type EditorSettings = z.infer<typeof EditorSettingsSchema>;
+export type WindowSettings = z.infer<typeof WindowSettingsSchema>;
 export type TreeTypographySettings = z.infer<typeof TreeTypographySettingsSchema>;
 export type EffectiveTreeTypography = Pick<TreeTypographySettings, "fontFamily" | "fontSize">;
 export type WorkbenchSettings = z.infer<typeof WorkbenchSettingsSchema>;
@@ -80,6 +86,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = Object.freeze({
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
     fontSize: 16,
   }),
+  window: DEFAULT_WINDOW_SETTINGS,
   workbench: DEFAULT_WORKBENCH_SETTINGS,
 });
 
@@ -96,6 +103,7 @@ export function settingsToJson(settings: AppSettings): string {
   const publicSettings: SettingsJson = {
     "editor.fontFamily": settings.editor.fontFamily,
     "editor.fontSize": settings.editor.fontSize,
+    "window.zoomLevel": settings.window.zoomLevel,
     "workbench.colorTheme": settings.workbench.colorTheme,
     "workbench.iconTheme": settings.workbench.iconTheme,
     "workbench.tree.fontFamily": settings.workbench.tree.fontFamily,
@@ -105,7 +113,7 @@ export function settingsToJson(settings: AppSettings): string {
   return JSON.stringify(publicSettings, null, 2);
 }
 
-export function settingsFromJson(source: string, current: AppSettings): AppSettings {
+export function settingsFromJson(source: string): AppSettings {
   let value: unknown;
   try {
     value = JSON.parse(source);
@@ -122,10 +130,12 @@ export function settingsFromJson(source: string, current: AppSettings): AppSetti
   }
 
   return {
-    ...current,
     editor: {
       fontFamily: parsed.data["editor.fontFamily"],
       fontSize: parsed.data["editor.fontSize"],
+    },
+    window: {
+      zoomLevel: parsed.data["window.zoomLevel"],
     },
     workbench: {
       colorTheme: parsed.data["workbench.colorTheme"],

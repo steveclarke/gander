@@ -17,17 +17,21 @@ import { effectiveTreeTypography } from "../../settings.js";
 import { currentLine } from "./selection.js";
 import type { QuestionTarget } from "./selection.js";
 import "./theme.css";
+import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 
 const store = createStore(api);
 const editorSettings = createEditorSettingsStore(api, api.initialWindowState.colorTheme);
 const integratedTitleBar = api.initialWindowState.windowStyle === "integrated-titlebar";
 let unsubscribeOpenTarget: (() => void) | null = null;
 let unsubscribeOpenSettings: (() => void) | null = null;
+let unsubscribeZoomChanged: (() => void) | null = null;
 
 onMounted(async () => {
   // Registered first, so commands arriving while the app restores its last review are not dropped.
   unsubscribeOpenTarget = api.onOpenTarget((target) => { void store.openTarget(target); });
   unsubscribeOpenSettings = api.onOpenSettings(() => openSettings());
+  unsubscribeZoomChanged = api.onZoomChanged((level) => { zoomLevel.value = level; });
+  zoomLevel.value = await api.getZoomLevel();
   void editorSettings.load();
   // An installed app starts with no connection at all. Knowing that here is what lets the
   // window say where to set one instead of showing an empty review that cannot be filled.
@@ -42,7 +46,10 @@ const unconfigured = ref(false);
 const questionTarget = shallowRef<QuestionTarget | null>(null);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
+const treeScrolling = shallowRef(false);
+let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
 const activeSurface = shallowRef<"review" | "settings">("review");
+const zoomLevel = shallowRef(DEFAULT_ZOOM_LEVEL);
 const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
 // Which section the settings surface opens on. The prompt about a missing service leads
 // straight to the one that fixes it, rather than to whatever was showing last.
@@ -77,6 +84,11 @@ function toggleSettings(): void {
   if (activeSurface.value === "review") void refreshConnectionState();
 }
 
+async function changeZoom(level: number): Promise<void> {
+  zoomLevel.value = clampZoomLevel(level);
+  zoomLevel.value = await api.setZoomLevel(level);
+}
+
 // v-model needs something assignable, and which dimension the questions splitter drags
 // depends on where the panel is docked.
 const questionsSize = computed({
@@ -94,6 +106,12 @@ function openQuestion(target?: QuestionTarget): void {
     path: store.selectedPath,
     line: store.selectedPath === null ? null : currentLine.value,
   };
+}
+
+function onTreeScroll(): void {
+  treeScrolling.value = true;
+  clearTimeout(treeScrollTimer);
+  treeScrollTimer = setTimeout(() => { treeScrolling.value = false; }, 500);
 }
 
 // Monaco takes keyboard input through a hidden textarea, so clicking a line to position
@@ -149,10 +167,12 @@ window.addEventListener("focus", onFocus);
 onBeforeUnmount(() => {
   clearInterval(timer);
   clearInterval(healthTimer);
+  clearTimeout(treeScrollTimer);
   window.removeEventListener("focus", onFocus);
   window.removeEventListener("keydown", onKey, true);
   unsubscribeOpenTarget?.();
   unsubscribeOpenSettings?.();
+  unsubscribeZoomChanged?.();
 });
 </script>
 
@@ -196,7 +216,9 @@ onBeforeUnmount(() => {
             :icon-theme="editorSettings.settings.workbench.iconTheme"
             :typography="treeTypography"
             class="tree"
+            :class="{ scrolling: treeScrolling }"
             :style="{ width: `${treeWidth}px` }"
+            @scroll.passive="onTreeScroll"
           />
           <Splitter
             v-if="treeVisible"
@@ -243,7 +265,10 @@ onBeforeUnmount(() => {
       :tree-visible="treeVisible"
       :is-development="api.initialWindowState.isDevelopment"
       :worktree-label="api.initialWindowState.worktreeLabel"
+      :zoom-level="zoomLevel"
       @toggle-tree="treeVisible = !treeVisible"
+      @change-zoom="changeZoom"
+      @open-zoom-settings="openSettings('workbench')"
     />
     <QuestionCapture :store="store" :target="questionTarget" @close="questionTarget = null" />
   </div>
@@ -273,6 +298,25 @@ onBeforeUnmount(() => {
 .workspace.bottom { flex-direction: column; }
 .drawer { flex: none; }
 .workspace.bottom .drawer { border-left: none; border-top: 1px solid var(--workbench-border); }
-.tree { flex: none; border-right: 1px solid var(--workbench-border); overflow: hidden auto; }
+.tree {
+  --scrollbar-thumb: transparent;
+  --scrollbar-track: transparent;
+  flex: none;
+  border-right: 1px solid var(--workbench-border);
+  overflow: hidden auto;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  transition: scrollbar-color 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tree:hover, .tree:focus-within, .tree.scrolling {
+  --scrollbar-thumb: color-mix(in srgb, var(--faint-foreground) 45%, transparent);
+  --scrollbar-track: transparent;
+}
 .diff { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .tree { transition: none; } }
+@media (prefers-contrast: more) {
+  .tree:hover, .tree:focus-within, .tree.scrolling { --scrollbar-thumb: var(--workbench-foreground); }
+}
+@media (forced-colors: active) { .tree { scrollbar-color: auto; } }
 </style>
