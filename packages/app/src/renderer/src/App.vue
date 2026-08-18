@@ -13,6 +13,7 @@ import SettingsPane from "./components/SettingsPane.vue";
 import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
 import { X } from "lucide-vue-next";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
+import { effectiveTreeTypography } from "../../settings.js";
 import "./theme.css";
 
 const store = createStore(api);
@@ -39,6 +40,7 @@ const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const activeSurface = shallowRef<"review" | "settings">("review");
+const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
 // Which section the settings surface opens on. The prompt about a missing service leads
 // straight to the one that fixes it, rather than to whatever was showing last.
 const settingsCategory = shallowRef<"workbench" | "editor" | "connection">("workbench");
@@ -179,6 +181,7 @@ onBeforeUnmount(() => {
             v-if="treeVisible"
             :store="store"
             :icon-theme="editorSettings.settings.workbench.iconTheme"
+            :typography="treeTypography"
             class="tree"
             :style="{ width: `${treeWidth}px` }"
           />

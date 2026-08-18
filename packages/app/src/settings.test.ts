@@ -3,6 +3,8 @@ import { reactive } from "vue";
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_EDITOR_FONT_FAMILY,
+  DEFAULT_TREE_FONT_FAMILY,
+  effectiveTreeTypography,
   parseAppSettings,
   settingsFromJson,
   settingsToJson,
@@ -15,16 +17,25 @@ describe("application settings", () => {
         fontFamily: "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
         fontSize: 16,
       },
-      workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
+      workbench: {
+        colorTheme: "Catppuccin Mocha",
+        iconTheme: "catppuccin-mocha",
+        tree: {
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          fontSize: 13,
+          inheritEditorTypography: false,
+        },
+      },
     });
     expect(DEFAULT_APP_SETTINGS.editor.fontFamily).toBe(DEFAULT_EDITOR_FONT_FAMILY);
+    expect(DEFAULT_APP_SETTINGS.workbench.tree.fontFamily).toBe(DEFAULT_TREE_FONT_FAMILY);
   });
 
   it("accepts VS Code-compatible fractional font sizes", () => {
     expect(parseAppSettings({ editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 } }))
       .toEqual({
         editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 },
-        workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
+        workbench: DEFAULT_APP_SETTINGS.workbench,
       });
   });
 
@@ -48,6 +59,9 @@ describe("application settings", () => {
     [{ editor: { fontFamily: "monospace", fontSize: Number.NaN } }, "fontSize"],
     [{ editor: { fontFamily: "monospace", fontSize: 16 }, workbench: { colorTheme: "Unknown" } }, "colorTheme"],
     [{ editor: { fontFamily: "monospace", fontSize: 16 }, workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "Unknown" } }, "iconTheme"],
+    [{ ...DEFAULT_APP_SETTINGS, workbench: { ...DEFAULT_APP_SETTINGS.workbench, tree: { fontFamily: "", fontSize: 13, inheritEditorTypography: false } } }, "fontFamily"],
+    [{ ...DEFAULT_APP_SETTINGS, workbench: { ...DEFAULT_APP_SETTINGS.workbench, tree: { fontFamily: "system-ui", fontSize: 5, inheritEditorTypography: false } } }, "fontSize"],
+    [{ ...DEFAULT_APP_SETTINGS, workbench: { ...DEFAULT_APP_SETTINGS.workbench, tree: { fontFamily: "system-ui", fontSize: 13, inheritEditorTypography: "yes" } } }, "inheritEditorTypography"],
   ])("rejects invalid persisted or IPC input", (value, field) => {
     expect(() => parseAppSettings(value)).toThrow(new RegExp(field));
   });
@@ -59,6 +73,9 @@ describe("application settings", () => {
       "editor.fontSize": 16,
       "workbench.colorTheme": "Catppuccin Mocha",
       "workbench.iconTheme": "catppuccin-mocha",
+      "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY,
+      "workbench.tree.fontSize": 13,
+      "workbench.tree.inheritEditorTypography": false,
     });
     expect(source).not.toContain("serviceToken");
     expect(settingsFromJson(source, DEFAULT_APP_SETTINGS)).toEqual(DEFAULT_APP_SETTINGS);
@@ -71,19 +88,30 @@ describe("application settings", () => {
       "editor.fontSize": 18,
       "workbench.colorTheme": "Gander Dark",
       "workbench.iconTheme": "catppuccin-mocha",
+      "workbench.tree.fontFamily": "system-ui, sans-serif",
+      "workbench.tree.fontSize": 14,
+      "workbench.tree.inheritEditorTypography": true,
     }), current)).toEqual({
       futureSetting: true,
       editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
-      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+      workbench: {
+        colorTheme: "Gander Dark",
+        iconTheme: "catppuccin-mocha",
+        tree: {
+          fontFamily: "system-ui, sans-serif",
+          fontSize: 14,
+          inheritEditorTypography: true,
+        },
+      },
     });
   });
 
   it.each([
     ["{", /Invalid settings JSON/],
     [JSON.stringify({ "editor.fontFamily": "monospace" }), /editor\.fontSize/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Unknown", "workbench.iconTheme": "catppuccin-mocha" }), /workbench\.colorTheme/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "Unknown" }), /workbench\.iconTheme/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "catppuccin-mocha", serviceToken: "nope" }), /Unrecognized key/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Unknown", "workbench.iconTheme": "catppuccin-mocha", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false }), /workbench\.colorTheme/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "Unknown", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false }), /workbench\.iconTheme/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "catppuccin-mocha", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false, serviceToken: "nope" }), /Unrecognized key/],
   ])("rejects invalid or non-public settings JSON", (source, message) => {
     expect(() => settingsFromJson(source, DEFAULT_APP_SETTINGS)).toThrow(message);
   });
@@ -94,7 +122,30 @@ describe("application settings", () => {
       workbench: { colorTheme: "Gander Dark" },
     })).toEqual({
       editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
-      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+      workbench: {
+        colorTheme: "Gander Dark",
+        iconTheme: "catppuccin-mocha",
+        tree: DEFAULT_APP_SETTINGS.workbench.tree,
+      },
     });
+  });
+
+  it("derives effective tree typography in one place for independent and inherited settings", () => {
+    const independent = {
+      ...DEFAULT_APP_SETTINGS,
+      editor: { fontFamily: "Editor Mono", fontSize: 18 },
+      workbench: {
+        ...DEFAULT_APP_SETTINGS.workbench,
+        tree: { fontFamily: "Tree UI", fontSize: 14, inheritEditorTypography: false },
+      },
+    };
+    expect(effectiveTreeTypography(independent)).toEqual({ fontFamily: "Tree UI", fontSize: 14 });
+    expect(effectiveTreeTypography({
+      ...independent,
+      workbench: {
+        ...independent.workbench,
+        tree: { ...independent.workbench.tree, inheritEditorTypography: true },
+      },
+    })).toEqual({ fontFamily: "Editor Mono", fontSize: 18 });
   });
 });

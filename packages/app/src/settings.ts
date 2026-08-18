@@ -8,6 +8,8 @@ import {
 
 export const DEFAULT_EDITOR_FONT_FAMILY =
   "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace";
+export const DEFAULT_TREE_FONT_FAMILY =
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 export const EditorSettingsSchema = z.object({
   fontFamily: z.string().trim().min(1),
@@ -19,16 +21,32 @@ export const EditorSettingsSchema = z.object({
 export const ThemeIdSchema = z.enum(THEME_IDS);
 export const FileIconThemeIdSchema = z.enum(FILE_ICON_THEME_IDS);
 
+export const TreeTypographySettingsSchema = z.object({
+  fontFamily: z.string().trim().min(1),
+  fontSize: z.number().finite().min(6).max(100),
+  inheritEditorTypography: z.boolean(),
+});
+
+export const DEFAULT_TREE_TYPOGRAPHY_SETTINGS: Readonly<TreeTypographySettings> = Object.freeze({
+  fontFamily: DEFAULT_TREE_FONT_FAMILY,
+  fontSize: 13,
+  inheritEditorTypography: false,
+});
+
 export const WorkbenchSettingsSchema = z.object({
   colorTheme: ThemeIdSchema,
   // Configs written before file icons already have a workbench object, so the
   // field itself needs a default rather than relying on the object's default.
   iconTheme: FileIconThemeIdSchema.default(DEFAULT_FILE_ICON_THEME_ID),
+  // Tree typography was added after workbench themes. Preserve older workbench
+  // settings while supplying the VS Code-like Explorer default.
+  tree: TreeTypographySettingsSchema.default(DEFAULT_TREE_TYPOGRAPHY_SETTINGS),
 });
 
 export const DEFAULT_WORKBENCH_SETTINGS: Readonly<WorkbenchSettings> = Object.freeze({
   colorTheme: DEFAULT_THEME_ID,
   iconTheme: DEFAULT_FILE_ICON_THEME_ID,
+  tree: DEFAULT_TREE_TYPOGRAPHY_SETTINGS,
 });
 
 export const AppSettingsSchema = z.object({
@@ -43,9 +61,14 @@ export const SettingsJsonSchema = z.object({
   "editor.fontSize": EditorSettingsSchema.shape.fontSize,
   "workbench.colorTheme": ThemeIdSchema,
   "workbench.iconTheme": FileIconThemeIdSchema,
+  "workbench.tree.fontFamily": TreeTypographySettingsSchema.shape.fontFamily,
+  "workbench.tree.fontSize": TreeTypographySettingsSchema.shape.fontSize,
+  "workbench.tree.inheritEditorTypography": TreeTypographySettingsSchema.shape.inheritEditorTypography,
 }).strict();
 
 export type EditorSettings = z.infer<typeof EditorSettingsSchema>;
+export type TreeTypographySettings = z.infer<typeof TreeTypographySettingsSchema>;
+export type EffectiveTreeTypography = Pick<TreeTypographySettings, "fontFamily" | "fontSize">;
 export type WorkbenchSettings = z.infer<typeof WorkbenchSettingsSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 export type SettingsJson = z.infer<typeof SettingsJsonSchema>;
@@ -75,6 +98,9 @@ export function settingsToJson(settings: AppSettings): string {
     "editor.fontSize": settings.editor.fontSize,
     "workbench.colorTheme": settings.workbench.colorTheme,
     "workbench.iconTheme": settings.workbench.iconTheme,
+    "workbench.tree.fontFamily": settings.workbench.tree.fontFamily,
+    "workbench.tree.fontSize": settings.workbench.tree.fontSize,
+    "workbench.tree.inheritEditorTypography": settings.workbench.tree.inheritEditorTypography,
   };
   return JSON.stringify(publicSettings, null, 2);
 }
@@ -104,6 +130,24 @@ export function settingsFromJson(source: string, current: AppSettings): AppSetti
     workbench: {
       colorTheme: parsed.data["workbench.colorTheme"],
       iconTheme: parsed.data["workbench.iconTheme"],
+      tree: {
+        fontFamily: parsed.data["workbench.tree.fontFamily"],
+        fontSize: parsed.data["workbench.tree.fontSize"],
+        inheritEditorTypography: parsed.data["workbench.tree.inheritEditorTypography"],
+      },
     },
+  };
+}
+
+export function effectiveTreeTypography(settings: AppSettings): EffectiveTreeTypography {
+  if (settings.workbench.tree.inheritEditorTypography) {
+    return {
+      fontFamily: settings.editor.fontFamily,
+      fontSize: settings.editor.fontSize,
+    };
+  }
+  return {
+    fontFamily: settings.workbench.tree.fontFamily,
+    fontSize: settings.workbench.tree.fontSize,
   };
 }

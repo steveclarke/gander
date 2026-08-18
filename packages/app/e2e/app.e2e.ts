@@ -86,6 +86,22 @@ describe("Gander end to end", () => {
     const iconTheme = await $("select[name='workbench.iconTheme']");
     await expect(theme).toHaveValue("Catppuccin Mocha");
     await expect(iconTheme).toHaveValue("catppuccin-mocha");
+    const treeFamily = await $("input[name='workbench.tree.fontFamily']");
+    const treeSize = await $("input[name='workbench.tree.fontSize']");
+    const inheritEditorTypography = await $("input[name='workbench.tree.inheritEditorTypography']");
+    await expect(treeFamily).toHaveValue('-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif');
+    await expect(treeSize).toHaveValue("13");
+    await expect(inheritEditorTypography).not.toBeChecked();
+    await treeFamily.clearValue();
+    await treeFamily.setValue("Arial, sans-serif");
+    await browser.keys("Tab");
+    await treeSize.click();
+    await treeSize.clearValue();
+    await treeSize.setValue("14.5");
+    await browser.keys("Tab");
+    await browser.waitUntil(async () => await browser.execute(() =>
+      document.querySelector(".settings-pane [role='status']")?.textContent === "Saved automatically",
+    ));
     await selectColorTheme("Gander Dark");
     await browser.waitUntil(async () => await browser.execute(() =>
       document.querySelector(".settings-pane [role='status']")?.textContent === "Saved automatically",
@@ -124,6 +140,9 @@ describe("Gander end to end", () => {
     expect(jsonSource).toContain("editor.fontSize");
     expect(jsonSource).toContain("workbench.colorTheme");
     expect(jsonSource).toContain("workbench.iconTheme");
+    expect(jsonSource).toContain("workbench.tree.fontFamily");
+    expect(jsonSource).toContain("workbench.tree.fontSize");
+    expect(jsonSource).toContain("workbench.tree.inheritEditorTypography");
     expect(jsonSource).toContain("Gander Dark");
     await $("button[aria-label='Close settings']").click();
     await expect($(".settings-pane")).not.toBeDisplayed();
@@ -139,6 +158,9 @@ describe("Gander end to end", () => {
     await $("button[aria-label='Editor settings']").click();
     await expect($("select[name='workbench.colorTheme']")).toHaveValue("Gander Dark");
     await expect($("select[name='workbench.iconTheme']")).toHaveValue("catppuccin-mocha");
+    await expect($("input[name='workbench.tree.fontFamily']")).toHaveValue("Arial, sans-serif");
+    await expect($("input[name='workbench.tree.fontSize']")).toHaveValue("14.5");
+    await expect($("input[name='workbench.tree.inheritEditorTypography']")).not.toBeChecked();
     await $("//button[contains(@class, 'category') and normalize-space()='Editor']").click();
     await expect($("input[name='editor.fontFamily']")).toHaveValue("'Courier New', monospace");
     await expect($("input[name='editor.fontSize']")).toHaveValue("18.5");
@@ -148,6 +170,30 @@ describe("Gander end to end", () => {
   it("registers a repository and keeps a reviewed file checked after restart", async () => {
     await registerAndSelect(requiredEnv("GANDER_E2E_PERSISTENCE_URL"), "persistence");
     await openPullRequest("Persist reviewed files");
+
+    const fileTreeTypography = async () => browser.execute(() => {
+      const tree = document.querySelector<HTMLElement>(".tree.root");
+      if (!tree) return null;
+      const style = getComputedStyle(tree);
+      return { fontFamily: style.fontFamily, fontSize: style.fontSize };
+    });
+    const fileTreeRowStyles = async () => browser.execute(() =>
+      [...document.querySelectorAll<HTMLElement>(".tnode .fname")].map((label) => {
+        const style = getComputedStyle(label);
+        return {
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+          rowHeight: label.closest<HTMLElement>(".tnode")?.getBoundingClientRect().height,
+        };
+      }),
+    );
+    await $(".tree.root").waitForDisplayed();
+    await expect(fileTreeTypography()).resolves.toMatchObject({ fontSize: "14.5px" });
+    expect((await fileTreeTypography())?.fontFamily).toContain("Arial");
+    expect(await fileTreeRowStyles()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ fontFamily: "Arial, sans-serif", fontSize: "14.5px", rowHeight: 22 }),
+    ]));
+    expect(new Set((await fileTreeRowStyles()).map((style) => JSON.stringify(style))).size).toBe(1);
 
     const typography = async () => browser.execute(() => {
       const line = document.querySelector<HTMLElement>(".monaco-editor .view-line span");
@@ -169,6 +215,11 @@ describe("Gander end to end", () => {
     });
     await $("button[aria-label='Editor settings']").click();
     await expect($(".settings-pane")).toBeDisplayed();
+    await $("input[name='workbench.tree.inheritEditorTypography']").click();
+    await browser.waitUntil(async () => await browser.execute(() =>
+      document.querySelector(".settings-pane [role='status']")?.textContent === "Saved automatically",
+    ));
+    await expect($("input[name='workbench.tree.fontFamily']")).toBeDisabled();
     await selectIconTheme("catppuccin-mocha");
     await browser.waitUntil(async () => await browser.execute(() =>
       document.querySelector(".settings-pane [role='status']")?.textContent === "Saved automatically",
@@ -180,6 +231,11 @@ describe("Gander end to end", () => {
     ));
     await $("button[aria-label='Close settings']").click();
     await expect($(".diff .monaco-editor[data-mount-marker='preserved']")).toBeDisplayed();
+    await expect(fileTreeTypography()).resolves.toMatchObject({ fontSize: "18.5px" });
+    expect((await fileTreeTypography())?.fontFamily).toContain("Courier New");
+    expect((await fileTreeRowStyles()).every((style) =>
+      style.fontFamily.includes("Courier New") && style.fontSize === "18.5px" && style.rowHeight === 22,
+    )).toBe(true);
 
     await browser.keys("n");
     const question = await $("textarea[placeholder='What needs answering or changing here?']");
@@ -205,6 +261,11 @@ describe("Gander end to end", () => {
     await expect(browser).toHaveTitle("Gander");
     await expect($(".progress")).toHaveText("1/2 reviewed");
     await expect(await fileCheckbox("a.rb")).toHaveAttribute("aria-checked", "true");
+    await expect(fileTreeTypography()).resolves.toMatchObject({ fontSize: "18.5px" });
+    expect((await fileTreeTypography())?.fontFamily).toContain("Courier New");
+    expect((await fileTreeRowStyles()).every((style) =>
+      style.fontFamily.includes("Courier New") && style.fontSize === "18.5px" && style.rowHeight === 22,
+    )).toBe(true);
     await $("button[aria-label='Questions']").click();
     await expect($(".message.reply .text")).toHaveText("Because both callers share this path.");
   });

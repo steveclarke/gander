@@ -4,6 +4,7 @@ import type { EditorSettingsStore } from "../editor-settings-store.js";
 import { DEFAULT_APP_SETTINGS, type FileIconThemeId, type ThemeId } from "../../../settings.js";
 import { THEME_IDS, themeFor } from "../../../themes.js";
 import { FILE_ICON_THEME_IDS, fileIconThemeFor } from "../../../file-icon-themes.js";
+import TreeTypographySettings from "./TreeTypographySettings.vue";
 
 const props = defineProps<{ store: EditorSettingsStore }>();
 const emit = defineEmits<{ saved: [success: boolean] }>();
@@ -80,6 +81,8 @@ async function reset(): Promise<void> {
     <div class="swatches" role="img" :aria-label="`${activeTheme.label} color palette`">
       <span v-for="(color, token) in activeTheme.workbench" :key="token" :style="{ backgroundColor: color }" />
     </div>
+
+    <TreeTypographySettings :store="store" @saved="emit('saved', $event)" />
   </section>
 </template>
 
