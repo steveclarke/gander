@@ -329,6 +329,7 @@ describe("Gander end to end", () => {
         rowWidth: row.getBoundingClientRect().width,
         scrollHeight: panel.scrollHeight,
         scrollbarColor: getComputedStyle(panel).scrollbarColor,
+        scrollbarWidth: getComputedStyle(panel).scrollbarWidth,
       };
     });
 
@@ -336,10 +337,11 @@ describe("Gander end to end", () => {
     expect(resting).not.toBeNull();
     expect(resting!.scrollHeight).toBeGreaterThan(resting!.clientHeight);
     expect(resting!.scrollbarColor).toBe("rgba(0, 0, 0, 0) rgba(0, 0, 0, 0)");
+    expect(resting!.scrollbarWidth).toBe("thin");
 
     await tree.moveTo();
     await browser.waitUntil(async () => (await treeMetrics())?.scrollbarColor
-      === "rgb(147, 153, 178) rgb(88, 91, 112)");
+      === "color(srgb 0.576471 0.6 0.698039 / 0.45) rgba(0, 0, 0, 0)");
     const hovered = await treeMetrics();
     expect(hovered!.rowWidth).toBe(resting!.rowWidth);
   });

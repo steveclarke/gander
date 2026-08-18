@@ -269,14 +269,17 @@ onBeforeUnmount(() => {
   overflow: hidden auto;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   scrollbar-gutter: stable;
-  scrollbar-width: auto;
+  scrollbar-width: thin;
   transition: scrollbar-color 120ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .tree:hover, .tree:focus-within, .tree.scrolling {
-  --scrollbar-thumb: var(--faint-foreground);
-  --scrollbar-track: var(--workbench-border);
+  --scrollbar-thumb: color-mix(in srgb, var(--faint-foreground) 45%, transparent);
+  --scrollbar-track: transparent;
 }
 .diff { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .tree { transition: none; } }
+@media (prefers-contrast: more) {
+  .tree:hover, .tree:focus-within, .tree.scrolling { --scrollbar-thumb: var(--workbench-foreground); }
+}
 @media (forced-colors: active) { .tree { scrollbar-color: auto; } }
 </style>
