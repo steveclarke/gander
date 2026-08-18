@@ -4,6 +4,15 @@ Observations from reviewing real pull requests in Gander. Each entry is a
 candidate for a milestone; none are commitments yet. Entries marked **Addressed**
 name the commit that resolved them.
 
+## Nowhere to put review comments — Addressed
+
+Reviewing a pull request while an agent worked elsewhere in the repository left
+comments held in the reviewer's head, along with which file each belonged to.
+This was the reason the app was built.
+
+Addressed: `n` captures a question against the file and line being read, a drawer
+lists them, and agents collect them over MCP.
+
 ## Repository registration
 
 Registering a repository requires pasting its full GitHub URL. A browsable list

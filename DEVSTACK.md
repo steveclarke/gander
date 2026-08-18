@@ -48,6 +48,28 @@ than fetching it again.
 own process-compose control socket, so `bin/dev status` in one checkout never
 reaches another's stack. In a new worktree: `bin/setup`, then `bin/dev`.
 
+## Registering the MCP endpoint with an agent
+
+Agents read the reviewer's questions from the same service, at `/mcp`, with the
+same bearer token. Port and token are allocated per checkout, so the command is
+generated rather than committed — read the live values out of `.env`:
+
+```
+source .env
+claude mcp add --transport http gander "$GANDER_SERVICE_URL/mcp" \
+  --header "Authorization: Bearer $GANDER_TOKEN"
+```
+
+Run it in the repository being reviewed, not in this one. Two tools appear:
+
+| Tool | Purpose |
+|------|---------|
+| `get_review_questions` | Open questions for a repo + branch (or pull request number), with file and line |
+| `mark_question_addressed` | Flags one as acted on, with an optional commit ref and note |
+
+Nothing over MCP resolves a question. That stays the reviewer's act, made by
+re-reviewing the file in the app.
+
 ## Config precedence
 
 `GANDER_SERVICE_URL` and `GANDER_TOKEN` from `.env` override the URL and token in

@@ -35,11 +35,25 @@ bin/dev
 
 See `DEVSTACK.md`. Config and review state are repo-local, under `.gander/`.
 
+## Questions
+
+Reviewing while an agent works elsewhere in the repository is what the app is
+for, so questions came in immediately after M1 rather than waiting for a
+milestone boundary.
+
+Pressing `n` over a file captures a question against it, stamped with the line
+being read. Questions carry three states: `open` when captured, `addressed` when
+an agent has acted on one, and `resolved` when the reviewer re-checks the file.
+Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`
+for registration.
+
+Each opened pull request records its own branch, which is how the service maps an
+agent's working branch to a pull request without holding GitHub credentials.
+
 ## Not in M1
 
 Carried into M2 planning:
 
-- Questions drawer and the MCP endpoint
 - The "since my ✓" delta tab
 - Local branch/worktree viewer (stateless, no review state)
 - Three spec items the M1 plan omitted: the Fetch origin segment, the file-tree
