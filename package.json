@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
+    "test:e2e": "pnpm --filter @gander/app test:e2e",
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {

@@ -14,6 +14,13 @@ process-compose, with ports allocated by outport.
 | Status | `bin/dev status` (add `--json` for machine-readable) |
 | Logs | `bin/dev logs service` |
 | Restart one process | `bin/dev restart service` |
+| End-to-end tests | `pnpm test:e2e` |
+
+`pnpm test:e2e` builds the Electron app, starts an isolated service and local
+GitHub fake, creates real temporary Git repositories, and runs the three window
+tests. It does not use the dev stack, GitHub credentials, or an existing Gander
+service. The ordinary `pnpm test` command continues to run only the fast Vitest
+suite.
 
 ## Processes
 
