@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   head_ref TEXT,
   title TEXT,
   head_sha TEXT,
+  stack_id INTEGER,
   stack_size INTEGER,
   stack_position INTEGER,
   UNIQUE(repo_id, pr_number)
@@ -48,6 +49,8 @@ export interface Storage {
   /** Records what the app knows about a pull request, so agents can be told which one they are on. */
   setPrContext(repoId: string, prNumber: number, context: PrContext): void;
   getPrContext(repoId: string, prNumber: number): PrContext | null;
+  /** Every pull request recorded as part of the same stack, with how many open questions each holds. */
+  listStackMembers(repoId: string, stackId: number): Array<{ prNumber: number; headRef: string | null; title: string | null; position: number | null; openQuestions: number }>;
   findPrByHeadRef(repoId: string, headRef: string): number | null;
   markQuestionAddressed(id: number, input: MarkAddressed): Question | null;
   listQuestions(repoId: string, prNumber: number): Question[];
@@ -86,6 +89,7 @@ function migrate(db: Database.Database): void {
   addColumn("reviews", "head_ref", "TEXT");
   addColumn("reviews", "title", "TEXT");
   addColumn("reviews", "head_sha", "TEXT");
+  addColumn("reviews", "stack_id", "INTEGER");
   addColumn("reviews", "stack_size", "INTEGER");
   addColumn("reviews", "stack_position", "INTEGER");
 }
@@ -152,18 +156,34 @@ export function openStorage(dbPath: string): Storage {
 
     setPrContext(repoId, prNumber, context) {
       const rid = reviewId(repoId, prNumber);
-      db.prepare("UPDATE reviews SET head_ref = ?, title = ?, head_sha = ?, stack_size = ?, stack_position = ? WHERE id = ?")
-        .run(context.headRef, context.title, context.headSha, context.stackSize, context.stackPosition, rid);
+      db.prepare("UPDATE reviews SET head_ref = ?, title = ?, head_sha = ?, stack_id = ?, stack_size = ?, stack_position = ? WHERE id = ?")
+        .run(context.headRef, context.title, context.headSha, context.stackId, context.stackSize, context.stackPosition, rid);
+    },
+
+    listStackMembers(repoId, stackId) {
+      return db.prepare(`
+        SELECT r.pr_number, r.head_ref, r.title, r.stack_position,
+               (SELECT COUNT(*) FROM questions q WHERE q.review_id = r.id AND q.state = 'open') AS open_questions
+        FROM reviews r
+        WHERE r.repo_id = ? AND r.stack_id = ?
+        ORDER BY r.stack_position
+      `).all(repoId, stackId).map((r) => {
+        const row = r as { pr_number: number; head_ref: string | null; title: string | null; stack_position: number | null; open_questions: number };
+        return {
+          prNumber: row.pr_number, headRef: row.head_ref, title: row.title,
+          position: row.stack_position, openQuestions: row.open_questions,
+        };
+      });
     },
 
     getPrContext(repoId, prNumber) {
-      const row = db.prepare("SELECT head_ref, title, head_sha, stack_size, stack_position FROM reviews WHERE repo_id = ? AND pr_number = ?")
-        .get(repoId, prNumber) as { head_ref: string | null; title: string | null; head_sha: string | null; stack_size: number | null; stack_position: number | null } | undefined;
+      const row = db.prepare("SELECT head_ref, title, head_sha, stack_id, stack_size, stack_position FROM reviews WHERE repo_id = ? AND pr_number = ?")
+        .get(repoId, prNumber) as { head_ref: string | null; title: string | null; head_sha: string | null; stack_id: number | null; stack_size: number | null; stack_position: number | null } | undefined;
       // Null when the pull request has never been opened in the app, so nothing recorded it.
       if (!row || row.head_ref === null || row.head_sha === null) return null;
       return {
         headRef: row.head_ref, title: row.title ?? "", headSha: row.head_sha,
-        stackSize: row.stack_size, stackPosition: row.stack_position,
+        stackId: row.stack_id, stackSize: row.stack_size, stackPosition: row.stack_position,
       };
     },
 

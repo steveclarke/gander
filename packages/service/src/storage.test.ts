@@ -142,14 +142,14 @@ describe("storage", () => {
     });
 
     it("resolves a branch to its pull request", () => {
-      storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
+      storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
       expect(storage.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(7);
       expect(storage.findPrByHeadRef("acme/atlas", "no-such-branch")).toBeNull();
     });
 
     it("resolves a reused branch name to the newest pull request on it", () => {
-      storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
-      storage.setPrContext("acme/atlas", 9, { headRef: "feat/thing", title: "Newer", headSha: "sha-9", stackSize: null, stackPosition: null });
+      storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+      storage.setPrContext("acme/atlas", 9, { headRef: "feat/thing", title: "Newer", headSha: "sha-9", stackId: null, stackSize: null, stackPosition: null });
       expect(storage.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(9);
     });
 
@@ -192,7 +192,7 @@ describe("storage", () => {
         // And the new columns work rather than throwing on first write.
         const id = upgraded.listQuestions("acme/atlas", 7)[0]!.id;
         expect(upgraded.markQuestionAddressed(id, { commitRef: "abc", note: "done" })?.state).toBe("addressed");
-        upgraded.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
+        upgraded.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
         expect(upgraded.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(7);
       } finally {
         upgraded.close();

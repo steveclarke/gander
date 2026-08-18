@@ -69,6 +69,8 @@ export const PrContextSchema = z.object({
   headRef: z.string().min(1),
   title: z.string(),
   headSha: z.string().min(1),
+  /** Shared by every pull request in a GitHub stack; null when the pull request stands alone. */
+  stackId: z.number().int().positive().nullable(),
   stackSize: z.number().int().positive().nullable(),
   stackPosition: z.number().int().positive().nullable(),
 });

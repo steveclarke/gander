@@ -74,18 +74,27 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     return files;
   }
 
-  async function recordContext(repoId: string, prNumber: number, pr: PrSummary): Promise<void> {
-    await deps.service.setPrContext(repoId, prNumber, {
-      headRef: pr.headRef,
-      title: pr.title,
-      headSha: pr.headSha,
-      stackSize: pr.stack?.size ?? null,
-      stackPosition: pr.stack?.position ?? null,
+  async function recordContext(repoId: string, prNumber: number, pr: PrSummary, all: PrSummary[]): Promise<void> {
+    const write = (p: PrSummary): Promise<void> => deps.service.setPrContext(repoId, p.number, {
+      headRef: p.headRef,
+      title: p.title,
+      headSha: p.headSha,
+      stackId: p.stack?.id ?? null,
+      stackSize: p.stack?.size ?? null,
+      stackPosition: p.stack?.position ?? null,
     });
+
+    // Every member of the stack is recorded, not just the one being opened. An agent
+    // stands on one branch of a stack and asks about it; if only the reviewed pull
+    // request were known, that lookup would come back empty and the agent would be left
+    // guessing pull request numbers to find the questions.
+    const siblings = pr.stack === null ? [] : all.filter((p) => p.stack?.id === pr.stack?.id && p.number !== pr.number);
+    await Promise.all([write(pr), ...siblings.map(write)]);
   }
 
   async function openPr(repoId: string, prNumber: number): Promise<PrView> {
-    const pr = (await deps.listPrs(repoId)).find((p) => p.number === prNumber);
+    const all = await deps.listPrs(repoId);
+    const pr = all.find((p) => p.number === prNumber);
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
 
     const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
@@ -93,7 +102,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     // Recorded here so an agent working in a checkout of this branch can ask the service
     // for its questions by branch name, without the service needing GitHub credentials —
     // and so the answer can name which pull request, and which member of a stack, it is.
-    await recordContext(repoId, prNumber, pr);
+    await recordContext(repoId, prNumber, pr, all);
     const head = await deps.git.resolveRef(clone, `refs/gander/pr/${prNumber}`);
     const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
     const mergeBase = await deps.git.mergeBase(clone, base, head);
@@ -106,14 +115,15 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
   }
 
   async function refreshPr(repoId: string, prNumber: number): Promise<PrView> {
-    const pr = (await deps.listPrs(repoId)).find((p) => p.number === prNumber);
+    const all = await deps.listPrs(repoId);
+    const pr = all.find((p) => p.number === prNumber);
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
 
     const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
     await deps.git.fetchPr(clone, prNumber, pr.baseRef);
     // Kept current on every refresh: it is what tells an agent that a question's line
     // number predates the commits now on the branch.
-    await recordContext(repoId, prNumber, pr);
+    await recordContext(repoId, prNumber, pr, all);
     const head = await deps.git.resolveRef(clone, `refs/gander/pr/${prNumber}`);
 
     const cached = cache.get(key(repoId, prNumber));

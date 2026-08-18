@@ -45,6 +45,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       if (typeof resolved === "string") return { content: [{ type: "text", text: resolved }], isError: true };
 
       const context = storage.getPrContext(repo, resolved);
+      const members = context?.stackId == null ? [] : storage.listStackMembers(repo, context.stackId);
       const wanted = includeAddressed === true ? ["open", "addressed"] : ["open"];
       const questions = storage
         .listQuestions(repo, resolved)
@@ -70,11 +71,30 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         headSha: context?.headSha ?? null,
         stack: context?.stackSize == null || context.stackPosition == null
           ? null
-          : { position: context.stackPosition, size: context.stackSize },
+          : {
+              position: context.stackPosition,
+              size: context.stackSize,
+              // Named so an agent that asked about its own branch can see where the rest
+              // of the reviewer's questions are, instead of guessing pull request numbers.
+              members: members.map((m) => ({
+                prNumber: m.prNumber, branch: m.headRef, title: m.title,
+                position: m.position, openQuestions: m.openQuestions,
+              })),
+            },
         questions,
       };
 
-      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
+      // A stacked pull request splits one piece of work across branches, and the reviewer
+      // reads whichever branch holds the code. Saying nothing here is what sent an agent
+      // hunting through pull request numbers by hand.
+      const elsewhere = members.filter((m) => m.prNumber !== resolved && m.openQuestions > 0);
+      const hint = questions.length === 0 && elsewhere.length > 0
+        ? `\n\nNo open questions on this pull request, but this stack has some on: ${
+            elsewhere.map((m) => `#${m.prNumber} (${m.headRef ?? "unknown branch"}, ${m.openQuestions} open)`).join(", ")
+          }. Call this tool again with that prNumber to read them.`
+        : "";
+
+      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) + hint }] };
     },
   );
 

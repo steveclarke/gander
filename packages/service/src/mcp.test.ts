@@ -57,7 +57,7 @@ describe("MCP endpoint", () => {
   });
 
   it("returns the reviewer's open questions for a branch", async () => {
-    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
     storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null });
 
     const client = await connect();
@@ -78,7 +78,7 @@ describe("MCP endpoint", () => {
   });
 
   it("hides addressed questions unless they are asked for", async () => {
-    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
     const done = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null });
     storage.addQuestion("acme/atlas", 7, { path: "b.rb", line: null, text: "still open", headSha: null });
     storage.markQuestionAddressed(done.id, { commitRef: "abc", note: null });
@@ -99,7 +99,7 @@ describe("MCP endpoint", () => {
   });
 
   it("marks a question addressed, and the state is really in storage", async () => {
-    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
     const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
 
     const client = await connect();
@@ -139,20 +139,64 @@ describe("MCP endpoint", () => {
   it("reports the stack position so an agent knows a sibling exists", async () => {
     storage.setPrContext("acme/atlas", 7, {
       headRef: "feat/backend", title: "Feature backend", headSha: "sha-1",
-      stackSize: 2, stackPosition: 1,
+      stackId: 99, stackSize: 2, stackPosition: 1,
     });
     const client = await connect();
     const payload = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", prNumber: 7 },
-    })) as { content?: unknown })) as { stack: { position: number; size: number } };
-    expect(payload.stack).toEqual({ position: 1, size: 2 });
+    })) as { content?: unknown })) as { stack: { position: number; size: number; members: unknown[] } };
+    expect(payload.stack).toMatchObject({ position: 1, size: 2 });
+    await client.close();
+  });
+
+  it("names the sibling holding the questions when the agent's own branch has none", async () => {
+    // The reviewer read the backend branch and left a question there; the agent is
+    // standing on the frontend branch of the same stack.
+    storage.setPrContext("acme/atlas", 7, {
+      headRef: "feat/backend", title: "Backend", headSha: "sha-1", stackId: 99, stackSize: 2, stackPosition: 1,
+    });
+    storage.setPrContext("acme/atlas", 8, {
+      headRef: "feat/frontend", title: "Frontend", headSha: "sha-2", stackId: 99, stackSize: 2, stackPosition: 2,
+    });
+    storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
+
+    const client = await connect();
+    const text = textOf((await client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", branch: "feat/frontend" },
+    })) as { content?: unknown });
+
+    // It must not have to guess pull request numbers to find them.
+    expect(text).toContain("#7");
+    expect(text).toContain("feat/backend");
+    expect(text).toContain("1 open");
+    await client.close();
+  });
+
+  it("stays quiet about siblings when the branch has its own questions", async () => {
+    storage.setPrContext("acme/atlas", 7, {
+      headRef: "feat/backend", title: "Backend", headSha: "sha-1", stackId: 99, stackSize: 2, stackPosition: 1,
+    });
+    storage.setPrContext("acme/atlas", 8, {
+      headRef: "feat/frontend", title: "Frontend", headSha: "sha-2", stackId: 99, stackSize: 2, stackPosition: 2,
+    });
+    storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 1, text: "on backend", headSha: null });
+    storage.addQuestion("acme/atlas", 8, { path: "b.ts", line: 1, text: "on frontend", headSha: null });
+
+    const client = await connect();
+    const text = textOf((await client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", branch: "feat/frontend" },
+    })) as { content?: unknown });
+    expect(text).toContain("on frontend");
+    expect(text).not.toContain("Call this tool again");
     await client.close();
   });
 
   it("flags a question whose line predates the commits now on the branch", async () => {
     storage.setPrContext("acme/atlas", 7, {
-      headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null,
+      headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null,
     });
     storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "captured at sha-1", headSha: "sha-1" });
 
@@ -164,7 +208,7 @@ describe("MCP endpoint", () => {
 
     // The branch moves: the reviewer's line number is now only where it used to be.
     storage.setPrContext("acme/atlas", 7, {
-      headRef: "feat/thing", title: "Feature", headSha: "sha-2", stackSize: null, stackPosition: null,
+      headRef: "feat/thing", title: "Feature", headSha: "sha-2", stackId: null, stackSize: null, stackPosition: null,
     });
     const moved = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions", arguments: { repo: "acme/atlas", prNumber: 7 },
