@@ -15,16 +15,20 @@ worktree.
 1. Work from the Gander worktree root.
 2. Resolve the current PR with `gh pr view --json number,url,headRefName` and
    resolve the repository ID with `gh repo view --json nameWithOwner`.
-3. Make sure `.gander/config.json` contains that repository in `repos` and that
-   `lastReview` names the resolved repository and PR. Preserve every unrelated
-   config field. This is a temporary development fallback until the Gander CLI
-   can command a running app directly.
-4. Start the worktree stack with `bin/dev -D`. If it is already running after
-   the config change, run `bin/dev restart app` so Electron reloads the config.
+3. Start the worktree stack with `bin/dev -D`, unless `bin/dev status` shows it
+   already running.
+4. Open the PR in that worktree's app:
+
+   ```bash
+   bin/gander --repo OWNER/REPO --pr NUMBER
+   ```
+
+   The command registers the repository if the app has not seen it, and prints
+   what it opened or why it could not. Never edit `.gander/config.json` to steer
+   the app.
 5. Run `bin/mcp check`. Report any dev-stack or MCP error; do not claim the PR
    is ready merely because an Electron process exists.
-6. Tell the reviewer the exact PR and worktree instance that are open. If the
-   app did not restore that PR, say so and use its visible repo and PR controls.
+6. Tell the reviewer the exact PR and worktree instance that are open.
 
 ## Read review questions
 
@@ -66,6 +70,8 @@ MCP contract has no threaded agent reply; the `note` on
 - `bin/mcp inspect` opens its web debugger on ports allocated to this worktree.
 - Read `DEVSTACK.md` before changing how the stack or instance discovery works.
 
-Keep `bin/mcp` as the worktree-local development bridge. A future installed
-`gander` CLI may provide app control and instance selection, but it must retain
-this local-first scoping and an explicit override for another instance.
+`bin/gander` and `bin/mcp` are both worktree-local: each reads this checkout's
+endpoint, token, and app socket from `.env`, so a command run here reaches this
+worktree's app and service and no other. An installed `gander` CLI will replace
+`bin/gander` once the app is packaged, and must keep that scoping with an
+explicit override for another instance.
