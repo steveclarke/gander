@@ -6,6 +6,10 @@ services:
     env_file:
       - .env
       - .pc_env
+  mcp_inspector_client:
+    env_var: MCP_INSPECTOR_CLIENT_PORT
+  mcp_inspector_sandbox:
+    env_var: MCP_INSPECTOR_SANDBOX_PORT
 
 computed:
   # The app's serviceUrl and the readiness probe both read this. Built from the

@@ -8,6 +8,7 @@
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
+    "@modelcontextprotocol/inspector": "2.2.0",
     "@vitejs/plugin-vue": "^5.2.4",
     "jsdom": "^30.0.1",
     "typescript": "^7.0.2",
