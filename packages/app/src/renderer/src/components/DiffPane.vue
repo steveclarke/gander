@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { languageForPath } from "../languages.js";
 import { setupMonacoWorkers } from "../monaco.js";
 import type { Store } from "../store.js";
-import { Check, TriangleAlert } from "lucide-vue-next";
+import { Check, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
 
 const props = defineProps<{ store: Store }>();
 const host = ref<HTMLElement | null>(null);
@@ -22,6 +22,8 @@ const dirName = computed(() => {
   return parts.length ? `${parts.join("/")}/` : "";
 });
 const baseName = computed(() => current.value?.path.split("/").pop() ?? "");
+// The branch the pull request targets — "master" as often as "main".
+const baseRef = computed(() => props.store.view?.pr.baseRef ?? "the base branch");
 
 // git.ts hashes a binary blob's raw bytes but withholds its content, so `content === null`
 // paired with a real hash (as opposed to a null hash, which means "absent at this revision")
@@ -110,9 +112,27 @@ onBeforeUnmount(dispose);
   <section v-if="current" class="pane">
     <header class="filehead">
       <span class="path"><span class="dir">{{ dirName }}</span>{{ baseName }}</span>
-      <div class="tabs">
-        <button :class="{ active: view === 'diff' }" @click="view = 'diff'">vs main</button>
-        <button :class="{ active: view === 'full' }" @click="view = 'full'">full file</button>
+      <div class="tabs" role="tablist">
+        <button
+          role="tab"
+          :aria-selected="view === 'diff'"
+          :class="{ active: view === 'diff' }"
+          :aria-label="`Changes against ${baseRef}`"
+          :title="`Changes against ${baseRef}`"
+          @click="view = 'diff'"
+        >
+          <FileDiff :size="15" />
+        </button>
+        <button
+          role="tab"
+          :aria-selected="view === 'full'"
+          :class="{ active: view === 'full' }"
+          aria-label="Full file"
+          title="Full file"
+          @click="view = 'full'"
+        >
+          <FileText :size="15" />
+        </button>
       </div>
       <button
         class="check"
@@ -169,14 +189,16 @@ onBeforeUnmount(dispose);
   flex: none;
 }
 .tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
   background: none;
   border: none;
   color: var(--dim);
-  font-size: 11.5px;
-  padding: 3px 10px;
   border-radius: 5px;
   cursor: pointer;
-  white-space: nowrap;
 }
 .tabs button.active {
   background: #2c3340;
