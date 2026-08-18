@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("gander", {
   addRepo: invoke("addRepo"),
   listPrs: invoke("listPrs"),
   lastReview: invoke("lastReview"),
+  serviceHealthy: invoke("serviceHealthy"),
   openPr: invoke("openPr"),
   setChecked: invoke("setChecked"),
   setCheckedMany: invoke("setCheckedMany"),

@@ -9,9 +9,15 @@ export interface Store {
   view: PrView | null;
   selectedPath: string | null;
   error: string | null;
+  /** Whether the review service answered its last health check. */
+  serviceReachable: boolean;
+  /** When the pull request was last fetched from origin, as an ISO string. */
+  lastFetchAt: string | null;
   /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
   busy: boolean;
   loadRepos(): Promise<void>;
+  checkService(): Promise<void>;
+  dismissError(): void;
   /** Reopen the pull request that was open when the app last closed. */
   restoreLastReview(): Promise<void>;
   addRepo(url: string): Promise<void>;
@@ -35,12 +41,20 @@ export function createStore(api: GanderApi): Store {
     view: null,
     selectedPath: null,
     error: null,
+    serviceReachable: true,
+    lastFetchAt: null,
     busy: false,
 
     async loadRepos() {
       await guard(async () => {
         store.repos = await api.listRepos();
       });
+    },
+    async checkService() {
+      store.serviceReachable = await api.serviceHealthy();
+    },
+    dismissError() {
+      store.error = null;
     },
     async restoreLastReview() {
       const last = await api.lastReview();
@@ -55,30 +69,32 @@ export function createStore(api: GanderApi): Store {
       if (store.error) store.error = null;
     },
     async addRepo(url: string) {
-      await withBusy(() => guard(async () => {
+      await userAction(() => withBusy(() => guard(async () => {
         await api.addRepo(url);
         store.repos = await api.listRepos();
-      }));
+      })));
     },
     async selectRepo(repoId: string) {
-      await withBusy(() => guard(async () => {
+      await userAction(() => withBusy(() => guard(async () => {
         store.prs = await api.listPrs(repoId);
         store.currentRepoId = repoId;
         store.view = null;
         store.selectedPath = null;
-      }));
+      })));
     },
     async openPr(prNumber: number) {
-      await withBusy(() => guard(async () => {
+      await userAction(() => withBusy(() => guard(async () => {
         if (!store.currentRepoId) throw new Error("no repo selected");
         store.view = await api.openPr(store.currentRepoId, prNumber);
         store.selectedPath = store.view.files[0]?.path ?? null;
-      }));
+        store.lastFetchAt = new Date().toISOString();
+      })));
     },
     async refresh() {
       await withBusy(() => guard(async () => {
         if (!store.currentRepoId || !store.view) return;
         store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+        store.lastFetchAt = new Date().toISOString();
       }));
     },
     async setChecked(path: string, checked: boolean) {
@@ -118,13 +134,22 @@ export function createStore(api: GanderApi): Store {
     },
   });
 
+  // An error stays on screen until the reviewer dismisses it or starts something new.
+  // Clearing it on any success meant the 30-second poll wiped failures before they
+  // could be read — the app looked fine while nothing had actually worked.
   async function guard(fn: () => Promise<void>): Promise<void> {
     try {
       await fn();
-      store.error = null;
     } catch (err) {
       store.error = (err as Error).message;
     }
+  }
+
+  // Wraps the actions the reviewer starts themselves. Those do clear the previous
+  // error: they are the reviewer saying "try again".
+  async function userAction(fn: () => Promise<void>): Promise<void> {
+    store.error = null;
+    await fn();
   }
 
   async function withBusy(fn: () => Promise<void>): Promise<void> {

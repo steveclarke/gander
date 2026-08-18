@@ -33,6 +33,7 @@ async function bootstrap(): Promise<GanderConfig> {
     return entry;
   });
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, ghToken));
+  ipcMain.handle("gander:serviceHealthy", async () => service.healthy());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:openPr", async (_e, repoId: string, n: number) => {
     const view = await reviewer.openPr(repoId, n);

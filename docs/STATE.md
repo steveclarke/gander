@@ -50,20 +50,13 @@ for registration.
 Each opened pull request records its own branch, which is how the service maps an
 agent's working branch to a pull request without holding GitHub credentials.
 
-## Not in M1
+## Still open
 
-Carried into M2 planning:
-
-- The "since my ✓" delta tab
 - Local branch/worktree viewer (stateless, no review state)
-- Three spec items the M1 plan omitted: the Fetch origin segment, the file-tree
-  toggle, and the status bar showing service reachability and last fetch
-- Sticky `store.error` — errors currently clear too eagerly
-- Progress feedback during a first clone. Its absence caused repeated clicks on
-  an unresponsive button, which surfaced the clone race fixed in b575f50.
-- End-to-end tests. M1 has no harness driving the real Electron window; every
-  layer below it is tested. The clone race was invisible to the whole suite
+- End-to-end tests. There is still no harness driving the real Electron window;
+  every layer below it is tested. The clone race was invisible to the whole suite
   because no test ever clicked twice.
+- Packaging: signing, notarization, and the Homebrew cask.
 
 ## Open decision
 

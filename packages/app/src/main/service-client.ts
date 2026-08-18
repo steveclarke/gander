@@ -9,6 +9,8 @@ export interface ServiceClient {
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<void>;
   setHeadRef(repoId: string, prNumber: number, headRef: string): Promise<void>;
   getSnapshot(repoId: string, prNumber: number, path: string): Promise<{ baseContent: string | null; headContent: string | null }>;
+  /** Whether the service answers at all. Never throws — unreachable is an answer, not a failure. */
+  healthy(): Promise<boolean>;
 }
 
 const SnapshotSchema = z.object({
@@ -61,6 +63,14 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
     },
     deleteQuestion: async (repoId, prNumber, id) => {
       await req("DELETE", `/api/reviews/${enc(repoId)}/${prNumber}/questions/${id}`);
+    },
+    healthy: async () => {
+      try {
+        const res = await fetch(`${baseUrl}/healthz`);
+        return res.ok;
+      } catch {
+        return false;
+      }
     },
     getSnapshot: async (repoId, prNumber, path) => {
       const url = `/api/reviews/${enc(repoId)}/${prNumber}/snapshot?path=${enc(path)}`;

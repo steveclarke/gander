@@ -22,6 +22,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     setCheckedMany: async (_r, _n, paths) => prView(paths),
     refreshPr: async () => prView(),
     lastReview: async () => null,
+    serviceHealthy: async () => true,
     reviewedSnapshot: async () => null,
     addQuestion: async () => prView(),
     deleteQuestion: async () => prView(),
@@ -126,6 +127,58 @@ describe("store", () => {
       await store.restoreLastReview();
       expect(store.view).toBeNull();
       expect(store.error).toBeNull();
+    });
+  });
+
+  describe("errors", () => {
+    it("keeps an error on screen until the reviewer acts, not until the next poll", async () => {
+      let fail = true;
+      const store = createStore(fakeApi({
+        refreshPr: async () => { if (fail) throw new Error("Gander service unreachable"); return prView(); },
+      }));
+      await store.loadRepos();
+      await store.selectRepo("acme/atlas");
+      await store.openPr(1);
+
+      await store.refresh();
+      expect(store.error).toContain("unreachable");
+
+      // The background poll succeeding must not wipe a failure the reviewer has not seen.
+      fail = false;
+      await store.refresh();
+      expect(store.error).toContain("unreachable");
+
+      store.dismissError();
+      expect(store.error).toBeNull();
+    });
+
+    it("clears the error when the reviewer starts something new", async () => {
+      let fail = true;
+      const store = createStore(fakeApi({
+        listPrs: async () => { if (fail) throw new Error("GitHub API 403"); return []; },
+      }));
+      await store.loadRepos();
+      await store.selectRepo("acme/atlas");
+      expect(store.error).toContain("403");
+
+      fail = false;
+      await store.selectRepo("acme/atlas");
+      expect(store.error).toBeNull();
+    });
+
+    it("records when the pull request was last fetched", async () => {
+      const store = createStore(fakeApi());
+      await store.loadRepos();
+      await store.selectRepo("acme/atlas");
+      expect(store.lastFetchAt).toBeNull();
+      await store.openPr(1);
+      expect(store.lastFetchAt).not.toBeNull();
+    });
+
+    it("reports the service as unreachable when the health check fails", async () => {
+      const store = createStore(fakeApi({ serviceHealthy: async () => false }));
+      await store.checkService();
+      expect(store.serviceReachable).toBe(false);
     });
   });
 });
