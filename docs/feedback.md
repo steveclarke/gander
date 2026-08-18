@@ -74,3 +74,24 @@ following VS Code's toolbar grammar.
 Addressed by adopting Lucide (`lucide-vue-next`) as the icon set and replacing
 the emoji and Unicode glyphs throughout: repository, pull request, add, refresh,
 tree chevrons, checkbox marks, and the changed-since banner.
+
+## Stacked pull requests are invisible
+
+A feature split across a stack shows up as unrelated pull requests. Reviewing one
+and capturing a question against it gives no indication that a sibling exists, or
+which of the two a given file belongs to — the reviewer has to remember which
+branch holds what.
+
+GitHub's own list shows position within the stack (`1/2`, `2/2`) beside a stack
+icon.
+
+The data costs nothing extra: the `pulls` list response Gander already fetches
+carries a `stack` object per pull request.
+
+```json
+"stack": { "id": 423381, "number": 1029, "size": 2, "position": 1 }
+```
+
+A shared `id` groups the members, and `position`/`size` order them. Worth showing
+in the Reviewing dropdown, and worth considering for questions — an agent working
+one branch of a stack currently sees nothing captured against its sibling.
