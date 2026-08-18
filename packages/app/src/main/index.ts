@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { repoIdFromUrl, type RepoEntry } from "@gander/shared";
-import { loadConfig, saveConfig } from "./config.js";
+import { loadConfig, resolveServiceConnection, saveConfig } from "./config.js";
 import { createGitEngine } from "./git.js";
 import { listOpenPrs, resolveGithubToken } from "./github.js";
 import { createReviewer } from "./review.js";
@@ -12,7 +12,8 @@ async function bootstrap(): Promise<void> {
   const cfg = loadConfig();
   const ghToken = await resolveGithubToken(cfg.githubToken);
   const git = createGitEngine(join(app.getPath("userData"), "clones"));
-  const service = createServiceClient(cfg.serviceUrl, cfg.serviceToken);
+  const conn = resolveServiceConnection(cfg);
+  const service = createServiceClient(conn.url, conn.token);
   const urlFor = (repoId: string): string => {
     const entry = cfg.repos.find((r) => r.repoId === repoId);
     if (!entry) throw new Error(`Repo ${repoId} is not registered`);

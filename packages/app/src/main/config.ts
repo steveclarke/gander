@@ -39,3 +39,17 @@ export function saveConfig(cfg: GanderConfig, path = defaultPath()): void {
   writeFileSync(path, JSON.stringify(cfg, null, 2), { mode: 0o600 });
   chmodSync(path, 0o600);
 }
+
+/**
+ * Where the app should actually reach the service. The dev stack allocates the port
+ * per worktree and generates the token, writing both into .env, so env wins over the
+ * file. Deliberately not folded into loadConfig: saveConfig round-trips whatever
+ * loadConfig returned, and persisting a machine-specific port and token into the
+ * config file is exactly what this avoids.
+ */
+export function resolveServiceConnection(cfg: GanderConfig): { url: string; token: string } {
+  return {
+    url: process.env.GANDER_SERVICE_URL ?? cfg.serviceUrl,
+    token: process.env.GANDER_TOKEN ?? cfg.serviceToken,
+  };
+}

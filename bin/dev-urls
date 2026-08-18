@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Print the stack's allocated ports, then idle so process-compose keeps the pane.
+
+if command -v outport > /dev/null 2>&1; then
+  outport ports
+  echo ""
+fi
+
+exec tail -f /dev/null

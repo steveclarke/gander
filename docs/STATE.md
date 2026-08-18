@@ -2,7 +2,7 @@
 
 ## Where the work is
 
-`m1-walking-skeleton`, 30 commits ahead of `master`. Not yet merged.
+M1 is merged to `master`.
 
 - Spec: `docs/superpowers/specs/2026-08-15-gander-design.md` (approved, binding)
 - Plan: `docs/superpowers/plans/2026-08-15-m1-walking-skeleton.md` (all 11 tasks complete)
@@ -28,20 +28,12 @@ is the base for the M2 delta view.
 
 ## Running it locally
 
-Two processes. Service first:
-
 ```
-GANDER_TOKEN=gander-local-dev GANDER_DB=$HOME/.local/share/gander/gander.db GANDER_PORT=8390 pnpm --filter @gander/service dev
-```
-
-Then the app:
-
-```
-pnpm --filter @gander/app dev
+bin/setup
+bin/dev
 ```
 
-Config lives at `~/.config/gander/config.json` — service URL, token, and the
-list of registered repos.
+See `DEVSTACK.md`. Config and review state are repo-local, under `.gander/`.
 
 ## Not in M1
 

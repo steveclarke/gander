@@ -1,0 +1,37 @@
+version: "0.5"
+
+log_level: info
+
+shell:
+  shell_command: "bash"
+  shell_argument: "-lc"
+
+# GANDER_PORT, GANDER_TOKEN and GANDER_SERVICE_URL come from .env / .pc_env,
+# which process-compose loads before anything starts. Paths are built from $PWD
+# rather than hardcoded, so a worktree keeps its own database and config.
+
+processes:
+  service:
+    command: eval "$(mise activate bash)" && GANDER_DB="$PWD/.gander/gander.db" pnpm --filter @gander/service dev
+    readiness_probe:
+      exec:
+        command: "curl -sf $GANDER_SERVICE_URL/healthz"
+      initial_delay_seconds: 2
+      period_seconds: 2
+      failure_threshold: 15
+
+  app:
+    command: eval "$(mise activate bash)" && GANDER_CONFIG="$PWD/.gander/config.json" pnpm --filter @gander/app dev
+    depends_on:
+      service:
+        condition: process_healthy
+    # Closing the Electron window is a deliberate quit, not a crash — restarting
+    # would reopen a window that was just dismissed.
+    availability:
+      restart: "no"
+
+  urls:
+    command: bin/dev-urls
+    depends_on:
+      service:
+        condition: process_healthy

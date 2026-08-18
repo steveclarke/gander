@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# One-time (or after a fresh clone) setup. Safe to re-run.
+
+cd "$(dirname "$0")/.."
+
+echo "==> Installing dependencies"
+pnpm install
+
+echo "==> Allocating ports"
+if command -v outport > /dev/null 2>&1; then
+  outport up
+else
+  echo "outport not found — falling back to the default port 8390."
+  echo "Install: brew install steveclarke/tap/outport"
+  printf 'GANDER_PORT=8390\nGANDER_SERVICE_URL=http://127.0.0.1:8390\n' > .env
+  cp .env .pc_env
+fi
+
+# The service token is shared by both processes: the service authenticates with
+# it, the app sends it. It lives outside outport's fenced block, which outport
+# preserves across `outport up`.
+if ! grep -q '^GANDER_TOKEN=' .env 2>/dev/null; then
+  echo "==> Generating a dev service token"
+  printf 'GANDER_TOKEN=%s\n' "$(openssl rand -hex 16)" >> .env
+  grep '^GANDER_TOKEN=' .env >> .pc_env
+fi
+
+# A repo-local config keeps ~/.config/gander/config.json untouched, and keeps
+# each worktree's registered repos separate. serviceUrl and serviceToken here
+# are placeholders — the live values come from .env at runtime.
+if [ ! -f .gander/config.json ]; then
+  echo "==> Seeding .gander/config.json"
+  mkdir -p .gander
+  cat > .gander/config.json <<'JSON'
+{
+  "serviceUrl": "http://127.0.0.1:8390",
+  "serviceToken": "placeholder-overridden-by-env",
+  "repos": []
+}
+JSON
+fi
+
+echo
+echo "Setup complete. Start the stack with: bin/dev"
