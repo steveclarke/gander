@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review with Gander"
+  short_description: "Dogfood a PR through the local Gander app"
+  default_prompt: "Use $review-with-gander to open this worktree PR and respond to its review questions."

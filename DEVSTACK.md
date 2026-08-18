@@ -132,7 +132,12 @@ The Inspector package is an exact development dependency, while
 `GANDER_MCP_INSPECTOR_PACKAGE` can select another package version through
 `pnpm dlx` for deliberate compatibility testing.
 
-## Registering the MCP endpoint with an agent
+## Registering the MCP endpoint with an agent (optional)
+
+Agents working inside a Gander development worktree should use `bin/mcp` as
+documented above. It discovers this worktree's connection without changing
+global agent configuration. Direct MCP registration remains available for an
+agent working in another repository that needs to reach this Gander instance.
 
 Agents read the reviewer's questions from the same service, at `/mcp`, with the
 same bearer token. Port and token are allocated per checkout, so the command is
