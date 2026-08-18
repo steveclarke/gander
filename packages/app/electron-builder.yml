@@ -31,6 +31,13 @@ dmg:
 
 linux:
   category: Development
+  # Without this the binary is named from the package, and "@gander/app" flattens to
+  # "@ganderapp" — not a name a file path can carry.
+  executableName: gander
+  # Ties running windows to the .desktop entry, so the icon and title are right in a
+  # Linux dock rather than a generic Electron placeholder.
+  synopsis: Review code diffs, branches, and pull requests
+  syncDesktopName: true
   target:
     - AppImage
   # The reviewer's own Linux machine is Arch, where the AppImage is what installs.
