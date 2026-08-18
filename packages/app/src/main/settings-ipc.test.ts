@@ -35,6 +35,7 @@ describe("settings IPC", () => {
 
     const next = {
       editor: { fontFamily: "Consolas, monospace", fontSize: 20 },
+      window: { zoomLevel: 0.5 },
       workbench: {
         colorTheme: "Gander Dark" as const,
         iconTheme: "catppuccin-mocha" as const,
@@ -52,6 +53,7 @@ describe("settings IPC", () => {
     const { cfg, handlers, persist, onSettingsChanged } = fixture();
     await expect(handlers.get("gander:updateSettings")?.({}, {
       editor: { fontFamily: "monospace", fontSize: 200 },
+      window: DEFAULT_APP_SETTINGS.window,
       workbench: DEFAULT_APP_SETTINGS.workbench,
     })).rejects.toThrow(/fontSize/);
     expect(cfg.settings).toEqual(DEFAULT_APP_SETTINGS);
@@ -64,6 +66,7 @@ describe("settings IPC", () => {
     persist.mockImplementation(() => { throw new Error("disk full"); });
     await expect(handlers.get("gander:updateSettings")?.({}, {
       editor: { fontFamily: "Consolas, monospace", fontSize: 20 },
+      window: DEFAULT_APP_SETTINGS.window,
       workbench: DEFAULT_APP_SETTINGS.workbench,
     })).rejects.toThrow(/disk full/);
     expect(cfg.settings).toEqual(DEFAULT_APP_SETTINGS);

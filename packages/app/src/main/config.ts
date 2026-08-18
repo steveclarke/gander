@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { RepoEntry } from "@gander/shared";
 import { AppSettingsSchema, DEFAULT_APP_SETTINGS, type AppSettings } from "../settings.js";
+import { clampZoomLevel } from "../zoom.js";
 
 // owner/repo, matching repoIdFromUrl's output — a hand-edited config must not be able to flow
 // an arbitrary string into both a filesystem path (clone directory name) and a GitHub API URL.
@@ -52,9 +53,30 @@ export function loadConfig(path = defaultPath()): GanderConfig {
   // A missing file is a first run, not a failure. Anything present but malformed still
   // throws: that is a file someone edited, and silently replacing it would lose their work.
   if (!existsSync(path)) return unconfigured();
-  const parsed = ConfigSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
+  const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  const parsed = ConfigSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`Invalid config at ${path}: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
-  return parsed.data as GanderConfig;
+  const cfg = parsed.data as GanderConfig;
+  // Before window.zoomLevel became a public setting, the same value lived at the config
+  // root. Prefer an explicitly saved public setting, otherwise carry the old value forward.
+  const legacy = typeof raw === "object" && raw !== null && "zoomLevel" in raw
+    ? (raw as { zoomLevel?: unknown }).zoomLevel
+    : undefined;
+  const rawSettings = typeof raw === "object" && raw !== null && "settings" in raw
+    ? (raw as { settings?: unknown }).settings
+    : undefined;
+  const hasPublicZoom = typeof rawSettings === "object" && rawSettings !== null && "window" in rawSettings
+    && typeof (rawSettings as { window?: unknown }).window === "object"
+    && (rawSettings as { window: object }).window !== null
+    && "zoomLevel" in (rawSettings as { window: object }).window;
+  if (!hasPublicZoom && typeof legacy === "number") {
+    cfg.settings = {
+      ...cfg.settings,
+      window: { ...cfg.settings.window, zoomLevel: clampZoomLevel(legacy) },
+    };
+  }
+  delete cfg.zoomLevel;
+  return cfg;
 }
 
 export function saveConfig(cfg: GanderConfig, path = defaultPath()): void {

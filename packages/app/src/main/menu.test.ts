@@ -35,4 +35,25 @@ describe("application menu", () => {
     settings?.click?.({} as Electron.MenuItem, undefined, {} as Electron.KeyboardEvent);
     expect(callbacks.openSettings).toHaveBeenCalledOnce();
   });
+
+  it("routes every View zoom command through the shared zoom actions", () => {
+    const callbacks = actions();
+    callbacks.currentZoom.mockReturnValue(1);
+    const template = buildMenuTemplate("darwin", "Gander", callbacks);
+    const view = template.find((item) => item.label === "View");
+    const items = submenu(view!);
+
+    items.find((item) => item.label === "Zoom In" && item.visible !== false)?.click?.(
+      {} as Electron.MenuItem, undefined, {} as Electron.KeyboardEvent,
+    );
+    expect(callbacks.setZoom).toHaveBeenLastCalledWith(1.5);
+    items.find((item) => item.label === "Zoom Out")?.click?.(
+      {} as Electron.MenuItem, undefined, {} as Electron.KeyboardEvent,
+    );
+    expect(callbacks.setZoom).toHaveBeenLastCalledWith(0.5);
+    items.find((item) => item.label === "Actual Size")?.click?.(
+      {} as Electron.MenuItem, undefined, {} as Electron.KeyboardEvent,
+    );
+    expect(callbacks.setZoom).toHaveBeenLastCalledWith(0);
+  });
 });

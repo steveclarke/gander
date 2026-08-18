@@ -49,4 +49,7 @@ export interface GanderApi {
   getSettings(): Promise<AppSettings>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;
   onOpenSettings(listener: () => void): () => void;
+  getZoomLevel(): Promise<number>;
+  setZoomLevel(level: number): Promise<number>;
+  onZoomChanged(listener: (level: number) => void): () => void;
 }
