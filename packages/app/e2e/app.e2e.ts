@@ -337,6 +337,9 @@ describe("Gander end to end", () => {
     await browser.keys("n");
     const question = await $("textarea[placeholder='What needs answering or changing here?']");
     await question.waitForDisplayed();
+    const questionSize = await question.getSize();
+    expect(questionSize.width).toBeGreaterThanOrEqual(900);
+    expect(questionSize.height).toBeGreaterThanOrEqual(350);
     await question.setValue("Why does this need to happen here?");
     await browser.keys("Enter");
     await $("button[aria-label='Questions']").click();
