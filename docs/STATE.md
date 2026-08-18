@@ -5,7 +5,6 @@
 M1 is merged to `master`.
 
 - Spec: `docs/superpowers/specs/2026-08-15-gander-design.md` (approved, binding)
-- Plan: `docs/superpowers/plans/2026-08-15-m1-walking-skeleton.md` (all 11 tasks complete)
 - UI design of record: `docs/mockups/mockup-v4.html`
 
 ## M1 — what exists

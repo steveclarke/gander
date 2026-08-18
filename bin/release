@@ -10,10 +10,11 @@ set -euo pipefail
 #
 # Prerequisites:
 #   - "Developer ID Application: Sevenview Studios Inc." in the keychain
-#   - Notarization credentials: xcrun notarytool store-credentials "outport-notarize"
+#   - Notarization credentials stored with `xcrun notarytool store-credentials`,
+#     and APPLE_KEYCHAIN_PROFILE naming that profile
 #   - gh authenticated
 #
-# Usage: bin/release 0.2.0
+# Usage: APPLE_KEYCHAIN_PROFILE=<profile> bin/release 0.2.0
 
 VERSION="${1:?Usage: bin/release VERSION}"
 TAG="v${VERSION}"
@@ -53,7 +54,10 @@ echo "==> Building, signing, and notarizing"
 # Emptied first: the upload below globs dist/, and artifacts left by an earlier version
 # would be uploaded to this release as if they belonged to it.
 rm -rf packages/app/dist
-export APPLE_KEYCHAIN_PROFILE="outport-notarize"
+# Named by the environment rather than here: a keychain profile is personal to the
+# machine holding the credentials, and this repository is public.
+: "${APPLE_KEYCHAIN_PROFILE:?set APPLE_KEYCHAIN_PROFILE to a notarytool keychain profile — create one with: xcrun notarytool store-credentials}"
+export APPLE_KEYCHAIN_PROFILE
 pnpm --filter @gander/app run dist:mac
 
 # Globbed rather than named: electron-builder decides the artifact names, and a
