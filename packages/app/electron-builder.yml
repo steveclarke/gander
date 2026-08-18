@@ -1,0 +1,42 @@
+appId: ca.sevenview.gander
+productName: Gander
+copyright: Copyright © 2026 Sevenview Studios Inc.
+
+directories:
+  output: dist
+  buildResources: resources
+
+# electron-vite bundles main, preload, and renderer with their dependencies, so
+# the package is the build output and nothing else — no node_modules, and none of
+# pnpm's symlink problems.
+files:
+  - out/**/*
+  - package.json
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: arm64
+    - target: zip
+      arch: arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  notarize: true
+
+dmg:
+  title: Gander
+
+linux:
+  category: Development
+  target:
+    - AppImage
+  # The reviewer's own Linux machine is Arch, where the AppImage is what installs.
+  # A .deb can follow if anyone asks for one.
+
+publish:
+  provider: github
+  owner: steveclarke
+  repo: gander

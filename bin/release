@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Build, sign, notarize, and publish a Gander release.
+#
+# macOS artifacts are built here, because the Developer ID certificate and the
+# notarization credentials live in this machine's keychain rather than in a
+# public repository's secrets. The Linux AppImage is built by GitHub Actions
+# once the release exists.
+#
+# Prerequisites:
+#   - "Developer ID Application: Sevenview Studios Inc." in the keychain
+#   - Notarization credentials: xcrun notarytool store-credentials "outport-notarize"
+#   - gh authenticated
+#
+# Usage: bin/release 0.2.0
+
+VERSION="${1:?Usage: bin/release VERSION}"
+TAG="v${VERSION}"
+
+cd "$(dirname "$0")/.."
+
+if [[ "$(git branch --show-current)" != "master" ]]; then
+  echo "Releases are cut from master." >&2
+  exit 1
+fi
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "Working tree is not clean." >&2
+  exit 1
+fi
+
+echo "==> Gander v${VERSION}"
+
+node -e '
+const fs = require("node:fs");
+const path = "packages/app/package.json";
+const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+pkg.version = process.argv[1];
+fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+' "$VERSION"
+git add packages/app/package.json
+git commit -m "Release v${VERSION}"
+git tag "$TAG"
+git push origin master --tags
+
+# Created before the build so the Linux workflow, which triggers on the release,
+# has somewhere to upload to.
+gh release create "$TAG" --title "Gander v${VERSION}" --notes "Gander v${VERSION}"
+
+echo "==> Building, signing, and notarizing"
+export APPLE_KEYCHAIN_PROFILE="outport-notarize"
+pnpm --filter @gander/app run dist:mac
+
+# Globbed rather than named: electron-builder decides the artifact names, and a
+# renamed default here would fail the release after it had already been tagged.
+cd packages/app
+gh release upload "$TAG" dist/*.dmg dist/*.zip dist/*.blockmap dist/latest-mac.yml
+
+echo "==> Published https://github.com/steveclarke/gander/releases/tag/${TAG}"
+echo "    The Linux AppImage follows from CI."

@@ -31,6 +31,7 @@ in code, comments, commits, or issues.
 | Typecheck (all packages) | `pnpm typecheck` |
 | Electron E2E | `pnpm test:e2e` |
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
+| Build an unsigned app | `pnpm --filter @gander/app run dist:unsigned` |
 | Isolated working copy | `bin/worktree add <name>` |
 | Check this worktree's MCP bridge | `bin/mcp check` |
 
