@@ -21,9 +21,9 @@ computed:
       - .env
       - .pc_env
 
-  # process-compose reads .pc_env before anything else. Setting this both enables
-  # UDS mode and gives each worktree its own control socket, so `bin/dev status`
-  # in one checkout never talks to another checkout's stack.
+  # bin/dev loads .pc_env before every process-compose command. Setting this
+  # both enables UDS mode and gives each worktree its own control socket, so a
+  # command in one checkout never talks to another checkout's stack.
   PC_SOCKET_PATH:
     value: "/tmp/process-compose-${project_name}${instance:+-${instance}}.sock"
     env_file: .pc_env

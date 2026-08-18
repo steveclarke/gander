@@ -64,7 +64,7 @@ checkout.
 | Path | Contents |
 |------|----------|
 | `.env` | Allocated port, service URL, generated dev token, app socket path |
-| `.pc_env` | The same values plus `PC_SOCKET_PATH`, read by process-compose at startup |
+| `.pc_env` | The same values plus `PC_SOCKET_PATH`, loaded by `bin/dev` before every process-compose command |
 | `.gander/config.json` | Repo-local app config — registered repos |
 | `.gander/gander.db` | Review state (checkoffs, snapshots) |
 
