@@ -17,9 +17,6 @@ const ConfigSchema = z
     serviceUrl: z.string().url().or(z.literal("")),
     serviceToken: z.string(),
     githubToken: z.string().min(1).optional(),
-    // Electron zoom level: 0 is 100%, each step is a 20% change. Persisted so the
-    // window reopens at the size the reader last chose.
-    zoomLevel: z.number().optional(),
     // The pull request open when the app last closed, reopened on launch.
     lastReview: z.object({ repoId: RepoIdSchema, prNumber: z.number().int().positive() }).strict().optional(),
     settings: AppSettingsSchema,
@@ -31,7 +28,6 @@ export interface GanderConfig {
   serviceUrl: string;
   serviceToken: string;
   githubToken?: string;
-  zoomLevel?: number;
   lastReview?: LastReview;
   settings: AppSettings;
   repos: RepoEntry[];

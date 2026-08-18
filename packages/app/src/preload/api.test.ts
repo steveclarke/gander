@@ -40,6 +40,7 @@ describe("preload API", () => {
 
     const settings = {
       editor: { fontFamily: "Fira Code, monospace", fontSize: 17 },
+      window: DEFAULT_APP_SETTINGS.window,
       workbench: { ...DEFAULT_APP_SETTINGS.workbench, colorTheme: "Gander Dark" as const },
     };
     await api.updateSettings(settings);
@@ -81,5 +82,26 @@ describe("preload API", () => {
 
     expect(api.onOpenSettings(listener)).toBe(cleanup);
     expect(subscribe).toHaveBeenCalledWith("gander:openSettings", listener);
+  });
+
+  it("routes zoom calls and forwards main-process zoom changes", async () => {
+    const invoke = vi.fn(async () => 0.5);
+    const cleanup = vi.fn();
+    let subscribed: ((...args: any[]) => void) | undefined;
+    const subscribe: Parameters<typeof createGanderApi>[1] = vi.fn((_channel, listener) => {
+      subscribed = listener;
+      return cleanup;
+    });
+    const api = createGanderApi(invoke, subscribe);
+    const listener = vi.fn();
+
+    await api.getZoomLevel();
+    expect(invoke).toHaveBeenLastCalledWith("gander:getZoomLevel");
+    await api.setZoomLevel(0.5);
+    expect(invoke).toHaveBeenLastCalledWith("gander:setZoomLevel", 0.5);
+    expect(api.onZoomChanged(listener)).toBe(cleanup);
+    expect(subscribe).toHaveBeenCalledWith("gander:zoomChanged", expect.any(Function));
+    subscribed?.(1);
+    expect(listener).toHaveBeenCalledWith(1);
   });
 });

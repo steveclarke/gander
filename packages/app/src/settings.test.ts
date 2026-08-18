@@ -17,6 +17,7 @@ describe("application settings", () => {
         fontFamily: "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
         fontSize: 16,
       },
+      window: { zoomLevel: 0 },
       workbench: {
         colorTheme: "Catppuccin Mocha",
         iconTheme: "catppuccin-mocha",
@@ -38,6 +39,7 @@ describe("application settings", () => {
     }))
       .toEqual({
         editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 },
+        window: DEFAULT_APP_SETTINGS.window,
         workbench: DEFAULT_APP_SETTINGS.workbench,
       });
   });
@@ -45,6 +47,7 @@ describe("application settings", () => {
   it("normalizes Vue settings proxies into data Electron can clone", () => {
     const reactiveSettings = reactive({
       editor: { ...DEFAULT_APP_SETTINGS.editor },
+      window: { ...DEFAULT_APP_SETTINGS.window },
       workbench: {
         ...DEFAULT_APP_SETTINGS.workbench,
         colorTheme: "Gander Dark" as const,
@@ -56,6 +59,7 @@ describe("application settings", () => {
     expect(() => structuredClone(parsed)).not.toThrow();
     expect(parsed).not.toBe(reactiveSettings);
     expect(parsed.editor).not.toBe(reactiveSettings.editor);
+    expect(parsed.window).not.toBe(reactiveSettings.window);
     expect(parsed.workbench).not.toBe(reactiveSettings.workbench);
   });
 
@@ -64,6 +68,8 @@ describe("application settings", () => {
     [{ editor: { fontFamily: "monospace", fontSize: 5 } }, "fontSize"],
     [{ editor: { fontFamily: "monospace", fontSize: 101 } }, "fontSize"],
     [{ editor: { fontFamily: "monospace", fontSize: Number.NaN } }, "fontSize"],
+    [{ ...DEFAULT_APP_SETTINGS, window: { zoomLevel: -4 } }, "zoomLevel"],
+    [{ ...DEFAULT_APP_SETTINGS, window: { zoomLevel: 7 } }, "zoomLevel"],
     [{ editor: { fontFamily: "monospace", fontSize: 16 }, workbench: { colorTheme: "Unknown" } }, "colorTheme"],
     [{ editor: { fontFamily: "monospace", fontSize: 16 }, workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "Unknown" } }, "iconTheme"],
     [{ ...DEFAULT_APP_SETTINGS, workbench: { ...DEFAULT_APP_SETTINGS.workbench, tree: { fontFamily: "", fontSize: 13, inheritEditorTypography: false } } }, "fontFamily"],
@@ -78,6 +84,7 @@ describe("application settings", () => {
     expect(JSON.parse(source)).toEqual({
       "editor.fontFamily": DEFAULT_EDITOR_FONT_FAMILY,
       "editor.fontSize": 16,
+      "window.zoomLevel": 0,
       "workbench.colorTheme": "Catppuccin Mocha",
       "workbench.iconTheme": "catppuccin-mocha",
       "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY,
@@ -91,15 +98,19 @@ describe("application settings", () => {
   it.each([
     ["{", /Invalid settings JSON/],
     [JSON.stringify({ "editor.fontFamily": "monospace" }), /editor\.fontSize/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Unknown", "workbench.iconTheme": "catppuccin-mocha", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false }), /workbench\.colorTheme/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "Unknown", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false }), /workbench\.iconTheme/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "catppuccin-mocha", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false, serviceToken: "nope" }), /Unrecognized key/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "window.zoomLevel": 0, "workbench.colorTheme": "Unknown", "workbench.iconTheme": "catppuccin-mocha", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false }), /workbench\.colorTheme/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "window.zoomLevel": 0, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "Unknown", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false }), /workbench\.iconTheme/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "window.zoomLevel": 0, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "catppuccin-mocha", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false, serviceToken: "nope" }), /Unrecognized key/],
   ])("rejects invalid or non-public settings JSON", (source, message) => {
     expect(() => settingsFromJson(source)).toThrow(message);
   });
 
   it("rejects incomplete and unknown settings shapes", () => {
     expect(() => parseAppSettings({ editor: DEFAULT_APP_SETTINGS.editor })).toThrow(/workbench/);
+    expect(() => parseAppSettings({
+      editor: DEFAULT_APP_SETTINGS.editor,
+      workbench: DEFAULT_APP_SETTINGS.workbench,
+    })).toThrow(/window/);
     expect(() => parseAppSettings({
       ...DEFAULT_APP_SETTINGS,
       workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },

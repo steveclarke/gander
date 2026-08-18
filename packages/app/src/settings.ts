@@ -5,6 +5,7 @@ import {
   FILE_ICON_THEME_IDS,
   type FileIconThemeId,
 } from "./file-icon-themes.js";
+import { DEFAULT_ZOOM_LEVEL, ZoomLevelSchema } from "./zoom.js";
 
 export const DEFAULT_EDITOR_FONT_FAMILY =
   "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace";
@@ -27,6 +28,14 @@ export const TreeTypographySettingsSchema = z.object({
   inheritEditorTypography: z.boolean(),
 }).strict();
 
+export const WindowSettingsSchema = z.object({
+  zoomLevel: ZoomLevelSchema,
+}).strict();
+
+export const DEFAULT_WINDOW_SETTINGS: Readonly<WindowSettings> = Object.freeze({
+  zoomLevel: DEFAULT_ZOOM_LEVEL,
+});
+
 export const DEFAULT_TREE_TYPOGRAPHY_SETTINGS: Readonly<TreeTypographySettings> = Object.freeze({
   fontFamily: DEFAULT_TREE_FONT_FAMILY,
   fontSize: 13,
@@ -47,12 +56,14 @@ export const DEFAULT_WORKBENCH_SETTINGS: Readonly<WorkbenchSettings> = Object.fr
 
 export const AppSettingsSchema = z.object({
   editor: EditorSettingsSchema,
+  window: WindowSettingsSchema,
   workbench: WorkbenchSettingsSchema,
 }).strict();
 
 export const SettingsJsonSchema = z.object({
   "editor.fontFamily": EditorSettingsSchema.shape.fontFamily,
   "editor.fontSize": EditorSettingsSchema.shape.fontSize,
+  "window.zoomLevel": ZoomLevelSchema,
   "workbench.colorTheme": ThemeIdSchema,
   "workbench.iconTheme": FileIconThemeIdSchema,
   "workbench.tree.fontFamily": TreeTypographySettingsSchema.shape.fontFamily,
@@ -61,6 +72,7 @@ export const SettingsJsonSchema = z.object({
 }).strict();
 
 export type EditorSettings = z.infer<typeof EditorSettingsSchema>;
+export type WindowSettings = z.infer<typeof WindowSettingsSchema>;
 export type TreeTypographySettings = z.infer<typeof TreeTypographySettingsSchema>;
 export type EffectiveTreeTypography = Pick<TreeTypographySettings, "fontFamily" | "fontSize">;
 export type WorkbenchSettings = z.infer<typeof WorkbenchSettingsSchema>;
@@ -74,6 +86,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = Object.freeze({
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
     fontSize: 16,
   }),
+  window: DEFAULT_WINDOW_SETTINGS,
   workbench: DEFAULT_WORKBENCH_SETTINGS,
 });
 
@@ -90,6 +103,7 @@ export function settingsToJson(settings: AppSettings): string {
   const publicSettings: SettingsJson = {
     "editor.fontFamily": settings.editor.fontFamily,
     "editor.fontSize": settings.editor.fontSize,
+    "window.zoomLevel": settings.window.zoomLevel,
     "workbench.colorTheme": settings.workbench.colorTheme,
     "workbench.iconTheme": settings.workbench.iconTheme,
     "workbench.tree.fontFamily": settings.workbench.tree.fontFamily,
@@ -119,6 +133,9 @@ export function settingsFromJson(source: string): AppSettings {
     editor: {
       fontFamily: parsed.data["editor.fontFamily"],
       fontSize: parsed.data["editor.fontSize"],
+    },
+    window: {
+      zoomLevel: parsed.data["window.zoomLevel"],
     },
     workbench: {
       colorTheme: parsed.data["workbench.colorTheme"],

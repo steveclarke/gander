@@ -96,6 +96,9 @@ if [ ! -f .gander/config.json ]; then
       "fontFamily": "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
       "fontSize": 16
     },
+    "window": {
+      "zoomLevel": 0
+    },
     "workbench": {
       "colorTheme": "Catppuccin Mocha",
       "iconTheme": "catppuccin-mocha",

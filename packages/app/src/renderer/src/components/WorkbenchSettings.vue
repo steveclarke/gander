@@ -5,6 +5,7 @@ import { DEFAULT_APP_SETTINGS, type FileIconThemeId, type ThemeId } from "../../
 import { THEME_IDS, themeFor } from "../../../themes.js";
 import { FILE_ICON_THEME_IDS, fileIconThemeFor } from "../../../file-icon-themes.js";
 import TreeTypographySettings from "./TreeTypographySettings.vue";
+import WindowZoomSettings from "./WindowZoomSettings.vue";
 
 const props = defineProps<{ store: EditorSettingsStore }>();
 const emit = defineEmits<{ saved: [success: boolean] }>();
@@ -82,6 +83,7 @@ async function reset(): Promise<void> {
       <span v-for="(color, token) in activeTheme.workbench" :key="token" :style="{ backgroundColor: color }" />
     </div>
 
+    <WindowZoomSettings :store="store" @saved="emit('saved', $event)" />
     <TreeTypographySettings :store="store" @saved="emit('saved', $event)" />
   </section>
 </template>

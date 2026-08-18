@@ -14,6 +14,9 @@ import { registerSettingsIpc } from "./settings-ipc.js";
 import { buildMenuTemplate } from "./menu.js";
 import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.js";
 import { linkedWorktreeLabel } from "./development-context.js";
+import { createZoomController, type ZoomController } from "./zoom-controller.js";
+
+let zoomController: ZoomController;
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
@@ -96,33 +99,28 @@ async function bootstrap(): Promise<GanderConfig> {
     return result;
   });
 
+  zoomController = createZoomController(cfg, () => BrowserWindow.getAllWindows());
+  ipcMain.handle("gander:getZoomLevel", async () => zoomController.current());
+  ipcMain.handle("gander:setZoomLevel", async (_event, level: number) => zoomController.set(level));
+
   registerSettingsIpc(ipcMain, cfg, saveConfig, (settings) => {
     updateNativeWindowTheme(process.platform, BrowserWindow.getAllWindows(), settings.workbench.colorTheme);
+    zoomController.apply(settings.window.zoomLevel);
   });
 
   return cfg;
 }
 
-// Electron's built-in zoom roles change the level but forget it on quit. These do the
-// same steps — 0.5 matches Chromium's own increment — and write the result to the
-// config, so the window reopens at the size the reader chose.
-const ZOOM_MIN = -3;
-const ZOOM_MAX = 6;
-
-function installMenu(cfg: GanderConfig): void {
-  const setZoom = (level: number): void => {
-    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, level));
-    for (const win of BrowserWindow.getAllWindows()) win.webContents.setZoomLevel(clamped);
-    cfg.zoomLevel = clamped;
-    saveConfig(cfg);
-  };
-  const currentZoom = (): number => BrowserWindow.getFocusedWindow()?.webContents.getZoomLevel() ?? cfg.zoomLevel ?? 0;
-
+function installMenu(): void {
   const openSettings = (): void => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     win?.webContents.send("gander:openSettings");
   };
-  const template = buildMenuTemplate(process.platform, app.name, { openSettings, setZoom, currentZoom });
+  const template = buildMenuTemplate(process.platform, app.name, {
+    openSettings,
+    setZoom: zoomController.set,
+    currentZoom: zoomController.current,
+  });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
@@ -174,7 +172,7 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
 
   // Applied on every load, not just the first: Chromium resets zoom per navigation,
   // and the dev server reloads the renderer on every edit.
-  win.webContents.on("did-finish-load", () => win.webContents.setZoomLevel(cfg.zoomLevel ?? 0));
+  win.webContents.on("did-finish-load", () => win.webContents.setZoomLevel(cfg.settings.window.zoomLevel));
 
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
   else win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
@@ -215,7 +213,7 @@ app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  installMenu(cfg);
+  installMenu();
   await createWindow(cfg);
 
   try {
