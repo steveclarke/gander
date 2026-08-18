@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { api, type ConnectionCheck } from "../api.js";
+import { Loader2 } from "lucide-vue-next";
+
+// A saved connection changes what the rest of the window can do, and the status bar's own
+// poll is half a minute away — too long to leave "Service unreachable" on screen under a
+// connection that just succeeded.
+const emit = defineEmits<{ connected: [] }>();
 
 /**
  * Where the review service is, and the token for it.
@@ -29,6 +35,7 @@ async function run(action: "test" | "save"): Promise<void> {
     result.value = action === "test"
       ? await api.testConnection(url.value, token.value)
       : await api.setConnection(url.value, token.value);
+    if (action === "save" && result.value.ok) emit("connected");
   } finally {
     busy.value = false;
   }
@@ -80,6 +87,7 @@ async function run(action: "test" | "save"): Promise<void> {
     <div class="actions">
       <button type="button" :disabled="busy" @click="run('test')">Test</button>
       <button type="button" class="primary" :disabled="busy" @click="run('save')">Save</button>
+      <span v-if="busy" class="working"><Loader2 :size="13" class="spin" />Reaching the service…</span>
       <!-- Saving tests first and keeps nothing that failed, so the only outcomes worth
            reporting are "connected" and the reason it is not. -->
       <span v-if="result" class="result" :class="{ bad: !result.ok }" role="status" aria-live="polite">
@@ -104,7 +112,10 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button { height: 28px; padding: 0 12px; border: 1px solid var(--workbench-border); border-radius: 5px; background: var(--input-background); color: var(--workbench-foreground); cursor: pointer; font: inherit; font-size: 12px; }
 button.primary { border-color: var(--accent); background: var(--accent); color: var(--workbench-background); }
 button:disabled { opacity: .55; cursor: default; }
-.result { color: var(--muted-foreground); font-size: 11.5px; }
+.result, .working { color: var(--muted-foreground); font-size: 11.5px; }
+.working { display: flex; align-items: center; gap: 5px; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .result.bad { color: var(--red, #e06c75); }
 code { font-family: var(--mono, monospace); font-size: 11px; }
 </style>

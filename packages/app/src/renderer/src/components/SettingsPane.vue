@@ -9,7 +9,7 @@ import WorkbenchSettings from "./WorkbenchSettings.vue";
 import ConnectionSettings from "./ConnectionSettings.vue";
 
 const props = defineProps<{ store: EditorSettingsStore }>();
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; connected: [] }>();
 
 const mode = shallowRef<"ui" | "json">("ui");
 const category = shallowRef<"workbench" | "editor" | "connection">("workbench");
@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
         <Settings2 :size="20" />
         <div>
           <h1 id="settings-title">Settings</h1>
-          <p>Changes are saved automatically.</p>
+          <p>{{ category === "connection" ? "Connection is saved when it answers." : "Changes are saved automatically." }}</p>
         </div>
       </div>
       <div class="title-actions">
@@ -158,7 +158,7 @@ onBeforeUnmount(() => {
           <WorkbenchSettings v-if="category === 'workbench'" :store="store" @saved="onUiSaved" />
           <!-- Connection is not part of the settings document, so it saves itself rather
                than reporting through the document's automatic save. -->
-          <ConnectionSettings v-else-if="category === 'connection'" />
+          <ConnectionSettings v-else-if="category === 'connection'" @connected="emit('connected')" />
           <EditorSettings v-else :store="store" @saved="onUiSaved" />
         </template>
         <div v-else class="json-view">
@@ -178,7 +178,8 @@ onBeforeUnmount(() => {
     </div>
 
     <footer class="settings-status">
-      <span :class="{ error: jsonError || store.error }" role="status" aria-live="polite">{{ status }}</span>
+      <span v-if="category !== 'connection' || mode === 'json'" :class="{ error: jsonError || store.error }" role="status" aria-live="polite">{{ status }}</span>
+      <span v-else />
       <span v-if="mode === 'json'" class="format">Only public application settings are shown — not the connection.</span>
     </footer>
   </section>

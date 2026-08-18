@@ -41,6 +41,14 @@ const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const activeSurface = shallowRef<"review" | "settings">("review");
 
+// A connection just saved is worth checking now: the status bar's poll is 30 seconds
+// away, and until it runs the window contradicts what the settings pane just said.
+async function onConnected(): Promise<void> {
+  unconfigured.value = false;
+  await store.checkService();
+  await store.loadRepos();
+}
+
 function openSettings(): void {
   activeSurface.value = "settings";
 }
@@ -137,6 +145,7 @@ onBeforeUnmount(() => {
       <SettingsPane
         v-if="activeSurface === 'settings'"
         :store="editorSettings"
+        @connected="onConnected"
         @close="activeSurface = 'review'"
       />
       <div v-show="activeSurface === 'review'" class="review-surface">
