@@ -1,44 +1,37 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Store } from "../store.js";
-import type { EditorSettingsStore } from "../editor-settings-store.js";
 import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw, Settings } from "lucide-vue-next";
 import SwitcherDropdown from "./SwitcherDropdown.vue";
-import EditorSettings from "./EditorSettings.vue";
 
-const props = defineProps<{ store: Store; editorSettings: EditorSettingsStore; questions: number }>();
-defineEmits<{ toggleQuestions: [] }>();
+const props = defineProps<{ store: Store; questions: number; settingsActive: boolean }>();
+const emit = defineEmits<{ toggleQuestions: []; toggleSettings: [] }>();
 
 const repoOpen = ref(false);
 const reviewOpen = ref(false);
 const addingRepo = ref(false);
-const settingsOpen = ref(false);
 const newRepoUrl = ref("");
 
 function toggleRepo() {
   reviewOpen.value = false;
-  settingsOpen.value = false;
   repoOpen.value = !repoOpen.value;
   if (!repoOpen.value) addingRepo.value = false;
 }
 
 function toggleReview() {
   repoOpen.value = false;
-  settingsOpen.value = false;
   reviewOpen.value = !reviewOpen.value;
 }
 
-function toggleSettings() {
-  repoOpen.value = false;
-  reviewOpen.value = false;
-  settingsOpen.value = !settingsOpen.value;
+function toggleSettings(): void {
+  closeAll();
+  emit("toggleSettings");
 }
 
 function closeAll() {
   repoOpen.value = false;
   reviewOpen.value = false;
   addingRepo.value = false;
-  settingsOpen.value = false;
 }
 
 async function pickRepo(repoId: string) {
@@ -125,10 +118,10 @@ const progress = computed(() => props.store.progress());
     <div class="right">
       <button
         class="fetch"
+        :class="{ active: settingsActive }"
         aria-label="Editor settings"
         title="Editor settings"
-        :aria-expanded="settingsOpen"
-        aria-haspopup="dialog"
+        :aria-pressed="settingsActive"
         @click.stop="toggleSettings"
       >
         <Settings :size="16" />
@@ -206,9 +199,6 @@ const progress = computed(() => props.store.progress());
     </div>
   </SwitcherDropdown>
 
-  <SwitcherDropdown :open="settingsOpen" :right="0" :width="440" @close="closeAll">
-    <EditorSettings :store="editorSettings" />
-  </SwitcherDropdown>
 </template>
 
 <style scoped>
@@ -239,6 +229,7 @@ const progress = computed(() => props.store.progress());
   color: var(--fg); cursor: pointer;
 }
 .fetch:hover:not(:disabled) { background: rgba(255,255,255,.06); }
+.fetch.active { border-color: var(--accent); background: rgba(77,159,236,.14); color: var(--accent); }
 .fetch:disabled { cursor: default; color: var(--faint); }
 .fetch { position: relative; }
 .badge {
