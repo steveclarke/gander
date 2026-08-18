@@ -23,7 +23,7 @@ let unsubscribeOpenSettings: (() => void) | null = null;
 onMounted(async () => {
   // Registered first, so commands arriving while the app restores its last review are not dropped.
   unsubscribeOpenTarget = api.onOpenTarget((target) => { void store.openTarget(target); });
-  unsubscribeOpenSettings = api.onOpenSettings(openSettings);
+  unsubscribeOpenSettings = api.onOpenSettings(() => openSettings());
   void editorSettings.load();
   // An installed app starts with no connection at all. Knowing that here is what lets the
   // window say where to set one instead of showing an empty review that cannot be filled.
@@ -39,6 +39,9 @@ const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const activeSurface = shallowRef<"review" | "settings">("review");
+// Which section the settings surface opens on. The prompt about a missing service leads
+// straight to the one that fixes it, rather than to whatever was showing last.
+const settingsCategory = shallowRef<"workbench" | "editor" | "connection">("workbench");
 
 // A connection just saved is worth checking now: the status bar's poll is 30 seconds
 // away, and until it runs the window contradicts what the settings pane just said.
@@ -52,7 +55,8 @@ async function refreshConnectionState(): Promise<void> {
   await store.checkService();
 }
 
-function openSettings(): void {
+function openSettings(category: "workbench" | "editor" | "connection" = "workbench"): void {
+  settingsCategory.value = category;
   activeSurface.value = "settings";
 }
 
@@ -156,6 +160,7 @@ onBeforeUnmount(() => {
       <SettingsPane
         v-if="activeSurface === 'settings'"
         :store="editorSettings"
+        :initial-category="settingsCategory"
         @connected="onConnected"
         @close="closeSettings"
       />
@@ -165,7 +170,7 @@ onBeforeUnmount(() => {
         </p>
         <p v-else-if="unconfigured" class="empty">
           No review service yet.
-          <button class="link" type="button" @click="openSettings">Set its URL and token</button>
+          <button class="link" type="button" @click="openSettings('connection')">Set its URL and token</button>
           to start reviewing.
         </p>
         <p v-else-if="!store.view" class="empty">Pick a repository, then a pull request.</p>

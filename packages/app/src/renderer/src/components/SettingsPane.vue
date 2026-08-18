@@ -8,11 +8,13 @@ import SettingsJsonEditor from "./SettingsJsonEditor.vue";
 import WorkbenchSettings from "./WorkbenchSettings.vue";
 import ConnectionSettings from "./ConnectionSettings.vue";
 
-const props = defineProps<{ store: EditorSettingsStore }>();
+type Category = "workbench" | "editor" | "connection";
+
+const props = defineProps<{ store: EditorSettingsStore; initialCategory?: Category }>();
 const emit = defineEmits<{ close: []; connected: [] }>();
 
 const mode = shallowRef<"ui" | "json">("ui");
-const category = shallowRef<"workbench" | "editor" | "connection">("workbench");
+const category = shallowRef<Category>(props.initialCategory ?? "workbench");
 const saveState = shallowRef<"idle" | "saving" | "saved" | "error">("idle");
 const jsonSource = shallowRef(settingsToJson(props.store.settings));
 const jsonError = shallowRef<string | null>(null);
