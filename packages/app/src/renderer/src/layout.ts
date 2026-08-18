@@ -12,7 +12,7 @@ export type Dock = "right" | "bottom";
 
 const KEY = "gander.layout";
 
-interface Layout {
+export interface Layout {
   questionsDock: Dock;
   treeWidth: number;
   questionsWidth: number;
@@ -26,13 +26,23 @@ const DEFAULTS: Layout = {
   questionsHeight: 260,
 };
 
+export function parseLayout(value: unknown): Layout | null {
+  if (
+    typeof value !== "object" || value === null
+    || Object.keys(value).length !== 4
+    || !("questionsDock" in value) || (value.questionsDock !== "right" && value.questionsDock !== "bottom")
+    || !("treeWidth" in value) || typeof value.treeWidth !== "number" || !Number.isFinite(value.treeWidth)
+    || !("questionsWidth" in value) || typeof value.questionsWidth !== "number" || !Number.isFinite(value.questionsWidth)
+    || !("questionsHeight" in value) || typeof value.questionsHeight !== "number" || !Number.isFinite(value.questionsHeight)
+  ) return null;
+  return value as Layout;
+}
+
 function load(): Layout {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw === null) return { ...DEFAULTS };
-    // Merged over the defaults so a layout saved by an earlier version, missing whatever
-    // was added since, opens with sensible values instead of NaN widths.
-    return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Layout>) };
+    return parseLayout(JSON.parse(raw)) ?? { ...DEFAULTS };
   } catch {
     return { ...DEFAULTS };
   }

@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import Database from "better-sqlite3";
 import { openStorage, type Storage } from "./storage.js";
 
 let dir: string;
@@ -205,45 +204,6 @@ describe("storage", () => {
       expect(storage.listQuestions("acme/atlas", 7)).toHaveLength(1);
       expect(storage.deleteQuestion("acme/atlas", 7, q.id)).toBe(true);
       expect(storage.listQuestions("acme/atlas", 7)).toEqual([]);
-    });
-  });
-
-  describe("migration from an earlier schema", () => {
-    it("adds the columns a database written before question states is missing", () => {
-      // A database exactly as the previous version left it: questions without
-      // commit_ref/note/addressed_at, reviews without head_ref.
-      const oldPath = join(dir, "old.db");
-      const old = new Database(oldPath);
-      old.exec(`
-        CREATE TABLE reviews (id INTEGER PRIMARY KEY, repo_id TEXT NOT NULL, pr_number INTEGER NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), UNIQUE(repo_id, pr_number));
-        CREATE TABLE file_states (id INTEGER PRIMARY KEY, review_id INTEGER NOT NULL REFERENCES reviews(id),
-          path TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0, base_hash TEXT, head_hash TEXT,
-          base_content BLOB, head_content BLOB, checked_at TEXT, machine TEXT, UNIQUE(review_id, path));
-        CREATE TABLE questions (id INTEGER PRIMARY KEY, review_id INTEGER NOT NULL REFERENCES reviews(id),
-          path TEXT, line INTEGER, text TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'open',
-          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
-        INSERT INTO reviews (repo_id, pr_number) VALUES ('acme/atlas', 7);
-        INSERT INTO questions (review_id, path, text) VALUES (1, 'a.rb', 'captured before the upgrade');
-      `);
-      old.close();
-
-      const upgraded = openStorage(oldPath);
-      try {
-        // The question written by the old version is still there and reads back whole.
-        expect(upgraded.listQuestions("acme/atlas", 7)).toMatchObject([
-          { path: "a.rb", text: "captured before the upgrade", state: "open", commitRef: null, note: null },
-        ]);
-        // And the new columns work rather than throwing on first write.
-        const id = upgraded.listQuestions("acme/atlas", 7)[0]!.id;
-        expect(upgraded.markQuestionAddressed(id, { commitRef: "abc", note: "done" })?.state).toBe("addressed");
-        expect(upgraded.addAgentReply(id, { text: "Reply after upgrade" })?.author).toBe("agent");
-        expect(upgraded.listQuestions("acme/atlas", 7)[0]?.replies).toMatchObject([{ text: "Reply after upgrade" }]);
-        upgraded.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-        expect(upgraded.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(7);
-      } finally {
-        upgraded.close();
-      }
     });
   });
 });

@@ -47,6 +47,14 @@ describe("checkConnection", () => {
     expect(result).toEqual({ ok: false, reason: `${url} is not a Gander service` });
   });
 
+  it("rejects a service without the current version handshake", async () => {
+    server = Fastify({ logger: false });
+    server.get("/healthz", async () => ({ ok: true }));
+    const url = await server.listen({ host: "127.0.0.1", port: 0 });
+    expect(await checkConnection(url, "t"))
+      .toEqual({ ok: false, reason: `${url} is not a Gander service` });
+  });
+
   it("asks for the missing half rather than probing", async () => {
     expect(await checkConnection("", "t")).toEqual({ ok: false, reason: "Enter the service URL." });
     expect(await checkConnection("http://x", " ")).toEqual({ ok: false, reason: "Enter the service token." });

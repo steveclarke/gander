@@ -11,11 +11,9 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "gander-cfg-")); cfgPath = j
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("config", () => {
-  it("fills in what a half-written config leaves out", () => {
-    // Missing halves of the connection are a state the app can show and the reviewer can
-    // fix in settings. Refusing to start over one only hides the way to fix it.
+  it("rejects a half-written config", () => {
     writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://x" }));
-    expect(loadConfig(cfgPath).serviceToken).toBe("");
+    expect(() => loadConfig(cfgPath)).toThrow(/Invalid config/);
   });
   it("round-trips repos through save/load", () => {
     saveConfig({ serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas" }] }, cfgPath);
@@ -23,9 +21,9 @@ describe("config", () => {
     expect(cfg.repos[0]?.repoId).toBe("acme/atlas");
   });
 
-  it("adds editor defaults to an existing config", () => {
+  it("rejects a config without current settings", () => {
     writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://h:8390", serviceToken: "t", repos: [] }));
-    expect(loadConfig(cfgPath).settings).toEqual(DEFAULT_APP_SETTINGS);
+    expect(() => loadConfig(cfgPath)).toThrow(/settings/);
   });
 
   it("persists editor settings across save and load", () => {
@@ -49,30 +47,12 @@ describe("config", () => {
     });
   });
 
-  it("adds the workbench default without discarding an older editor configuration", () => {
+  it("rejects settings without the current workbench fields", () => {
     writeFileSync(cfgPath, JSON.stringify({
       serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
       settings: { editor: { fontFamily: "Consolas, monospace", fontSize: 19 } },
     }));
-    expect(loadConfig(cfgPath).settings).toEqual({
-      editor: { fontFamily: "Consolas, monospace", fontSize: 19 },
-      workbench: DEFAULT_APP_SETTINGS.workbench,
-    });
-  });
-
-  it("adds tree typography defaults without discarding older workbench settings", () => {
-    writeFileSync(cfgPath, JSON.stringify({
-      serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
-      settings: {
-        editor: { fontFamily: "Consolas, monospace", fontSize: 19 },
-        workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
-      },
-    }));
-    expect(loadConfig(cfgPath).settings.workbench).toEqual({
-      colorTheme: "Gander Dark",
-      iconTheme: "catppuccin-mocha",
-      tree: DEFAULT_APP_SETTINGS.workbench.tree,
-    });
+    expect(() => loadConfig(cfgPath)).toThrow(/workbench/);
   });
 
   it.each([
@@ -80,14 +60,15 @@ describe("config", () => {
     { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY, fontSize: 1000 } },
     { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY } },
     { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY, fontSize: 16 }, workbench: { colorTheme: "Missing Theme" } },
-  ])("falls back safely when persisted editor settings are invalid", (settings) => {
+  ])("rejects invalid persisted settings", (settings) => {
     writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://h:8390", serviceToken: "t", repos: [], settings }));
-    expect(loadConfig(cfgPath).settings).toEqual(DEFAULT_APP_SETTINGS);
+    expect(() => loadConfig(cfgPath)).toThrow(/settings/);
   });
 
   it("rejects a repoId that isn't owner/repo shaped", () => {
     writeFileSync(cfgPath, JSON.stringify({
       serviceUrl: "http://h:8390", serviceToken: "t",
+      settings: DEFAULT_APP_SETTINGS,
       repos: [{ repoId: "../../etc/passwd", url: "https://github.com/acme/atlas" }],
     }));
     expect(() => loadConfig(cfgPath)).toThrow(/repoId|owner\/repo/i);
@@ -101,7 +82,7 @@ describe("config", () => {
   });
 
   (platform === "win32" ? it.skip : it)("repairs permissions on a config file that already existed world-readable", () => {
-    writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://h:8390", serviceToken: "t", repos: [] }), { mode: 0o644 });
+    writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [] }), { mode: 0o644 });
     saveConfig(loadConfig(cfgPath), cfgPath);
     expect(statSync(cfgPath).mode & 0o777).toBe(0o600);
   });
@@ -139,15 +120,12 @@ describe("config", () => {
     });
   });
 
-  it("preserves unknown keys across a load -> save round trip", () => {
+  it("rejects unknown config keys", () => {
     writeFileSync(cfgPath, JSON.stringify({
-      serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
+      serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [],
       futureFeatureFlag: "on-by-default-in-a-later-version",
     }));
-    const cfg = loadConfig(cfgPath);
-    saveConfig(cfg, cfgPath);
-    const raw = JSON.parse(readFileSync(cfgPath, "utf8")) as Record<string, unknown>;
-    expect(raw["futureFeatureFlag"]).toBe("on-by-default-in-a-later-version");
+    expect(() => loadConfig(cfgPath)).toThrow(/futureFeatureFlag/);
   });
 
   it("starts unconfigured when there is no file, and that config survives a save", () => {
@@ -168,7 +146,7 @@ describe("config", () => {
 
   it("still rejects a file that exists and is wrong", () => {
     const path = join(dir, "broken.json");
-    writeFileSync(path, JSON.stringify({ serviceUrl: "not a url", serviceToken: "t" }));
+    writeFileSync(path, JSON.stringify({ serviceUrl: "not a url", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [] }));
     expect(() => loadConfig(path)).toThrow(/Invalid config/);
   });
 });

@@ -32,7 +32,10 @@ describe("application settings", () => {
   });
 
   it("accepts VS Code-compatible fractional font sizes", () => {
-    expect(parseAppSettings({ editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 } }))
+    expect(parseAppSettings({
+      ...DEFAULT_APP_SETTINGS,
+      editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 },
+    }))
       .toEqual({
         editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 },
         workbench: DEFAULT_APP_SETTINGS.workbench,
@@ -42,7 +45,11 @@ describe("application settings", () => {
   it("normalizes Vue settings proxies into data Electron can clone", () => {
     const reactiveSettings = reactive({
       editor: { ...DEFAULT_APP_SETTINGS.editor },
-      workbench: { colorTheme: "Gander Dark" as const, iconTheme: "catppuccin-mocha" as const },
+      workbench: {
+        ...DEFAULT_APP_SETTINGS.workbench,
+        colorTheme: "Gander Dark" as const,
+        tree: { ...DEFAULT_APP_SETTINGS.workbench.tree },
+      },
     });
     const parsed = parseAppSettings(reactiveSettings);
 
@@ -78,32 +85,7 @@ describe("application settings", () => {
       "workbench.tree.inheritEditorTypography": false,
     });
     expect(source).not.toContain("serviceToken");
-    expect(settingsFromJson(source, DEFAULT_APP_SETTINGS)).toEqual(DEFAULT_APP_SETTINGS);
-  });
-
-  it("preserves future app settings when applying the current public JSON", () => {
-    const current = { ...DEFAULT_APP_SETTINGS, futureSetting: true };
-    expect(settingsFromJson(JSON.stringify({
-      "editor.fontFamily": "Consolas, monospace",
-      "editor.fontSize": 18,
-      "workbench.colorTheme": "Gander Dark",
-      "workbench.iconTheme": "catppuccin-mocha",
-      "workbench.tree.fontFamily": "system-ui, sans-serif",
-      "workbench.tree.fontSize": 14,
-      "workbench.tree.inheritEditorTypography": true,
-    }), current)).toEqual({
-      futureSetting: true,
-      editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
-      workbench: {
-        colorTheme: "Gander Dark",
-        iconTheme: "catppuccin-mocha",
-        tree: {
-          fontFamily: "system-ui, sans-serif",
-          fontSize: 14,
-          inheritEditorTypography: true,
-        },
-      },
-    });
+    expect(settingsFromJson(source)).toEqual(DEFAULT_APP_SETTINGS);
   });
 
   it.each([
@@ -113,21 +95,20 @@ describe("application settings", () => {
     [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "Unknown", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false }), /workbench\.iconTheme/],
     [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "catppuccin-mocha", "workbench.tree.fontFamily": DEFAULT_TREE_FONT_FAMILY, "workbench.tree.fontSize": 13, "workbench.tree.inheritEditorTypography": false, serviceToken: "nope" }), /Unrecognized key/],
   ])("rejects invalid or non-public settings JSON", (source, message) => {
-    expect(() => settingsFromJson(source, DEFAULT_APP_SETTINGS)).toThrow(message);
+    expect(() => settingsFromJson(source)).toThrow(message);
   });
 
-  it("adds the file icon default to settings written by the color-theme release", () => {
-    expect(parseAppSettings({
-      editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
-      workbench: { colorTheme: "Gander Dark" },
-    })).toEqual({
-      editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
-      workbench: {
-        colorTheme: "Gander Dark",
-        iconTheme: "catppuccin-mocha",
-        tree: DEFAULT_APP_SETTINGS.workbench.tree,
-      },
-    });
+  it("rejects incomplete and unknown settings shapes", () => {
+    expect(() => parseAppSettings({ editor: DEFAULT_APP_SETTINGS.editor })).toThrow(/workbench/);
+    expect(() => parseAppSettings({
+      ...DEFAULT_APP_SETTINGS,
+      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+    })).toThrow(/tree/);
+    expect(() => parseAppSettings({ ...DEFAULT_APP_SETTINGS, futureSetting: true })).toThrow(/Unrecognized key/);
+    expect(() => parseAppSettings({
+      ...DEFAULT_APP_SETTINGS,
+      editor: { ...DEFAULT_APP_SETTINGS.editor, futureFontOption: true },
+    })).toThrow(/Unrecognized key/);
   });
 
   it("derives effective tree typography in one place for independent and inherited settings", () => {
