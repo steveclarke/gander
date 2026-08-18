@@ -30,7 +30,9 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       title: "Get review questions",
       description:
         "Questions the reviewer has left on a pull request, with the file and line each one is about. " +
-        "Derive repo and branch from the working directory. Returns open questions by default — those are the ones still needing work.",
+        "Derive repo and branch from the working directory. Returns open questions by default — those are the ones still needing work. " +
+        "The response names the branch, title, and stack position of the pull request the questions belong to: check it matches the checkout being worked in, " +
+        "because a stacked pull request's sibling is a different branch with different questions.",
       inputSchema: {
         repo: z.string().describe('Repository as "owner/name", e.g. "acme/atlas".'),
         branch: z.string().optional().describe("The working branch. Use this when the pull request number is unknown."),
@@ -42,15 +44,37 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       const resolved = resolvePr(repo, prNumber, branch);
       if (typeof resolved === "string") return { content: [{ type: "text", text: resolved }], isError: true };
 
+      const context = storage.getPrContext(repo, resolved);
       const wanted = includeAddressed === true ? ["open", "addressed"] : ["open"];
       const questions = storage
         .listQuestions(repo, resolved)
         .filter((q) => wanted.includes(q.state))
-        .map((q) => ({ id: q.id, file: q.path, line: q.line, text: q.text, state: q.state }));
+        .map((q) => ({
+          id: q.id,
+          file: q.path,
+          line: q.line,
+          text: q.text,
+          state: q.state,
+          capturedAtSha: q.headSha,
+          // The branch may have moved since the reviewer read it, in which case the line
+          // number is the one they saw, not necessarily the one there now.
+          lineMayHaveMoved: q.headSha !== null && context !== null && q.headSha !== context.headSha,
+        }));
 
-      return {
-        content: [{ type: "text", text: JSON.stringify({ repo, prNumber: resolved, questions }, null, 2) }],
+      const payload = {
+        repo,
+        prNumber: resolved,
+        // Everything an agent needs to say — and check — which pull request it is on.
+        branch: context?.headRef ?? null,
+        title: context?.title ?? null,
+        headSha: context?.headSha ?? null,
+        stack: context?.stackSize == null || context.stackPosition == null
+          ? null
+          : { position: context.stackPosition, size: context.stackSize },
+        questions,
       };
+
+      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     },
   );
 

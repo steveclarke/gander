@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
-import { NewQuestionSchema, PutFileStateSchema } from "@gander/shared";
+import { NewQuestionSchema, PrContextSchema, PutFileStateSchema } from "@gander/shared";
 import { handleMcpRequest } from "./mcp.js";
 import type { Storage } from "./storage.js";
 
@@ -62,16 +62,16 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
     },
   );
 
-  app.put<{ Params: { repoId: string; prNumber: string }; Body: { headRef?: unknown } }>(
-    "/api/reviews/:repoId/:prNumber/head-ref",
+  app.put<{ Params: { repoId: string; prNumber: string } }>(
+    "/api/reviews/:repoId/:prNumber/context",
     async (req, reply) => {
       const prNumber = parsePrNumber(req.params.prNumber, reply);
       if (prNumber === undefined) return;
-      const headRef = req.body?.headRef;
-      if (typeof headRef !== "string" || headRef.length === 0) {
-        return reply.code(400).send({ error: "headRef must be a non-empty string" });
+      const parsed = PrContextSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
       }
-      opts.storage.setHeadRef(req.params.repoId, prNumber, headRef);
+      opts.storage.setPrContext(req.params.repoId, prNumber, parsed.data);
       return reply.code(204).send();
     },
   );

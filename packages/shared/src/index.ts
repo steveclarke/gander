@@ -45,6 +45,8 @@ export const QuestionSchema = z.object({
   line: z.number().int().positive().nullable(),
   text: z.string().min(1),
   state: QuestionStateSchema,
+  /** Head the branch was at when the question was captured. */
+  headSha: z.string().nullable(),
   /** Commit an agent named when it marked the question addressed. */
   commitRef: z.string().nullable(),
   /** One-line note an agent left when it marked the question addressed. */
@@ -57,8 +59,20 @@ export const NewQuestionSchema = z.object({
   path: z.string().min(1).nullable(),
   line: z.number().int().positive().nullable(),
   text: z.string().min(1),
+  /** Head the branch was at when this was captured, so a moved line can be spotted later. */
+  headSha: z.string().min(1).nullable(),
 });
 export type NewQuestion = z.infer<typeof NewQuestionSchema>;
+
+/** What the service remembers about a pull request, so agents can be told which one they are on. */
+export const PrContextSchema = z.object({
+  headRef: z.string().min(1),
+  title: z.string(),
+  headSha: z.string().min(1),
+  stackSize: z.number().int().positive().nullable(),
+  stackPosition: z.number().int().positive().nullable(),
+});
+export type PrContext = z.infer<typeof PrContextSchema>;
 
 export const MarkAddressedSchema = z.object({
   commitRef: z.string().min(1).nullable(),
@@ -74,6 +88,8 @@ export interface PrSummary {
   baseRef: string;
   /** The pull request's own branch. Lets the service resolve branch -> PR for agents. */
   headRef: string;
+  /** Position in a GitHub stacked pull request, or null when the pull request stands alone. */
+  stack: { id: number; size: number; position: number } | null;
   baseSha: string;
   headSha: string;
 }

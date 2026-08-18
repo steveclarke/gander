@@ -87,32 +87,32 @@ describe("storage", () => {
 
   describe("questions", () => {
     it("stores a question against a file and reads it back as open", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?" });
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null });
       expect(q).toMatchObject({ path: "a.rb", line: 12, text: "Why the retry here?", state: "open" });
       expect(storage.listQuestions("acme/atlas", 7)).toEqual([q]);
     });
 
     it("keeps a pull-request-level note, which has no file", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: null, line: null, text: "Squash before merge" });
+      const q = storage.addQuestion("acme/atlas", 7, { path: null, line: null, text: "Squash before merge", headSha: null });
       expect(q.path).toBeNull();
       expect(storage.listQuestions("acme/atlas", 7)).toHaveLength(1);
     });
 
     it("scopes questions to one review", () => {
-      storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "on seven" });
-      storage.addQuestion("acme/atlas", 8, { path: "a.rb", line: null, text: "on eight" });
+      storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "on seven", headSha: null });
+      storage.addQuestion("acme/atlas", 8, { path: "a.rb", line: null, text: "on eight", headSha: null });
       expect(storage.listQuestions("acme/atlas", 7).map((q) => q.text)).toEqual(["on seven"]);
       expect(storage.listQuestions("acme/atlas", 8).map((q) => q.text)).toEqual(["on eight"]);
     });
 
     it("an agent marks a question addressed with a commit and note", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?" });
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?", headSha: null });
       const marked = storage.markQuestionAddressed(q.id, { commitRef: "abc1234", note: "Dropped the retry" });
       expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", note: "Dropped the retry" });
     });
 
     it("refuses to re-address a question the reviewer already resolved", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?" });
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
       storage.markQuestionAddressed(q.id, { commitRef: null, note: null });
       storage.putFileState("acme/atlas", 7, {
         checked: true, path: "a.rb", baseHash: "b", headHash: "h",
@@ -123,9 +123,9 @@ describe("storage", () => {
     });
 
     it("re-checking a file resolves its addressed questions and leaves open ones alone", () => {
-      const answered = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "answered" });
-      const unanswered = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "still open" });
-      const elsewhere = storage.addQuestion("acme/atlas", 7, { path: "b.rb", line: null, text: "other file" });
+      const answered = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "answered", headSha: null });
+      const unanswered = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "still open", headSha: null });
+      const elsewhere = storage.addQuestion("acme/atlas", 7, { path: "b.rb", line: null, text: "other file", headSha: null });
       storage.markQuestionAddressed(answered.id, { commitRef: "c1", note: null });
       storage.markQuestionAddressed(elsewhere.id, { commitRef: "c2", note: null });
 
@@ -142,19 +142,19 @@ describe("storage", () => {
     });
 
     it("resolves a branch to its pull request", () => {
-      storage.setHeadRef("acme/atlas", 7, "feat/thing");
+      storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
       expect(storage.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(7);
       expect(storage.findPrByHeadRef("acme/atlas", "no-such-branch")).toBeNull();
     });
 
     it("resolves a reused branch name to the newest pull request on it", () => {
-      storage.setHeadRef("acme/atlas", 7, "feat/thing");
-      storage.setHeadRef("acme/atlas", 9, "feat/thing");
+      storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
+      storage.setPrContext("acme/atlas", 9, { headRef: "feat/thing", title: "Newer", headSha: "sha-9", stackSize: null, stackPosition: null });
       expect(storage.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(9);
     });
 
     it("deletes only within its own review", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "keep me" });
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "keep me", headSha: null });
       // The same id offered against a different pull request must not delete it.
       expect(storage.deleteQuestion("acme/atlas", 8, q.id)).toBe(false);
       expect(storage.listQuestions("acme/atlas", 7)).toHaveLength(1);
@@ -192,7 +192,7 @@ describe("storage", () => {
         // And the new columns work rather than throwing on first write.
         const id = upgraded.listQuestions("acme/atlas", 7)[0]!.id;
         expect(upgraded.markQuestionAddressed(id, { commitRef: "abc", note: "done" })?.state).toBe("addressed");
-        upgraded.setHeadRef("acme/atlas", 7, "feat/thing");
+        upgraded.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackSize: null, stackPosition: null });
         expect(upgraded.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(7);
       } finally {
         upgraded.close();

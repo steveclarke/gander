@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, MarkAddressed, NewQuestion, PutFileState, Question, ReviewState } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, NewQuestion, PrContext, PutFileState, Question, ReviewState } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS reviews (
   pr_number INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   head_ref TEXT,
+  title TEXT,
+  head_sha TEXT,
+  stack_size INTEGER,
+  stack_position INTEGER,
   UNIQUE(repo_id, pr_number)
 );
 CREATE TABLE IF NOT EXISTS file_states (
@@ -28,6 +32,7 @@ CREATE TABLE IF NOT EXISTS questions (
   line INTEGER,
   text TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'open',
+  head_sha TEXT,
   commit_ref TEXT,
   note TEXT,
   addressed_at TEXT,
@@ -40,8 +45,9 @@ export interface Storage {
   getReview(repoId: string, prNumber: number): ReviewState;
   putFileState(repoId: string, prNumber: number, input: PutFileState): FileCheckoff;
   getSnapshot(repoId: string, prNumber: number, path: string): { baseContent: string | null; headContent: string | null } | null;
-  /** Records which branch a pull request is on, so an agent can ask by branch instead of number. */
-  setHeadRef(repoId: string, prNumber: number, headRef: string): void;
+  /** Records what the app knows about a pull request, so agents can be told which one they are on. */
+  setPrContext(repoId: string, prNumber: number, context: PrContext): void;
+  getPrContext(repoId: string, prNumber: number): PrContext | null;
   findPrByHeadRef(repoId: string, headRef: string): number | null;
   markQuestionAddressed(id: number, input: MarkAddressed): Question | null;
   listQuestions(repoId: string, prNumber: number): Question[];
@@ -50,16 +56,17 @@ export interface Storage {
   close(): void;
 }
 
-interface QuestionRow { id: number; path: string | null; line: number | null; text: string; state: string; commit_ref: string | null; note: string | null; created_at: string }
+interface QuestionRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; commit_ref: string | null; note: string | null; created_at: string }
 
 const rowToQuestion = (r: QuestionRow): Question => ({
   id: r.id, path: r.path, line: r.line, text: r.text,
   state: r.state as Question["state"],
+  headSha: r.head_sha,
   commitRef: r.commit_ref, note: r.note,
   createdAt: r.created_at,
 });
 
-const QUESTION_COLUMNS = "id, path, line, text, state, commit_ref, note, created_at";
+const QUESTION_COLUMNS = "id, path, line, text, state, head_sha, commit_ref, note, created_at";
 
 /**
  * CREATE TABLE IF NOT EXISTS silently does nothing to a table that already exists, so a
@@ -75,7 +82,12 @@ function migrate(db: Database.Database): void {
   addColumn("questions", "commit_ref", "TEXT");
   addColumn("questions", "note", "TEXT");
   addColumn("questions", "addressed_at", "TEXT");
+  addColumn("questions", "head_sha", "TEXT");
   addColumn("reviews", "head_ref", "TEXT");
+  addColumn("reviews", "title", "TEXT");
+  addColumn("reviews", "head_sha", "TEXT");
+  addColumn("reviews", "stack_size", "INTEGER");
+  addColumn("reviews", "stack_position", "INTEGER");
 }
 
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
@@ -138,9 +150,21 @@ export function openStorage(dbPath: string): Storage {
       return { baseContent: unpack(row.base_content), headContent: unpack(row.head_content) };
     },
 
-    setHeadRef(repoId, prNumber, headRef) {
+    setPrContext(repoId, prNumber, context) {
       const rid = reviewId(repoId, prNumber);
-      db.prepare("UPDATE reviews SET head_ref = ? WHERE id = ?").run(headRef, rid);
+      db.prepare("UPDATE reviews SET head_ref = ?, title = ?, head_sha = ?, stack_size = ?, stack_position = ? WHERE id = ?")
+        .run(context.headRef, context.title, context.headSha, context.stackSize, context.stackPosition, rid);
+    },
+
+    getPrContext(repoId, prNumber) {
+      const row = db.prepare("SELECT head_ref, title, head_sha, stack_size, stack_position FROM reviews WHERE repo_id = ? AND pr_number = ?")
+        .get(repoId, prNumber) as { head_ref: string | null; title: string | null; head_sha: string | null; stack_size: number | null; stack_position: number | null } | undefined;
+      // Null when the pull request has never been opened in the app, so nothing recorded it.
+      if (!row || row.head_ref === null || row.head_sha === null) return null;
+      return {
+        headRef: row.head_ref, title: row.title ?? "", headSha: row.head_sha,
+        stackSize: row.stack_size, stackPosition: row.stack_position,
+      };
     },
 
     findPrByHeadRef(repoId, headRef) {
@@ -170,8 +194,8 @@ export function openStorage(dbPath: string): Storage {
     addQuestion(repoId, prNumber, input) {
       const rid = reviewId(repoId, prNumber);
       const { lastInsertRowid } = db
-        .prepare("INSERT INTO questions (review_id, path, line, text) VALUES (?, ?, ?, ?)")
-        .run(rid, input.path, input.line, input.text);
+        .prepare("INSERT INTO questions (review_id, path, line, text, head_sha) VALUES (?, ?, ?, ?, ?)")
+        .run(rid, input.path, input.line, input.text, input.headSha);
       const row = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(lastInsertRowid) as QuestionRow;
       return rowToQuestion(row);
     },

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FileCheckoffSchema, QuestionSchema, ReviewStateSchema, type FileCheckoff, type NewQuestion, type PutFileState, type Question, type ReviewState } from "@gander/shared";
+import { FileCheckoffSchema, QuestionSchema, ReviewStateSchema, type FileCheckoff, type NewQuestion, type PrContext, type PutFileState, type Question, type ReviewState } from "@gander/shared";
 
 export interface ServiceClient {
   getReview(repoId: string, prNumber: number): Promise<ReviewState>;
@@ -7,7 +7,7 @@ export interface ServiceClient {
   listQuestions(repoId: string, prNumber: number): Promise<Question[]>;
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<Question>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<void>;
-  setHeadRef(repoId: string, prNumber: number, headRef: string): Promise<void>;
+  setPrContext(repoId: string, prNumber: number, context: PrContext): Promise<void>;
   getSnapshot(repoId: string, prNumber: number, path: string): Promise<{ baseContent: string | null; headContent: string | null }>;
   /** Whether the service answers at all. Never throws — unreachable is an answer, not a failure. */
   healthy(): Promise<boolean>;
@@ -76,8 +76,8 @@ export function createServiceClient(baseUrl: string, token: string): ServiceClie
       const url = `/api/reviews/${enc(repoId)}/${prNumber}/snapshot?path=${enc(path)}`;
       return validate(SnapshotSchema, url, await req("GET", url));
     },
-    setHeadRef: async (repoId, prNumber, headRef) => {
-      await req("PUT", `/api/reviews/${enc(repoId)}/${prNumber}/head-ref`, { headRef });
+    setPrContext: async (repoId, prNumber, context) => {
+      await req("PUT", `/api/reviews/${enc(repoId)}/${prNumber}/context`, context);
     },
   };
 }

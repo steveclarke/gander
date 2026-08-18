@@ -11,7 +11,7 @@ export interface GanderApi {
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
-  addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<PrView>;
+  addQuestion(repoId: string, prNumber: number, input: Omit<NewQuestion, "headSha">): Promise<PrView>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
 }
 export const api = (window as unknown as { gander: GanderApi }).gander;

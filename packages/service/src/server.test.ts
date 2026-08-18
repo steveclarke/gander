@@ -89,7 +89,7 @@ describe("service API", () => {
     const url = "/api/reviews/acme%2Fatlas/7/questions";
 
     it("creates, lists, and deletes a question", async () => {
-      const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: 3, text: "Why?" } });
+      const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: 3, text: "Why?", headSha: "sha-1" } });
       expect(created.statusCode).toBe(201);
       const id = created.json().id as number;
 
@@ -102,7 +102,7 @@ describe("service API", () => {
     });
 
     it("rejects an empty question rather than storing a blank note", async () => {
-      const res = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: null, text: "" } });
+      const res = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: null, text: "", headSha: null } });
       expect(res.statusCode).toBe(400);
     });
 
