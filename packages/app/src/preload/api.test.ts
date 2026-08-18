@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createGanderApi } from "./api.js";
+import { DEFAULT_APP_SETTINGS } from "../settings.js";
 
 describe("preload API", () => {
   it("routes typed settings calls through their namespaced IPC channels", async () => {
@@ -11,7 +12,7 @@ describe("preload API", () => {
 
     const settings = {
       editor: { fontFamily: "Fira Code, monospace", fontSize: 17 },
-      workbench: { colorTheme: "Gander Dark" as const, iconTheme: "catppuccin-mocha" as const },
+      workbench: { ...DEFAULT_APP_SETTINGS.workbench, colorTheme: "Gander Dark" as const },
     };
     await api.updateSettings(settings);
     expect(invoke).toHaveBeenLastCalledWith("gander:updateSettings", settings);

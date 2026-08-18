@@ -13,6 +13,7 @@ import SettingsPane from "./components/SettingsPane.vue";
 import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
 import { X } from "lucide-vue-next";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
+import { effectiveTreeTypography } from "../../settings.js";
 import "./theme.css";
 
 const store = createStore(api);
@@ -36,6 +37,7 @@ const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const activeSurface = shallowRef<"review" | "settings">("review");
+const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
 
 function openSettings(): void {
   activeSurface.value = "settings";
@@ -145,6 +147,7 @@ onBeforeUnmount(() => {
             v-if="treeVisible"
             :store="store"
             :icon-theme="editorSettings.settings.workbench.iconTheme"
+            :typography="treeTypography"
             class="tree"
             :style="{ width: `${treeWidth}px` }"
           />
