@@ -12,9 +12,10 @@ notes to coding agents over MCP.
 
 `docs/deploy.md` covers running the service on a host.
 
-`docs/superpowers/specs/2026-08-15-gander-design.md` is the approved, binding
-design spec — read it before changing behaviour. `docs/STATE.md` says where the
-project stands. Interface work and the agent reply channel are GitHub issues.
+The approved design spec is binding and is kept outside this repository — on the
+maintainer's machines at `~/src/backstage/gander/specs/`. Read it before changing
+behaviour. `docs/STATE.md` says where the project stands. Interface work and the
+agent reply channel are GitHub issues.
 
 **The repo is public.** No client names, private repo names, or real PR numbers
 in code, comments, commits, or issues.

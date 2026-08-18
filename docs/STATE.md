@@ -4,7 +4,7 @@
 
 M1 is merged to `master`.
 
-- Spec: `docs/superpowers/specs/2026-08-15-gander-design.md` (approved, binding)
+- Spec: kept privately (`~/src/backstage/gander/specs/` on the maintainer's machines), approved and binding
 - UI design of record: `docs/mockups/mockup-v4.html`
 
 ## M1 — what exists
