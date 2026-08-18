@@ -28,6 +28,7 @@ in code, comments, commits, or issues.
 | One test by name | `pnpm vitest run -t "un-check retains the snapshot"` |
 | Typecheck (all packages) | `pnpm typecheck` |
 | Electron E2E | `pnpm test:e2e` |
+| Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Isolated working copy | `bin/worktree add <name>` |
 
 There is no linter or formatter, and no CI. `pnpm typecheck` and `pnpm test` are

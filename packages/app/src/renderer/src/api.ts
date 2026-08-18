@@ -1,10 +1,14 @@
-import type { NewQuestion, PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 
 export interface GanderApi {
   listRepos(): Promise<RepoEntry[]>;
   addRepo(url: string): Promise<RepoEntry>;
   listPrs(repoId: string): Promise<PrSummary[]>;
   lastReview(): Promise<{ repoId: string; prNumber: number } | null>;
+  /** What this launch was asked to open, from the command line. Null for an ordinary launch. */
+  initialTarget(): Promise<OpenTarget | null>;
+  /** Fires when an already-running app is handed a target by a later `gander` command. */
+  onOpenTarget(cb: (target: OpenTarget) => void): void;
   serviceHealthy(): Promise<boolean>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;

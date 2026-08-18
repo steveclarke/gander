@@ -39,6 +39,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async checkService() {},
     dismissError() {},
     async addRepo() {},
+    async openTarget() {},
     async selectRepo() {},
     async openPr() {},
     async refresh() {},
