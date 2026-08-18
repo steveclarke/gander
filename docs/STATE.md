@@ -5,7 +5,7 @@
 M1 is merged to `master`.
 
 - Spec: kept privately (`~/src/backstage/gander/specs/` on the maintainer's machines), approved and binding
-- UI design of record: `docs/mockups/mockup-v4.html`
+- UI design of record: the v4 mockup, kept privately alongside the spec
 
 ## M1 — what exists
 
