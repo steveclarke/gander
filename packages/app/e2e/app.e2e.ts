@@ -45,6 +45,7 @@ describe("Gander end to end", () => {
     await $("button[aria-label='Editor settings']").click();
     const family = await $("input[name='editor.fontFamily']");
     const size = await $("input[name='editor.fontSize']");
+    await expect($(".settings .preview-label")).toHaveText("Preview");
     await family.setValue("'Courier New', monospace");
     await size.setValue("18.5");
     await $(".settings .save").click();

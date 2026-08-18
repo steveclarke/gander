@@ -88,7 +88,8 @@ async function save(): Promise<void> {
       <span>px</span>
     </div>
 
-    <pre class="preview" :style="previewStyle"><code>const review = "ready";</code></pre>
+    <p id="editor-preview-label" class="preview-label">Preview</p>
+    <pre class="preview" aria-labelledby="editor-preview-label" :style="previewStyle"><code>const review = "ready";</code></pre>
 
     <div class="actions">
       <p v-if="localError || store.error" class="message error" role="alert">{{ localError || store.error }}</p>
@@ -107,6 +108,7 @@ async function save(): Promise<void> {
 .reset { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 11.5px; white-space: nowrap; }
 .reset:disabled { cursor: default; opacity: .55; }
 label { color: var(--dim); font-size: 11.5px; font-weight: 600; }
+.preview-label { color: var(--dim); font-size: 11.5px; font-weight: 600; margin-top: 6px; }
 input {
   width: 100%; min-width: 0; padding: 8px 10px;
   border: 1px solid var(--border); border-radius: 6px;
@@ -115,7 +117,7 @@ input {
 input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(77, 159, 236, .16); }
 .size-row { display: flex; align-items: center; gap: 8px; width: 110px; color: var(--faint); }
 .preview {
-  min-width: 0; overflow: hidden; margin-top: 6px; padding: 12px;
+  min-width: 0; overflow: hidden; padding: 12px;
   border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
   color: var(--text); line-height: 1.5; white-space: nowrap;
 }
