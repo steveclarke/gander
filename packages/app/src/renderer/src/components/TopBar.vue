@@ -127,7 +127,7 @@ const progress = computed(() => props.store.progress());
         :disabled="store.busy"
         aria-label="Fetch origin"
         title="Fetch origin — also runs every 30 seconds and whenever the window regains focus"
-        @click="store.refresh()"
+        @click="store.fetchNow()"
       >
         <RefreshCw :size="16" :class="{ spin: store.busy }" />
       </button>

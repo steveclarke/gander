@@ -24,6 +24,8 @@ export interface Store {
   selectRepo(repoId: string): Promise<void>;
   openPr(prNumber: number): Promise<void>;
   refresh(): Promise<void>;
+  /** The reviewer pressing Fetch origin: same work as refresh, but it clears a stale error. */
+  fetchNow(): Promise<void>;
   setChecked(path: string, checked: boolean): Promise<void>;
   setCheckedMany(paths: string[], checked: boolean): Promise<void>;
   reviewedSnapshot(path: string): Promise<string | null>;
@@ -96,6 +98,9 @@ export function createStore(api: GanderApi): Store {
         store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
         store.lastFetchAt = new Date().toISOString();
       }));
+    },
+    async fetchNow() {
+      await userAction(() => store.refresh());
     },
     async setChecked(path: string, checked: boolean) {
       await guard(async () => {

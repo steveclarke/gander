@@ -139,7 +139,10 @@ function render(): void {
 const renderKey = computed(() => {
   const file = current.value;
   if (!file) return null;
-  // The snapshot is part of what the delta tab renders, so it belongs in the key too.
+  // The delta tab renders the snapshot, which arrives a round trip after the tab is
+  // clicked. Holding the key back until it is in hand avoids building the diff against
+  // an empty original first, which reads as the whole file having been added.
+  if (view.value === "since" && snapshotFor.value !== file.path) return null;
   return `${file.path}#${file.baseHash ?? ""}#${file.headHash ?? ""}#${view.value}#${snapshotFor.value ?? ""}`;
 });
 

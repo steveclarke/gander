@@ -152,6 +152,23 @@ describe("store", () => {
       expect(store.error).toBeNull();
     });
 
+    it("clears a stale error when the reviewer presses Fetch origin", async () => {
+      let fail = true;
+      const store = createStore(fakeApi({
+        refreshPr: async () => { if (fail) throw new Error("Gander service unreachable"); return prView(); },
+      }));
+      await store.loadRepos();
+      await store.selectRepo("acme/atlas");
+      await store.openPr(1);
+      await store.refresh();
+      expect(store.error).toContain("unreachable");
+
+      // Pressing the button is the reviewer saying "try again" — the poll is not.
+      fail = false;
+      await store.fetchNow();
+      expect(store.error).toBeNull();
+    });
+
     it("clears the error when the reviewer starts something new", async () => {
       let fail = true;
       const store = createStore(fakeApi({

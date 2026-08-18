@@ -46,7 +46,6 @@ window.addEventListener("keydown", onKey);
 const POLL_MS = 30_000;
 let refreshing = false;
 async function refreshOnce(): Promise<void> {
-  await store.checkService();
   if (refreshing || !store.view) return;
   refreshing = true;
   try {
@@ -56,10 +55,16 @@ async function refreshOnce(): Promise<void> {
   }
 }
 const timer = setInterval(() => void refreshOnce(), POLL_MS);
-const onFocus = (): void => { void refreshOnce(); };
+// The health dot is the only live signal when no pull request is open, and the window
+// can sit unfocused for hours — so it gets its own timer rather than riding on the
+// refresh poll, which returns early with nothing open and only wakes on focus.
+const HEALTH_MS = 15_000;
+const healthTimer = setInterval(() => void store.checkService(), HEALTH_MS);
+const onFocus = (): void => { void store.checkService(); void refreshOnce(); };
 window.addEventListener("focus", onFocus);
 onBeforeUnmount(() => {
   clearInterval(timer);
+  clearInterval(healthTimer);
   window.removeEventListener("focus", onFocus);
   window.removeEventListener("keydown", onKey);
 });
