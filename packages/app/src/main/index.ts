@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "electron";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { repoIdFromUrl, type OpenTarget, type RepoEntry } from "@gander/shared";
@@ -83,10 +83,16 @@ function installMenu(cfg: GanderConfig): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// Lives outside the bundle so it survives electron-vite's build untouched. The path is
+// relative to out/main/, which is where this file runs from in dev and after a build alike.
+const appIcon = nativeImage.createFromPath(join(import.meta.dirname, "../../resources/icon.png"));
+
 function createWindow(cfg: GanderConfig): void {
   const win = new BrowserWindow({
     width: 1360, height: 860,
     backgroundColor: "#16181d",
+    // Ignored on macOS, where the dock icon comes from the bundle — app.dock.setIcon covers that.
+    icon: appIcon,
     // sandbox: false — our preload output is an ES module (index.mjs, from "type": "module");
     // Electron's default sandboxed preload context cannot load ESM, so window.gander would
     // silently never be defined. contextIsolation stays at its secure default and
@@ -140,6 +146,9 @@ try {
 }
 
 app.whenReady().then(async () => {
+  // Unpackaged runs show Electron's own icon in the dock; this is the only way to override it.
+  if (!appIcon.isEmpty()) app.dock?.setIcon(appIcon);
+
   let cfg: GanderConfig;
   try {
     cfg = await bootstrap();
