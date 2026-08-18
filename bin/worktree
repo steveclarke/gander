@@ -1,0 +1,677 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+################################################################################
+# Gander Worktree Manager
+################################################################################
+#
+# Creates and manages isolated Gander worktrees. New worktrees run bin/setup by
+# default, so their dependencies, ports, service token, process-compose socket,
+# SQLite database path, and repo-local configuration are ready before first use.
+#
+# Usage:
+#   bin/worktree add NAME
+#   bin/worktree add --gh ISSUE [NAME]
+#   bin/worktree add --pr PR [NAME]
+#   bin/worktree init [NAME]
+#   bin/worktree list
+#   bin/worktree path [QUERY]
+#   bin/worktree remove [NAME ...]
+#
+################################################################################
+
+SCRIPT_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+COMMON_DIR="$(git -C "$SCRIPT_ROOT" rev-parse --git-common-dir 2>/dev/null)" || {
+  echo "Error: bin/worktree must be run from a Gander checkout." >&2
+  exit 1
+}
+if [[ "$COMMON_DIR" != /* ]]; then
+  COMMON_DIR="$(cd "$SCRIPT_ROOT/$COMMON_DIR" && pwd -P)"
+fi
+if [[ "$(basename "$COMMON_DIR")" == ".git" ]]; then
+  REPO_ROOT="$(cd "$(dirname "$COMMON_DIR")" && pwd -P)"
+else
+  REPO_ROOT="$SCRIPT_ROOT"
+fi
+
+WORKTREE_ROOT="${GANDER_WORKTREE_ROOT:-$(dirname "$REPO_ROOT")/gander-worktrees}"
+BASE_BRANCH="${GANDER_BASE_BRANCH:-master}"
+
+if [[ -t 1 ]]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  CYAN='\033[0;36m'
+  BOLD='\033[1m'
+  DIM='\033[2m'
+  RESET='\033[0m'
+else
+  RED=''
+  GREEN=''
+  YELLOW=''
+  CYAN=''
+  BOLD=''
+  DIM=''
+  RESET=''
+fi
+
+GUM=""
+for candidate in /opt/homebrew/bin/gum /usr/local/bin/gum; do
+  if [[ -x "$candidate" ]]; then
+    GUM="$candidate"
+    break
+  fi
+done
+if [[ -z "$GUM" ]] && command -v gum >/dev/null 2>&1 && gum --version >/dev/null 2>&1; then
+  GUM="gum"
+fi
+unset candidate
+
+################################################################################
+# Main Orchestration
+################################################################################
+
+main() {
+  local command="${1:-help}"
+  [[ $# -gt 0 ]] && shift
+
+  case "$command" in
+    add) cmd_add "$@" ;;
+    init) cmd_init "$@" ;;
+    list|ls) cmd_list "$@" ;;
+    path) cmd_path "$@" ;;
+    remove|rm) cmd_remove "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+      error "Unknown command: $command"
+      usage >&2
+      return 1
+      ;;
+  esac
+}
+
+################################################################################
+# Output and Help
+################################################################################
+
+usage() {
+  cat <<'USAGE'
+bin/worktree — Manage Gander worktrees with isolated dev environments.
+
+Commands:
+  add [NAME]             Create and bootstrap a worktree
+  init [NAME]            Bootstrap the current or a named worktree
+  list, ls               List active worktrees
+  path [QUERY]           Print a worktree path; pick one when QUERY is omitted
+  remove, rm [NAME ...]  Remove worktrees; pick one when NAME is omitted
+
+Add options:
+  --gh N                 Name the branch from GitHub issue N
+  --pr N                 Check out the branch for GitHub pull request N
+  --init=false           Create the worktree without running bin/setup
+  --tmux                 Open the worktree with tmux-workspace
+  --agent NAME           Agent for tmux-workspace: claude, codex, or none
+  --mode STRING          Extra arguments passed to the agent
+  --no-switch            Do not attach to the new tmux session
+  --tmux-json            Print tmux pane IDs as JSON
+
+Remove options:
+  -m, --multiple         Select more than one worktree when NAME is omitted
+  -d, --delete-branch    Delete the local branch after removing its worktree
+  -f, --force            Remove a dirty worktree; force branch deletion with -d
+  -y, --yes              Skip confirmation
+
+Examples:
+  bin/worktree add settings-ui
+  bin/worktree add --gh 3
+  bin/worktree add --pr 12 --tmux --agent codex
+  bin/worktree add scratch --init=false
+  bin/worktree init settings-ui
+  bin/worktree path settings
+  bin/worktree rm settings-ui -d -y
+
+Interactive selection requires Charm gum: brew install gum
+USAGE
+}
+
+info() { printf '%b\n' "${DIM}$1${RESET}"; }
+success() { printf '%b\n' "${GREEN}✓ $1${RESET}"; }
+warn() { printf '%b\n' "${YELLOW}$1${RESET}" >&2; }
+error() { printf '%b\n' "${RED}$1${RESET}" >&2; }
+
+################################################################################
+# Worktree Discovery
+################################################################################
+
+list_worktree_records() {
+  local path=""
+  local branch=""
+  local line
+
+  while IFS= read -r line; do
+    case "$line" in
+      worktree\ *) path="${line#worktree }" ;;
+      branch\ refs/heads/*) branch="${line#branch refs/heads/}" ;;
+      "")
+        if [[ -n "$path" && -n "$branch" && "$path" != "$REPO_ROOT" ]]; then
+          printf '%s\t%s\n' "$path" "$branch"
+        fi
+        path=""
+        branch=""
+        ;;
+    esac
+  done < <(git -C "$REPO_ROOT" worktree list --porcelain)
+
+  if [[ -n "$path" && -n "$branch" && "$path" != "$REPO_ROOT" ]]; then
+    printf '%s\t%s\n' "$path" "$branch"
+  fi
+}
+
+list_worktree_names() {
+  local path
+  local branch
+  while IFS=$'\t' read -r path branch; do
+    printf '%s\n' "$branch"
+  done < <(list_worktree_records)
+}
+
+pick_worktrees() {
+  local header="$1"
+  local multiple="${2:-false}"
+  local names
+  names="$(list_worktree_names)"
+
+  if [[ -z "$names" ]]; then
+    warn "No worktrees are available."
+    return 1
+  fi
+  if [[ -z "$GUM" ]]; then
+    error "Specify a worktree name, or install gum for an interactive picker: brew install gum"
+    return 1
+  fi
+
+  local args=(choose --header "$header")
+  [[ "$multiple" == "true" ]] && args+=(--no-limit)
+  printf '%s\n' "$names" | "$GUM" "${args[@]}"
+}
+
+find_worktree() {
+  local query="$1"
+  local exact=""
+  local path
+  local branch
+  local -a prefix_paths=()
+  local -a prefix_branches=()
+  local -a substring_paths=()
+  local -a substring_branches=()
+
+  while IFS=$'\t' read -r path branch; do
+    if [[ "$branch" == "$query" ]]; then
+      exact="$path"
+      break
+    fi
+    if [[ "$branch" == "$query"* ]]; then
+      prefix_paths+=("$path")
+      prefix_branches+=("$branch")
+    elif [[ "$branch" == *"$query"* ]]; then
+      substring_paths+=("$path")
+      substring_branches+=("$branch")
+    fi
+  done < <(list_worktree_records)
+
+  if [[ -n "$exact" ]]; then
+    printf '%s\n' "$exact"
+    return 0
+  fi
+  if [[ ${#prefix_paths[@]} -eq 1 ]]; then
+    printf '%s\n' "${prefix_paths[0]}"
+    return 0
+  fi
+  if [[ ${#prefix_paths[@]} -gt 1 ]]; then
+    error "More than one worktree starts with '$query': ${prefix_branches[*]}"
+    return 1
+  fi
+  if [[ ${#substring_paths[@]} -eq 1 ]]; then
+    printf '%s\n' "${substring_paths[0]}"
+    return 0
+  fi
+  if [[ ${#substring_paths[@]} -gt 1 ]]; then
+    error "More than one worktree contains '$query': ${substring_branches[*]}"
+    return 1
+  fi
+
+  return 1
+}
+
+branch_for_path() {
+  local target="$1"
+  local path
+  local branch
+  while IFS=$'\t' read -r path branch; do
+    if [[ "$path" == "$target" ]]; then
+      printf '%s\n' "$branch"
+      return 0
+    fi
+  done < <(list_worktree_records)
+  return 1
+}
+
+################################################################################
+# Naming and Bootstrap
+################################################################################
+
+slugify() {
+  printf '%s\n' "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' \
+    | awk -F'-' '{ for (i = 1; i <= 5 && i <= NF; i++) { if (i > 1) printf "-"; printf "%s", $i } print "" }'
+}
+
+fetch_issue_title() {
+  (cd "$REPO_ROOT" && gh issue view "$1" --json title --jq '.title') 2>/dev/null
+}
+
+fetch_pr_branch() {
+  (cd "$REPO_ROOT" && gh pr view "$1" --json headRefName --jq '.headRefName') 2>/dev/null
+}
+
+parse_init_flag() {
+  case "$1" in
+    --init|--init=true|--init=1) return 0 ;;
+    --init=false|--init=0) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+resolve_add_names() {
+  local name="$1"
+  local pr="$2"
+  local issue="$3"
+
+  RESOLVED_DIR=""
+  RESOLVED_BRANCH=""
+  RESOLVED_HEADER=""
+
+  if [[ -n "$pr" ]]; then
+    local branch
+    branch="$(fetch_pr_branch "$pr")" || true
+    if [[ -z "$branch" ]]; then
+      error "Could not fetch pull request #$pr. Check gh authentication and the PR number."
+      return 1
+    fi
+    RESOLVED_BRANCH="$branch"
+    RESOLVED_DIR="${name:-${pr}-${branch//\//-}}"
+    RESOLVED_HEADER="Pull request #$pr"
+    return 0
+  fi
+
+  if [[ -n "$issue" ]]; then
+    if [[ -n "$name" ]]; then
+      RESOLVED_BRANCH="$name"
+      RESOLVED_DIR="${name//\//-}"
+    else
+      local title
+      local slug
+      title="$(fetch_issue_title "$issue")" || true
+      if [[ -z "$title" ]]; then
+        error "Could not fetch issue #$issue. Check gh authentication and the issue number."
+        return 1
+      fi
+      slug="$(slugify "$title")"
+      if [[ -z "$slug" ]]; then
+        error "Issue #$issue does not have a usable title."
+        return 1
+      fi
+      RESOLVED_BRANCH="${issue}-${slug}"
+      RESOLVED_DIR="$RESOLVED_BRANCH"
+    fi
+    RESOLVED_HEADER="Issue #$issue"
+    return 0
+  fi
+
+  if [[ -z "$name" ]]; then
+    error "Provide a NAME, --gh, or --pr."
+    return 1
+  fi
+
+  RESOLVED_BRANCH="$name"
+  RESOLVED_DIR="${name//\//-}"
+  RESOLVED_HEADER="$name"
+}
+
+bootstrap_worktree() {
+  local path="$1"
+  printf '\n%b\n' "${BOLD}━━━ Bootstrapping ${path##*/} ━━━${RESET}"
+  (cd "$path" && bin/setup)
+}
+
+launch_tmux_workspace() {
+  local path="$1"
+  local agent="$2"
+  local mode="$3"
+  local switch_session="$4"
+  local json="$5"
+
+  if ! command -v tmux-workspace >/dev/null 2>&1; then
+    warn "tmux-workspace is not installed; the worktree is ready, but no session was opened."
+    return 0
+  fi
+
+  local args=("$path")
+  [[ -n "$agent" ]] && args+=(--agent "$agent")
+  [[ -n "$mode" ]] && args+=(--mode "$mode")
+  [[ "$switch_session" == "false" ]] && args+=(--no-switch)
+  [[ "$json" == "true" ]] && args+=(--json)
+
+  printf '\n%b\n' "${BOLD}━━━ tmux-workspace ━━━${RESET}"
+  tmux-workspace "${args[@]}"
+}
+
+################################################################################
+# Commands
+################################################################################
+
+cmd_add() {
+  local name=""
+  local pr=""
+  local issue=""
+  local initialize=true
+  local use_tmux=false
+  local tmux_agent=""
+  local tmux_mode=""
+  local tmux_switch=true
+  local tmux_json=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr) pr="${2:?--pr requires a number}"; shift 2 ;;
+      --pr=*) pr="${1#*=}"; shift ;;
+      --gh) issue="${2:?--gh requires a number}"; shift 2 ;;
+      --gh=*) issue="${1#*=}"; shift ;;
+      --init|--init=*)
+        local init_status
+        if parse_init_flag "$1"; then
+          initialize=true
+        else
+          init_status=$?
+          if [[ $init_status -eq 1 ]]; then
+            initialize=false
+          else
+            error "Invalid value for $1. Use --init=true or --init=false."
+            return 1
+          fi
+        fi
+        shift
+        ;;
+      --tmux) use_tmux=true; shift ;;
+      --agent) tmux_agent="${2:?--agent requires a value}"; shift 2 ;;
+      --agent=*) tmux_agent="${1#*=}"; shift ;;
+      --mode) tmux_mode="${2:?--mode requires a value}"; shift 2 ;;
+      --mode=*) tmux_mode="${1#*=}"; shift ;;
+      --no-switch) tmux_switch=false; shift ;;
+      --tmux-json) tmux_json=true; shift ;;
+      -h|--help) usage; return 0 ;;
+      -*) error "Unknown option: $1"; return 1 ;;
+      *)
+        if [[ -n "$name" ]]; then
+          error "Only one worktree name can be provided."
+          return 1
+        fi
+        name="$1"
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -n "$pr" && -n "$issue" ]]; then
+    error "--pr and --gh are mutually exclusive."
+    return 1
+  fi
+
+  resolve_add_names "$name" "$pr" "$issue" || return 1
+
+  local dir_name="$RESOLVED_DIR"
+  local branch="$RESOLVED_BRANCH"
+  local worktree_path="$WORKTREE_ROOT/$dir_name"
+
+  if ! git check-ref-format --branch "$branch" >/dev/null 2>&1; then
+    error "Invalid branch name: $branch"
+    return 1
+  fi
+  if [[ -e "$worktree_path" ]]; then
+    error "A file or directory already exists at $worktree_path"
+    return 1
+  fi
+
+  printf '%b\n' "${BOLD}━━━ ${RESOLVED_HEADER} ━━━${RESET}"
+  [[ "$dir_name" != "$branch" ]] && info "Directory: $dir_name  Branch: $branch"
+  mkdir -p "$WORKTREE_ROOT"
+
+  if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$branch"; then
+    info "Checking out existing local branch $branch"
+    git -C "$REPO_ROOT" worktree add "$worktree_path" "$branch"
+  elif git -C "$REPO_ROOT" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+    info "Fetching and tracking origin/$branch"
+    git -C "$REPO_ROOT" fetch --no-tags origin "refs/heads/$branch:refs/remotes/origin/$branch"
+    git -C "$REPO_ROOT" worktree add --track -b "$branch" "$worktree_path" "origin/$branch"
+  else
+    info "Creating $branch from $BASE_BRANCH"
+    git -C "$REPO_ROOT" worktree add -b "$branch" "$worktree_path" "$BASE_BRANCH"
+  fi
+  success "Worktree created at $worktree_path"
+
+  if [[ "$initialize" == "true" ]]; then
+    if ! bootstrap_worktree "$worktree_path"; then
+      warn "Bootstrap failed. The worktree was kept for inspection."
+      warn "Retry with: cd $worktree_path && bin/setup"
+      return 1
+    fi
+  else
+    warn "Bootstrap skipped. Run bin/setup before starting the dev stack."
+  fi
+
+  printf '\n%b\n' "${BOLD}━━━ Next steps ━━━${RESET}"
+  printf '  cd %s\n' "$worktree_path"
+  [[ "$initialize" == "false" ]] && printf '  bin/setup\n'
+  printf '  bin/dev\n\n'
+
+  if command -v pbcopy >/dev/null 2>&1; then
+    printf 'Worktree ready\nBranch: %s\nPath: %s\n\nRun:\n  bin/dev\n' "$branch" "$worktree_path" | pbcopy
+    info "Copied the worktree details to the clipboard."
+  fi
+
+  if [[ "$use_tmux" == "true" ]]; then
+    launch_tmux_workspace "$worktree_path" "$tmux_agent" "$tmux_mode" "$tmux_switch" "$tmux_json"
+  fi
+}
+
+cmd_init() {
+  local name=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help) usage; return 0 ;;
+      -*) error "Unknown option: $1"; return 1 ;;
+      *)
+        if [[ -n "$name" ]]; then
+          error "Only one worktree name can be provided."
+          return 1
+        fi
+        name="$1"
+        shift
+        ;;
+    esac
+  done
+
+  local target_path
+  if [[ -z "$name" ]]; then
+    local current_root
+    current_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    if [[ -n "$current_root" && -x "$current_root/bin/setup" ]]; then
+      target_path="$current_root"
+    else
+      name="$(pick_worktrees "Select a worktree to bootstrap")" || return 1
+      target_path="$(find_worktree "$name")" || return 1
+    fi
+  else
+    target_path="$(find_worktree "$name")" || {
+      error "No worktree matches '$name'."
+      return 1
+    }
+  fi
+
+  if [[ ! -x "$target_path/bin/setup" ]]; then
+    error "$target_path/bin/setup is missing or is not executable."
+    return 1
+  fi
+  bootstrap_worktree "$target_path"
+}
+
+cmd_list() {
+  if [[ $# -gt 0 && "${1:-}" != "--table" ]]; then
+    error "Unknown option: $1"
+    return 1
+  fi
+
+  printf '%b\n\n' "${BOLD}Active worktrees:${RESET}"
+  local found=false
+  local path
+  local branch
+  while IFS=$'\t' read -r path branch; do
+    found=true
+    local port
+    port="$(sed -n 's/^GANDER_PORT=//p' "$path/.env" 2>/dev/null | head -n 1)"
+    [[ -z "$port" ]] && port="not initialized"
+
+    printf '  %b%s%b\n' "$CYAN" "$branch" "$RESET"
+    printf '       %b%s%b\n' "$DIM" "$path" "$RESET"
+    printf '       %bPort: %s%b\n\n' "$DIM" "$port" "$RESET"
+  done < <(list_worktree_records)
+
+  if [[ "$found" == "false" ]]; then
+    info "No worktrees found."
+  fi
+  return 0
+}
+
+cmd_path() {
+  if [[ $# -gt 1 ]]; then
+    error "path accepts at most one query."
+    return 1
+  fi
+
+  local query="${1:-}"
+  if [[ -z "$query" ]]; then
+    query="$(pick_worktrees "Select a worktree")" || return 1
+  fi
+
+  local path
+  path="$(find_worktree "$query")" || {
+    error "No worktree matches '$query'."
+    return 1
+  }
+  printf '%s\n' "$path"
+}
+
+confirm() {
+  local prompt="$1"
+  if [[ -n "$GUM" ]]; then
+    "$GUM" confirm --default=false "$prompt"
+  else
+    local answer
+    read -r -p "$prompt [y/N] " answer
+    [[ "$answer" =~ ^[Yy]$ ]]
+  fi
+}
+
+stop_worktree_services() {
+  local path="$1"
+  if [[ -x "$path/bin/dev" ]]; then
+    (cd "$path" && bin/dev stop >/dev/null 2>&1) || true
+  fi
+  if command -v outport >/dev/null 2>&1; then
+    (cd "$path" && outport down >/dev/null 2>&1) || true
+  fi
+}
+
+cmd_remove() {
+  local multiple=false
+  local force=false
+  local delete_branch=false
+  local skip_confirmation=false
+  local -a names=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -m|--multiple) multiple=true; shift ;;
+      -f|--force) force=true; shift ;;
+      -d|--delete-branch) delete_branch=true; shift ;;
+      -y|--yes) skip_confirmation=true; shift ;;
+      -h|--help) usage; return 0 ;;
+      -*) error "Unknown option: $1"; return 1 ;;
+      *) names+=("$1"); shift ;;
+    esac
+  done
+
+  if [[ ${#names[@]} -eq 0 ]]; then
+    local picked
+    picked="$(pick_worktrees "Select worktrees to remove" "$multiple")" || return 1
+    while IFS= read -r name; do
+      [[ -n "$name" ]] && names+=("$name")
+    done <<< "$picked"
+  fi
+
+  local result=0
+  local name
+  for name in "${names[@]}"; do
+    local path
+    path="$(find_worktree "$name")" || {
+      warn "No worktree matches '$name'; skipped."
+      result=1
+      continue
+    }
+
+    local branch
+    branch="$(branch_for_path "$path")" || {
+      warn "Could not determine the branch for $path; skipped."
+      result=1
+      continue
+    }
+
+    printf '%b\n' "${BOLD}Remove worktree?${RESET}"
+    info "Branch: $branch"
+    info "Path: $path"
+    if [[ "$skip_confirmation" != "true" ]] && ! confirm "Continue?"; then
+      info "Skipped."
+      continue
+    fi
+
+    stop_worktree_services "$path"
+    if [[ "$force" == "true" ]]; then
+      git -C "$REPO_ROOT" worktree remove --force "$path"
+    else
+      git -C "$REPO_ROOT" worktree remove "$path"
+    fi
+    success "Worktree removed."
+
+    if [[ "$delete_branch" == "true" ]]; then
+      if [[ "$force" == "true" ]]; then
+        git -C "$REPO_ROOT" branch -D "$branch"
+        success "Branch deleted."
+      elif git -C "$REPO_ROOT" branch -d "$branch"; then
+        success "Branch deleted."
+      else
+        warn "The worktree was removed, but branch $branch is unmerged and was kept."
+        warn "Use --force with --delete-branch only if discarding it is intentional."
+        result=1
+      fi
+    fi
+  done
+
+  return "$result"
+}
+
+################################################################################
+# Script Execution
+################################################################################
+
+main "$@"

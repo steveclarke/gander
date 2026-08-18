@@ -22,6 +22,28 @@ tests. It does not use the dev stack, GitHub credentials, or an existing Gander
 service. The ordinary `pnpm test` command continues to run only the fast Vitest
 suite.
 
+### When the suite cannot start Electron
+
+`electron` and `electron-chromedriver` download an archive in a postinstall
+script and unpack it into the package. Adding them to a checkout whose
+`node_modules` predates them can leave that unpacking truncated — `electron/dist`
+ends up a few hundred kilobytes rather than roughly 250 MB — while the install
+script still reports success and exits 0. The suite then fails with
+`spawn ... chromedriver ENOENT`, or Electron starts and dies with
+`DevToolsActivePort file doesn't exist`. Reinstalling does not help: pnpm sees
+the packages as present and never re-runs the step.
+
+Check for it, from the repository root:
+
+```bash
+./packages/app/node_modules/.bin/electron --version
+```
+
+A working install prints the version. A truncated one raises
+`Electron failed to install correctly`. The reliable repair is a worktree with a
+clean install of its own — `bin/worktree add` runs one — which unpacks correctly
+because nothing was there before.
+
 ## Processes
 
 | Process | Command | Waits for |
@@ -51,9 +73,35 @@ than fetching it again.
 
 ## Worktrees
 
-`outport up` gives each worktree its own port, and `PC_SOCKET_PATH` gives it its
-own process-compose control socket, so `bin/dev status` in one checkout never
-reaches another's stack. In a new worktree: `bin/setup`, then `bin/dev`.
+Create isolated working copies with `bin/worktree`. The `add` command runs the
+full `bin/setup` bootstrap by default, so the new checkout is ready for
+`bin/dev` immediately:
+
+```bash
+bin/worktree add settings-ui             # Create a branch and worktree
+bin/worktree add --gh 3                   # Name the branch from a GitHub issue
+bin/worktree add --pr 12                  # Check out a pull request branch
+bin/worktree add review --init=false      # Create only; run bin/setup later
+bin/worktree add --gh 3 --tmux            # Create, bootstrap, and open in tmux
+```
+
+Worktrees live in `~/src/gander-worktrees/<name>/`. Other commands:
+
+```bash
+bin/worktree init [name]                  # Bootstrap an existing worktree
+bin/worktree list                         # List worktrees and allocated ports
+bin/worktree path [query]                 # Find a worktree path
+bin/worktree remove <name>                # Stop services and remove it
+bin/worktree remove <name> -d -y          # Also delete its merged branch
+```
+
+Interactive selection for `init`, `path`, or `remove` requires `gum`. Named
+commands work without it.
+
+`outport up` gives each initialized worktree its own port. `PC_SOCKET_PATH`
+gives it its own process-compose control socket, so `bin/dev status` in one
+checkout never reaches another stack. `.gander/` keeps the registered repos and
+SQLite review state local to that worktree.
 
 ## Registering the MCP endpoint with an agent
 
