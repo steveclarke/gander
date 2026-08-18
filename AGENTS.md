@@ -30,6 +30,7 @@ in code, comments, commits, or issues.
 | Electron E2E | `pnpm test:e2e` |
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Isolated working copy | `bin/worktree add <name>` |
+| Check this worktree's MCP bridge | `bin/mcp check` |
 
 There is no linter or formatter, and no CI. `pnpm typecheck` and `pnpm test` are
 the gate.
@@ -38,6 +39,12 @@ the gate.
 allocated per-checkout by outport. Don't start packages by hand — the app reads
 its port and token from the generated `.env`. `DEVSTACK.md` covers the stack,
 worktrees, and MCP registration.
+
+When Steve asks to open the current PR in Gander, dogfood a change, or respond
+to Gander review questions, read
+`.agents/skills/review-with-gander/SKILL.md` and follow it. Use the CLI bridge
+from the current worktree; do not register its MCP endpoint globally or reuse
+another worktree's port, token, config, database, or process.
 
 **Electron install trap:** Electron 33's extract-zip silently truncates under
 Node 24, leaving a `node_modules/electron/dist` of a few hundred KB while the
