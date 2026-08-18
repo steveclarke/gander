@@ -27,8 +27,7 @@ onMounted(async () => {
   void editorSettings.load();
   // An installed app starts with no connection at all. Knowing that here is what lets the
   // window say where to set one instead of showing an empty review that cannot be filled.
-  unconfigured.value = (await api.getConnection()).url === "";
-  await store.checkService();
+  await refreshConnectionState();
   await store.loadRepos();
   const target = await api.initialTarget();
   if (target !== null) await store.openTarget(target);
@@ -44,17 +43,29 @@ const activeSurface = shallowRef<"review" | "settings">("review");
 // A connection just saved is worth checking now: the status bar's poll is 30 seconds
 // away, and until it runs the window contradicts what the settings pane just said.
 async function onConnected(): Promise<void> {
-  unconfigured.value = false;
-  await store.checkService();
+  await refreshConnectionState();
   await store.loadRepos();
+}
+
+async function refreshConnectionState(): Promise<void> {
+  unconfigured.value = (await api.getConnection()).url === "";
+  await store.checkService();
 }
 
 function openSettings(): void {
   activeSurface.value = "settings";
 }
 
+function closeSettings(): void {
+  activeSurface.value = "review";
+  void refreshConnectionState();
+}
+
 function toggleSettings(): void {
   activeSurface.value = activeSurface.value === "settings" ? "review" : "settings";
+  // Read back on the way out as well as on the save: the review surface must never
+  // claim there is no service while the status bar says it is connected.
+  if (activeSurface.value === "review") void refreshConnectionState();
 }
 
 // v-model needs something assignable, and which dimension the questions splitter drags
@@ -146,7 +157,7 @@ onBeforeUnmount(() => {
         v-if="activeSurface === 'settings'"
         :store="editorSettings"
         @connected="onConnected"
-        @close="activeSurface = 'review'"
+        @close="closeSettings"
       />
       <div v-show="activeSurface === 'review'" class="review-surface">
         <p v-if="store.busy && !store.view" class="empty working">

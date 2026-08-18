@@ -27,6 +27,7 @@ export function createGanderApi(invoke: Invoke, subscribe: Subscribe): GanderApi
     getConnection: () => call("getConnection"),
     testConnection: (url, token) => call("testConnection", url, token),
     setConnection: (url, token) => call("setConnection", url, token),
+    setGithubToken: (token) => call("setGithubToken", token),
     getSettings: () => call("getSettings"),
     updateSettings: (settings) => call("updateSettings", settings),
     onOpenSettings: (listener) => subscribe("gander:openSettings", listener),

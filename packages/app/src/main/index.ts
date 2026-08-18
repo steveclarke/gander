@@ -6,7 +6,7 @@ import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, save
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine } from "./git.js";
-import { listOpenPrs, resolveGithubToken } from "./github.js";
+import { checkGithubToken, listOpenPrs, resolveGithubToken } from "./github.js";
 import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
@@ -66,8 +66,23 @@ async function bootstrap(): Promise<GanderConfig> {
   ipcMain.handle("gander:getConnection", async () => ({
     url: cfg.serviceUrl,
     token: cfg.serviceToken,
+    githubToken: cfg.githubToken ?? "",
     fromEnvironment: connectionIsFromEnvironment(),
   }));
+  ipcMain.handle("gander:setGithubToken", async (_e, token: string) => {
+    const trimmed = token.trim();
+    // Emptying it is how the reviewer goes back to whatever `gh` provides.
+    if (trimmed === "") {
+      delete cfg.githubToken;
+      saveConfig(cfg);
+      return { ok: true as const, login: "" };
+    }
+    const result = await checkGithubToken(trimmed);
+    if (!result.ok) return result;
+    cfg.githubToken = trimmed;
+    saveConfig(cfg);
+    return result;
+  });
   ipcMain.handle("gander:testConnection", async (_e, url: string, token: string) => checkConnection(url, token));
   ipcMain.handle("gander:setConnection", async (_e, url: string, token: string) => {
     const result = await checkConnection(url, token);
