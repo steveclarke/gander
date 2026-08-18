@@ -1,5 +1,10 @@
 import type { NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
+import type { ConnectionCheck } from "./main/connection.js";
+
+export type GithubTokenCheck = { ok: true; login: string } | { ok: false; reason: string };
+
+export type { ConnectionCheck };
 
 export interface GanderApi {
   listRepos(): Promise<RepoEntry[]>;
@@ -10,6 +15,13 @@ export interface GanderApi {
   initialTarget(): Promise<OpenTarget | null>;
   /** Fires when an already-running app is handed a target by a later `gander` command. */
   onOpenTarget(listener: (target: OpenTarget) => void): () => void;
+  /** Where the review service is, and whether the environment is deciding that. */
+  getConnection(): Promise<{ url: string; token: string; githubToken: string; fromEnvironment: boolean }>;
+  /** Checks the token against GitHub, and saves it only if GitHub accepts it. Empty clears it. */
+  setGithubToken(token: string): Promise<GithubTokenCheck>;
+  testConnection(url: string, token: string): Promise<ConnectionCheck>;
+  /** Checks first, and saves only a connection that answered. */
+  setConnection(url: string, token: string): Promise<ConnectionCheck>;
   serviceHealthy(): Promise<boolean>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;

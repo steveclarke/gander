@@ -101,15 +101,28 @@ describe("resolveGithubToken", () => {
     expect(await resolveGithubToken(undefined, fakeExecFile)).toBe("gh-tok");
   });
 
-  it("falls back to configToken when gh and the env var are both unavailable", async () => {
-    const fakeExecFile = async () => { throw new Error("gh not found"); };
+  it("prefers a configured token over spawning gh", async () => {
+    const fakeExecFile = async () => { throw new Error("gh must not run"); };
     expect(await resolveGithubToken("config-tok", fakeExecFile)).toBe("config-tok");
   });
 
-  it("throws naming all three sources when no token is available anywhere", async () => {
+  it("finds gh where a package manager put it when PATH does not have it", async () => {
+    // What a GUI launch looks like: PATH is /usr/bin:/bin, so the bare name resolves to
+    // nothing while the binary is sitting in Homebrew's directory.
+    const tried: string[] = [];
+    const fakeExecFile = async (file: string) => {
+      tried.push(file);
+      if (file !== "/opt/homebrew/bin/gh") throw new Error("command not found");
+      return { stdout: "brew-tok\n" };
+    };
+    expect(await resolveGithubToken(undefined, fakeExecFile)).toBe("brew-tok");
+    expect(tried).toEqual(["gh", "/opt/homebrew/bin/gh"]);
+  });
+
+  it("says where to put a token when there is none anywhere", async () => {
     const fakeExecFile = async () => { throw new Error("gh not found"); };
     await expect(resolveGithubToken(undefined, fakeExecFile)).rejects.toThrow(
-      /gh auth login.*GANDER_GITHUB_TOKEN.*config file/s,
+      /Settings.*Connection.*gh auth login/s,
     );
   });
 });

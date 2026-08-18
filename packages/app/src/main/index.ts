@@ -2,10 +2,11 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "e
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { repoIdFromUrl, type OpenTarget, type RepoEntry } from "@gander/shared";
-import { loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
+import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
+import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine } from "./git.js";
-import { listOpenPrs, resolveGithubToken } from "./github.js";
+import { checkGithubToken, listOpenPrs, resolveGithubToken } from "./github.js";
 import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
@@ -15,10 +16,14 @@ import { themeFor } from "../themes.js";
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
-  const ghToken = await resolveGithubToken(cfg.githubToken);
   const git = createGitEngine(join(app.getPath("userData"), "clones"));
-  const conn = resolveServiceConnection(cfg);
-  const service = createServiceClient(conn.url, conn.token);
+  // Resolved per request rather than captured: the reviewer can enter or change the
+  // connection in settings, and it takes effect without a restart.
+  const service = createServiceClient(() => resolveServiceConnection(cfg));
+  // Resolved per call for the same reason, and lazily: an installed app launched from
+  // Finder gets a minimal PATH with no `gh` on it, which must leave the window open and
+  // the settings reachable rather than killing the launch.
+  const githubToken = async (): Promise<string> => resolveGithubToken(cfg.githubToken);
   const urlFor = (repoId: string): string => {
     const entry = cfg.repos.find((r) => r.repoId === repoId);
     if (!entry) throw new Error(`Repo ${repoId} is not registered`);
@@ -26,7 +31,7 @@ async function bootstrap(): Promise<GanderConfig> {
   };
   const reviewer = createReviewer({
     git, service,
-    listPrs: (repoId) => listOpenPrs(repoId, ghToken),
+    listPrs: async (repoId) => listOpenPrs(repoId, await githubToken()),
     repoUrl: urlFor,
     machine: hostname(),
   });
@@ -37,7 +42,7 @@ async function bootstrap(): Promise<GanderConfig> {
     if (!cfg.repos.some((r) => r.repoId === entry.repoId)) { cfg.repos.push(entry); saveConfig(cfg); }
     return entry;
   });
-  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, ghToken));
+  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, await githubToken()));
   ipcMain.handle("gander:serviceHealthy", async () => service.healthy());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
@@ -56,6 +61,40 @@ async function bootstrap(): Promise<GanderConfig> {
   ipcMain.handle("gander:addReviewerReply", async (_e, repoId: string, n: number, id: number, text: string) => reviewer.addReviewerReply(repoId, n, id, text));
   ipcMain.handle("gander:deleteQuestion", async (_e, repoId: string, n: number, id: number) => reviewer.deleteQuestion(repoId, n, id));
   ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean) => reviewer.setCheckedMany(repoId, n, paths, checked));
+  // Connection is deliberately not part of the settings document: that document is
+  // editable as JSON in the app, and the token does not belong on screen in a text editor.
+  ipcMain.handle("gander:getConnection", async () => ({
+    url: cfg.serviceUrl,
+    token: cfg.serviceToken,
+    githubToken: cfg.githubToken ?? "",
+    fromEnvironment: connectionIsFromEnvironment(),
+  }));
+  ipcMain.handle("gander:setGithubToken", async (_e, token: string) => {
+    const trimmed = token.trim();
+    // Emptying it is how the reviewer goes back to whatever `gh` provides.
+    if (trimmed === "") {
+      delete cfg.githubToken;
+      saveConfig(cfg);
+      return { ok: true as const, login: "" };
+    }
+    const result = await checkGithubToken(trimmed);
+    if (!result.ok) return result;
+    cfg.githubToken = trimmed;
+    saveConfig(cfg);
+    return result;
+  });
+  ipcMain.handle("gander:testConnection", async (_e, url: string, token: string) => checkConnection(url, token));
+  ipcMain.handle("gander:setConnection", async (_e, url: string, token: string) => {
+    const result = await checkConnection(url, token);
+    // Saved only once it answers. A connection that has never worked is not worth
+    // keeping, and finding out at the next launch is worse than finding out now.
+    if (!result.ok) return result;
+    cfg.serviceUrl = url.trim().replace(/\/+$/, "");
+    cfg.serviceToken = token.trim();
+    saveConfig(cfg);
+    return result;
+  });
+
   registerSettingsIpc(ipcMain, cfg);
 
   return cfg;
