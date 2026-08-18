@@ -87,14 +87,51 @@ describe("MCP endpoint", () => {
     const openOnly = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
-    })) as { content?: unknown })) as { questions: unknown[] };
+    })) as { content?: unknown })) as {
+      questionCounts: { open: number; addressed: number; resolved: number };
+      questions: unknown[];
+    };
     expect(openOnly.questions).toHaveLength(1);
+    expect(openOnly.questionCounts).toEqual({ open: 1, addressed: 1, resolved: 0 });
 
     const both = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing", includeAddressed: true },
     })) as { content?: unknown })) as { questions: unknown[] };
     expect(both.questions).toHaveLength(2);
+    await client.close();
+  });
+
+  it("explains when resolved questions are hidden and returns them when asked", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const resolved = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null });
+    storage.markQuestionAddressed(resolved.id, { commitRef: "abc1234", note: "Dropped the retry" });
+    storage.putFileState("acme/atlas", 7, {
+      checked: true, path: "a.rb", baseHash: "base", headHash: "head",
+      baseContent: "before", headContent: "after", machine: "studio",
+    });
+
+    const client = await connect();
+    const openOnly = JSON.parse(textOf((await client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", branch: "feat/thing" },
+    })) as { content?: unknown })) as {
+      questionCounts: { open: number; addressed: number; resolved: number };
+      message: string;
+      questions: unknown[];
+    };
+    expect(openOnly.questions).toEqual([]);
+    expect(openOnly.questionCounts).toEqual({ open: 0, addressed: 0, resolved: 1 });
+    expect(openOnly.message).toBe("No open questions returned. 1 resolved question is hidden; pass includeResolved: true to retrieve it.");
+
+    const withResolved = JSON.parse(textOf((await client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", branch: "feat/thing", includeResolved: true },
+    })) as { content?: unknown })) as { questions: Array<Record<string, unknown>> };
+    expect(withResolved.questions).toEqual([{
+      id: resolved.id, file: "a.rb", line: null, text: "handled", state: "resolved",
+      commitRef: "abc1234", note: "Dropped the retry", capturedAtSha: null, lineMayHaveMoved: false,
+    }]);
     await client.close();
   });
 

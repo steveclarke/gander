@@ -175,7 +175,7 @@ Run it in the repository being reviewed, not in this one. Two tools appear:
 
 | Tool | Purpose |
 |------|---------|
-| `get_review_questions` | Open questions for a repo + branch (or pull request number), with file and line |
+| `get_review_questions` | Open questions for a repo + branch (or pull request number), plus counts for every state; addressed and resolved questions can be included explicitly |
 | `mark_question_addressed` | Flags one as acted on, with an optional commit ref and note |
 
 Nothing over MCP resolves a question. That stays the reviewer's act, made by
