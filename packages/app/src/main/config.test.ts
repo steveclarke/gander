@@ -33,6 +33,7 @@ describe("config", () => {
       serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
       settings: {
         editor: { fontFamily: "'Fira Code', monospace", fontSize: 18.5 },
+        window: { zoomLevel: 0.5 },
         workbench: {
           colorTheme: "Gander Dark",
           iconTheme: "catppuccin-mocha",
@@ -41,6 +42,7 @@ describe("config", () => {
       },
     }, cfgPath);
     expect(loadConfig(cfgPath).settings.editor).toEqual({ fontFamily: "'Fira Code', monospace", fontSize: 18.5 });
+    expect(loadConfig(cfgPath).settings.window.zoomLevel).toBe(0.5);
     expect(loadConfig(cfgPath).settings.workbench.colorTheme).toBe("Gander Dark");
     expect(loadConfig(cfgPath).settings.workbench.tree).toEqual({
       fontFamily: "system-ui",
@@ -56,6 +58,7 @@ describe("config", () => {
     }));
     expect(loadConfig(cfgPath).settings).toEqual({
       editor: { fontFamily: "Consolas, monospace", fontSize: 19 },
+      window: DEFAULT_APP_SETTINGS.window,
       workbench: DEFAULT_APP_SETTINGS.workbench,
     });
   });
@@ -159,10 +162,10 @@ describe("config", () => {
 
     // The app writes the config on ordinary actions — a zoom change, opening a pull
     // request. An unconfigured one has to come back, not fail the next launch.
-    first.zoomLevel = 1;
+    first.settings = { ...first.settings, window: { zoomLevel: 1 } };
     saveConfig(first, path);
     const second = loadConfig(path);
-    expect(second.zoomLevel).toBe(1);
+    expect(second.settings.window.zoomLevel).toBe(1);
     expect(second.serviceUrl).toBe("");
   });
 

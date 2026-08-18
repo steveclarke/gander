@@ -2,14 +2,20 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import { PanelLeft } from "lucide-vue-next";
 import type { Store } from "../store.js";
+import ZoomControl from "./ZoomControl.vue";
 
 const props = defineProps<{
   store: Store;
   treeVisible: boolean;
   isDevelopment: boolean;
   worktreeLabel: string | null;
+  zoomLevel: number;
 }>();
-defineEmits<{ toggleTree: [] }>();
+defineEmits<{
+  toggleTree: [];
+  changeZoom: [level: number];
+  openZoomSettings: [];
+}>();
 
 const developmentLabel = computed(() => props.worktreeLabel
   ? `Development build · ${props.worktreeLabel}`
@@ -63,6 +69,11 @@ const lastFetch = computed(() => {
       <span class="development-kind">DEV</span>
       <span v-if="worktreeLabel" class="worktree-label">{{ `· ${worktreeLabel}` }}</span>
     </span>
+    <ZoomControl
+      :level="zoomLevel"
+      @change="$emit('changeZoom', $event)"
+      @open-settings="$emit('openZoomSettings')"
+    />
   </footer>
 </template>
 

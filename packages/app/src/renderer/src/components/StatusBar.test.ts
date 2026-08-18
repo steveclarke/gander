@@ -15,10 +15,10 @@ const store = {
 describe("StatusBar", () => {
   it("shows a development marker only for a development launch", () => {
     const development = mount(StatusBar, {
-      props: { store, treeVisible: true, isDevelopment: true, worktreeLabel: null },
+      props: { store, treeVisible: true, isDevelopment: true, worktreeLabel: null, zoomLevel: 0 },
     });
     const release = mount(StatusBar, {
-      props: { store, treeVisible: true, isDevelopment: false, worktreeLabel: null },
+      props: { store, treeVisible: true, isDevelopment: false, worktreeLabel: null, zoomLevel: 0 },
     });
 
     expect(development.get(".development").text()).toBe("DEV");
@@ -37,6 +37,7 @@ describe("StatusBar", () => {
         treeVisible: true,
         isDevelopment: true,
         worktreeLabel: "feature/review-status",
+        zoomLevel: 0,
       },
     });
 

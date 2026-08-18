@@ -15,17 +15,21 @@ import { X } from "lucide-vue-next";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
 import { effectiveTreeTypography } from "../../settings.js";
 import "./theme.css";
+import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 
 const store = createStore(api);
 const editorSettings = createEditorSettingsStore(api, api.initialWindowState.colorTheme);
 const integratedTitleBar = api.initialWindowState.windowStyle === "integrated-titlebar";
 let unsubscribeOpenTarget: (() => void) | null = null;
 let unsubscribeOpenSettings: (() => void) | null = null;
+let unsubscribeZoomChanged: (() => void) | null = null;
 
 onMounted(async () => {
   // Registered first, so commands arriving while the app restores its last review are not dropped.
   unsubscribeOpenTarget = api.onOpenTarget((target) => { void store.openTarget(target); });
   unsubscribeOpenSettings = api.onOpenSettings(() => openSettings());
+  unsubscribeZoomChanged = api.onZoomChanged((level) => { zoomLevel.value = level; });
+  zoomLevel.value = await api.getZoomLevel();
   void editorSettings.load();
   // An installed app starts with no connection at all. Knowing that here is what lets the
   // window say where to set one instead of showing an empty review that cannot be filled.
@@ -43,6 +47,7 @@ const treeVisible = ref(true);
 const treeScrolling = shallowRef(false);
 let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
 const activeSurface = shallowRef<"review" | "settings">("review");
+const zoomLevel = shallowRef(DEFAULT_ZOOM_LEVEL);
 const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
 // Which section the settings surface opens on. The prompt about a missing service leads
 // straight to the one that fixes it, rather than to whatever was showing last.
@@ -75,6 +80,11 @@ function toggleSettings(): void {
   // Read back on the way out as well as on the save: the review surface must never
   // claim there is no service while the status bar says it is connected.
   if (activeSurface.value === "review") void refreshConnectionState();
+}
+
+async function changeZoom(level: number): Promise<void> {
+  zoomLevel.value = clampZoomLevel(level);
+  zoomLevel.value = await api.setZoomLevel(level);
 }
 
 // v-model needs something assignable, and which dimension the questions splitter drags
@@ -152,6 +162,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKey, true);
   unsubscribeOpenTarget?.();
   unsubscribeOpenSettings?.();
+  unsubscribeZoomChanged?.();
 });
 </script>
 
@@ -237,7 +248,10 @@ onBeforeUnmount(() => {
       :tree-visible="treeVisible"
       :is-development="api.initialWindowState.isDevelopment"
       :worktree-label="api.initialWindowState.worktreeLabel"
+      :zoom-level="zoomLevel"
       @toggle-tree="treeVisible = !treeVisible"
+      @change-zoom="changeZoom"
+      @open-zoom-settings="openSettings('workbench')"
     />
     <QuestionCapture :store="store" :open="capturing" @close="capturing = false" />
   </div>

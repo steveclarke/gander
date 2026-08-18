@@ -112,6 +112,27 @@ describe("Gander end to end", () => {
     }
   });
 
+  it("changes the visible workbench zoom from the status-bar toolbar", async () => {
+    const trigger = await $("button[aria-label^='Zoom:']");
+    await expect(trigger).toHaveText("100%");
+    await trigger.click();
+
+    const zoomIn = await $("button[aria-label='Zoom in']");
+    await zoomIn.waitForDisplayed();
+    await zoomIn.click();
+    await browser.waitUntil(async () => (await trigger.getText()) === "110%");
+    expect(await browser.electron.execute((electron) =>
+      electron.BrowserWindow.getAllWindows()[0]?.webContents.getZoomLevel(),
+    )).toBeCloseTo(0.5);
+
+    const reset = await $("button[aria-label='Reset zoom to 100%']");
+    await reset.click();
+    await browser.waitUntil(async () => (await trigger.getText()) === "100%");
+    expect(await browser.electron.execute((electron) =>
+      electron.BrowserWindow.getAllWindows()[0]?.webContents.getZoomLevel(),
+    )).toBeCloseTo(0);
+  });
+
   it("changes workbench and editor settings live and keeps them after restart", async () => {
     await $("button[aria-label='Editor settings']").click();
     await expect($(".settings-pane h1")).toHaveText("Settings");
@@ -121,7 +142,9 @@ describe("Gander end to end", () => {
     await expect(iconTheme).toHaveValue("catppuccin-mocha");
     const treeFamily = await $("input[name='workbench.tree.fontFamily']");
     const treeSize = await $("input[name='workbench.tree.fontSize']");
+    const zoomLevel = await $("input[name='window.zoomLevel']");
     const inheritEditorTypography = await $("input[name='workbench.tree.inheritEditorTypography']");
+    await expect(zoomLevel).toHaveValue("0");
     await expect(treeFamily).toHaveValue('-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif');
     await expect(treeSize).toHaveValue("13");
     await expect(inheritEditorTypography).not.toBeChecked();
@@ -177,6 +200,7 @@ describe("Gander end to end", () => {
     )).replaceAll("\u00a0", " ");
     expect(jsonSource).toContain("editor.fontFamily");
     expect(jsonSource).toContain("editor.fontSize");
+    expect(jsonSource).toContain("window.zoomLevel");
     expect(jsonSource).toContain("workbench.colorTheme");
     expect(jsonSource).toContain("workbench.iconTheme");
     expect(jsonSource).toContain("workbench.tree.fontFamily");
@@ -202,6 +226,7 @@ describe("Gander end to end", () => {
         .gander.initialWindowState.colorTheme,
     )).toBe("Gander Dark");
     await expect($("select[name='workbench.iconTheme']")).toHaveValue("catppuccin-mocha");
+    await expect($("input[name='window.zoomLevel']")).toHaveValue("0");
     await expect($("input[name='workbench.tree.fontFamily']")).toHaveValue("Arial, sans-serif");
     await expect($("input[name='workbench.tree.fontSize']")).toHaveValue("14.5");
     await expect($("input[name='workbench.tree.inheritEditorTypography']")).not.toBeChecked();

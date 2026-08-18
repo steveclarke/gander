@@ -24,6 +24,8 @@ stands.
 Gander exposes VS Code-style public keys in its Settings JSON view. File-tree
 typography is deliberately separate from editor typography:
 
+- `window.zoomLevel` sets the persisted scale for every window. `0` is 100%,
+  and fractional values provide finer control than the View menu shortcuts.
 - `workbench.tree.fontFamily` and `workbench.tree.fontSize` control file and
   directory labels.
 - `workbench.tree.inheritEditorTypography` explicitly switches the tree to
