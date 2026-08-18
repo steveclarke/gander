@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   const databasePath = join(root, "gander.db");
   const userDataPath = join(root, "user-data");
   const raceMarkerPath = join(root, "concurrent-race-requests");
-  const [persistence, race, launcher, icons] = await Promise.all([
+  const [persistence, race, launcher, icons, scrollbar] = await Promise.all([
     repoFixture("acme/persistence", "Persist reviewed files"),
     repoFixture("acme/race", "Open without corrupting the clone"),
     repoFixture("acme/launcher", "Open from the command line"),
@@ -54,8 +54,16 @@ async function main(): Promise<void> {
       "types/index.d.ts": "export declare const ready: boolean;\n",
       "unknown/file.mystery": "unknown\n",
     }),
+    repoFixture(
+      "acme/scrollbar",
+      "Scroll a long file tree",
+      Object.fromEntries(Array.from({ length: 80 }, (_, index) => [
+        `src/file-${String(index + 1).padStart(2, "0")}.ts`,
+        `export const value${index + 1} = ${index + 1};\n`,
+      ])),
+    ),
   ]);
-  const fixtures = [persistence, race, launcher, icons];
+  const fixtures = [persistence, race, launcher, icons, scrollbar];
   const storage = openStorage(databasePath);
   const service = buildServer({ storage, token: SERVICE_TOKEN, version: "e2e" });
   const github = Fastify({ logger: false });
@@ -117,6 +125,7 @@ async function main(): Promise<void> {
       GANDER_E2E_RACE_MARKER: raceMarkerPath,
       GANDER_E2E_LAUNCHER_REPO: launcher.repoId,
       GANDER_E2E_ICONS_URL: icons.url,
+      GANDER_E2E_SCROLLBAR_URL: scrollbar.url,
       // Where the app listens with no allocated socket in the environment: beside the
       // suite's own user data, so this run cannot reach a development app.
       GANDER_E2E_APP_SOCKET: join(userDataPath, "app.sock"),

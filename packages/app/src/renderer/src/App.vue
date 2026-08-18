@@ -40,6 +40,8 @@ const unconfigured = ref(false);
 const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
+const treeScrolling = shallowRef(false);
+let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
 const activeSurface = shallowRef<"review" | "settings">("review");
 const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
 // Which section the settings surface opens on. The prompt about a missing service leads
@@ -85,6 +87,12 @@ const questionsSize = computed({
   },
 });
 const questionCount = computed(() => store.view?.questions.length ?? 0);
+
+function onTreeScroll(): void {
+  treeScrolling.value = true;
+  clearTimeout(treeScrollTimer);
+  treeScrollTimer = setTimeout(() => { treeScrolling.value = false; }, 500);
+}
 
 // Monaco takes keyboard input through a hidden textarea, so clicking a line to position
 // the cursor makes the diff the focused "text field" — and a naive typing check hands it
@@ -139,6 +147,7 @@ window.addEventListener("focus", onFocus);
 onBeforeUnmount(() => {
   clearInterval(timer);
   clearInterval(healthTimer);
+  clearTimeout(treeScrollTimer);
   window.removeEventListener("focus", onFocus);
   window.removeEventListener("keydown", onKey, true);
   unsubscribeOpenTarget?.();
@@ -185,7 +194,9 @@ onBeforeUnmount(() => {
             :icon-theme="editorSettings.settings.workbench.iconTheme"
             :typography="treeTypography"
             class="tree"
+            :class="{ scrolling: treeScrolling }"
             :style="{ width: `${treeWidth}px` }"
+            @scroll.passive="onTreeScroll"
           />
           <Splitter
             v-if="treeVisible"
@@ -256,6 +267,25 @@ onBeforeUnmount(() => {
 .workspace.bottom { flex-direction: column; }
 .drawer { flex: none; }
 .workspace.bottom .drawer { border-left: none; border-top: 1px solid var(--workbench-border); }
-.tree { flex: none; border-right: 1px solid var(--workbench-border); overflow: hidden auto; }
+.tree {
+  --scrollbar-thumb: transparent;
+  --scrollbar-track: transparent;
+  flex: none;
+  border-right: 1px solid var(--workbench-border);
+  overflow: hidden auto;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  transition: scrollbar-color 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tree:hover, .tree:focus-within, .tree.scrolling {
+  --scrollbar-thumb: color-mix(in srgb, var(--faint-foreground) 45%, transparent);
+  --scrollbar-track: transparent;
+}
 .diff { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .tree { transition: none; } }
+@media (prefers-contrast: more) {
+  .tree:hover, .tree:focus-within, .tree.scrolling { --scrollbar-thumb: var(--workbench-foreground); }
+}
+@media (forced-colors: active) { .tree { scrollbar-color: auto; } }
 </style>

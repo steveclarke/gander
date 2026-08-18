@@ -314,6 +314,38 @@ describe("Gander end to end", () => {
     await expect($(".message.reply .text")).toHaveText("Because both callers share this path.");
   });
 
+  it("shows the overflowing file-tree scrollbar only while the tree is hovered", async () => {
+    await registerAndSelect(requiredEnv("GANDER_E2E_SCROLLBAR_URL"), "scrollbar");
+    await openPullRequest("Scroll a long file tree");
+
+    const tree = await $(".review-surface > .tree");
+    await tree.waitForDisplayed();
+    const treeMetrics = async () => browser.execute(() => {
+      const panel = document.querySelector<HTMLElement>(".review-surface > .tree");
+      const row = panel?.querySelector<HTMLElement>(".tnode");
+      if (!panel || !row) return null;
+      return {
+        clientHeight: panel.clientHeight,
+        rowWidth: row.getBoundingClientRect().width,
+        scrollHeight: panel.scrollHeight,
+        scrollbarColor: getComputedStyle(panel).scrollbarColor,
+        scrollbarWidth: getComputedStyle(panel).scrollbarWidth,
+      };
+    });
+
+    const resting = await treeMetrics();
+    expect(resting).not.toBeNull();
+    expect(resting!.scrollHeight).toBeGreaterThan(resting!.clientHeight);
+    expect(resting!.scrollbarColor).toBe("rgba(0, 0, 0, 0) rgba(0, 0, 0, 0)");
+    expect(resting!.scrollbarWidth).toBe("thin");
+
+    await tree.moveTo();
+    await browser.waitUntil(async () => (await treeMetrics())?.scrollbarColor
+      === "color(srgb 0.576471 0.6 0.698039 / 0.45) rgba(0, 0, 0, 0)");
+    const hovered = await treeMetrics();
+    expect(hovered!.rowWidth).toBe(resting!.rowWidth);
+  });
+
   it("opens a pull request twice quickly with one valid clone", async () => {
     await registerAndSelect(requiredEnv("GANDER_E2E_RACE_URL"), "race");
     await openPullRequest("Open without corrupting the clone", true);
