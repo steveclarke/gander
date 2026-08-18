@@ -4,6 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { $, browser, expect } from "@wdio/globals";
+import "@wdio/electron-service";
 
 const run = promisify(execFile);
 
@@ -56,9 +57,77 @@ describe("Gander end to end", () => {
     await expect($(".empty")).toHaveText("Pick a repository, then a pull request.");
   });
 
+  it("changes editor font settings in the UI and keeps them after restart", async () => {
+    await $("button[aria-label='Editor settings']").click();
+    await expect($(".settings-pane h1")).toHaveText("Settings");
+    const family = await $("input[name='editor.fontFamily']");
+    const size = await $("input[name='editor.fontSize']");
+    await expect($("#editor-preview-label")).toHaveText("Preview");
+    await family.clearValue();
+    await family.setValue("'Courier New', monospace");
+    await browser.keys("Tab");
+    await browser.waitUntil(async () => (await browser.execute(() =>
+      document.documentElement.style.getPropertyValue("--editor-font-family"),
+    )).includes("Courier New"));
+    await size.click();
+    await size.clearValue();
+    await size.setValue("18.5");
+    await browser.keys("Tab");
+    await browser.waitUntil(async () => await browser.execute(() =>
+      document.documentElement.style.getPropertyValue("--editor-font-size") === "18.5px",
+    ));
+    await expect($(".settings-pane [role='status']")).toHaveText("Saved automatically");
+
+    await $("//button[@role='tab' and normalize-space()='JSON']").click();
+    await $(".settings-json-editor .monaco-editor").waitForDisplayed();
+    const jsonSource = await browser.execute(() =>
+      document.querySelector(".settings-json-editor .view-lines")?.textContent ?? "",
+    );
+    expect(jsonSource).toContain("editor.fontFamily");
+    expect(jsonSource).toContain("editor.fontSize");
+    await $("button[aria-label='Close settings']").click();
+    await expect($(".settings-pane")).not.toBeDisplayed();
+
+    await browser.electron.execute((electron) => {
+      electron.Menu.getApplicationMenu()?.getMenuItemById("settings")?.click();
+    });
+    await expect($(".settings-pane h1")).toHaveText("Settings");
+    await $("button[aria-label='Close settings']").click();
+
+    await browser.reloadSession();
+
+    await $("button[aria-label='Editor settings']").click();
+    await expect($("input[name='editor.fontFamily']")).toHaveValue("'Courier New', monospace");
+    await expect($("input[name='editor.fontSize']")).toHaveValue("18.5");
+    await $("button[aria-label='Close settings']").click();
+  });
+
   it("registers a repository and keeps a reviewed file checked after restart", async () => {
     await registerAndSelect(requiredEnv("GANDER_E2E_PERSISTENCE_URL"), "persistence");
     await openPullRequest("Persist reviewed files");
+
+    const typography = async () => browser.execute(() => {
+      const line = document.querySelector<HTMLElement>(".monaco-editor .view-line span");
+      if (!line) return null;
+      const style = getComputedStyle(line);
+      return { fontFamily: style.fontFamily, fontSize: style.fontSize };
+    });
+    await $(".monaco-editor .view-line span").waitForDisplayed();
+    await expect(typography()).resolves.toMatchObject({ fontSize: "18.5px" });
+    expect((await typography())?.fontFamily).toContain("Courier New");
+
+    await $("button[aria-label='Full file']").click();
+    await $(".monaco-editor .view-line span").waitForDisplayed();
+    await expect(typography()).resolves.toMatchObject({ fontSize: "18.5px" });
+
+    await browser.execute(() => {
+      const editor = document.querySelector<HTMLElement>(".diff .monaco-editor");
+      if (editor) editor.dataset.mountMarker = "preserved";
+    });
+    await $("button[aria-label='Editor settings']").click();
+    await expect($(".settings-pane")).toBeDisplayed();
+    await $("button[aria-label='Close settings']").click();
+    await expect($(".diff .monaco-editor[data-mount-marker='preserved']")).toBeDisplayed();
 
     const checkbox = await fileCheckbox("a.rb");
     await checkbox.click();

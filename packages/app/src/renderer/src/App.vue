@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
 import TopBar from "./components/TopBar.vue";
@@ -9,15 +9,22 @@ import QuestionCapture from "./components/QuestionCapture.vue";
 import QuestionsDrawer from "./components/QuestionsDrawer.vue";
 import StatusBar from "./components/StatusBar.vue";
 import Splitter from "./components/Splitter.vue";
+import SettingsPane from "./components/SettingsPane.vue";
 import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
 import { X } from "lucide-vue-next";
+import { createEditorSettingsStore } from "./editor-settings-store.js";
 import "./theme.css";
 
 const store = createStore(api);
+const editorSettings = createEditorSettingsStore(api);
+let unsubscribeOpenTarget: (() => void) | null = null;
+let unsubscribeOpenSettings: (() => void) | null = null;
+
 onMounted(async () => {
-  // Registered first, so a `gander` command that arrives while the app is still opening
-  // its last review is not dropped.
-  api.onOpenTarget((target) => { void store.openTarget(target); });
+  // Registered first, so commands arriving while the app restores its last review are not dropped.
+  unsubscribeOpenTarget = api.onOpenTarget((target) => { void store.openTarget(target); });
+  unsubscribeOpenSettings = api.onOpenSettings(openSettings);
+  void editorSettings.load();
   await store.checkService();
   await store.loadRepos();
   const target = await api.initialTarget();
@@ -28,6 +35,15 @@ onMounted(async () => {
 const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
+const activeSurface = shallowRef<"review" | "settings">("review");
+
+function openSettings(): void {
+  activeSurface.value = "settings";
+}
+
+function toggleSettings(): void {
+  activeSurface.value = activeSurface.value === "settings" ? "review" : "settings";
+}
 
 // v-model needs something assignable, and which dimension the questions splitter drags
 // depends on where the panel is docked.
@@ -46,6 +62,7 @@ const questionCount = computed(() => store.view?.questions.length ?? 0);
 // read-only, so a key pressed inside one is never being typed into anything.
 function isTyping(target: HTMLElement | null): boolean {
   if (target === null) return false;
+  if (target.closest("[data-app-typing='true']") !== null) return true;
   if (target.closest(".monaco-editor") !== null) return false;
   return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 }
@@ -94,55 +111,70 @@ onBeforeUnmount(() => {
   clearInterval(healthTimer);
   window.removeEventListener("focus", onFocus);
   window.removeEventListener("keydown", onKey, true);
+  unsubscribeOpenTarget?.();
+  unsubscribeOpenSettings?.();
 });
 </script>
 
 <template>
   <div class="app">
-    <TopBar :store="store" :questions="questionCount" @toggle-questions="drawerOpen = !drawerOpen" />
+    <TopBar
+      :store="store"
+      :questions="questionCount"
+      :settings-active="activeSurface === 'settings'"
+      @toggle-questions="drawerOpen = !drawerOpen"
+      @toggle-settings="toggleSettings"
+    />
     <div v-if="store.error" class="error-banner">
       <span>{{ store.error }}</span>
       <button aria-label="Dismiss" title="Dismiss" @click="store.dismissError()"><X :size="14" /></button>
     </div>
     <main class="body">
-      <p v-if="store.busy && !store.view" class="empty working">
-        <span class="spinner" />Opening pull request…
-      </p>
-      <p v-else-if="!store.view" class="empty">Pick a repository, then a pull request.</p>
-      <template v-else>
-        <FileTree v-if="treeVisible" :store="store" class="tree" :style="{ width: `${treeWidth}px` }" />
-        <Splitter
-          v-if="treeVisible"
-          v-model="treeWidth"
-          orientation="vertical"
-          :min="160"
-          :max="600"
-        />
-        <!-- Docked right, questions sit beside the diff; docked bottom, under both the
-             diff and the tree, which is what gives the diff the full window width. -->
-        <div class="workspace" :class="questionsDock">
-          <DiffPane :store="store" class="diff" />
-          <template v-if="drawerOpen">
-            <Splitter
-              v-model="questionsSize"
-              :orientation="questionsDock === 'right' ? 'vertical' : 'horizontal'"
-              :min="questionsDock === 'right' ? 220 : 120"
-              :max="700"
-              inverted
-            />
-            <QuestionsDrawer
-              :store="store"
-              class="drawer"
-              :dock="questionsDock"
-              @dock="questionsDock = $event"
-              :style="questionsDock === 'right'
-                ? { width: `${questionsWidth}px` }
-                : { height: `${questionsHeight}px` }"
-              @close="drawerOpen = false"
-            />
-          </template>
-        </div>
-      </template>
+      <SettingsPane
+        v-if="activeSurface === 'settings'"
+        :store="editorSettings"
+        @close="activeSurface = 'review'"
+      />
+      <div v-show="activeSurface === 'review'" class="review-surface">
+        <p v-if="store.busy && !store.view" class="empty working">
+          <span class="spinner" />Opening pull request…
+        </p>
+        <p v-else-if="!store.view" class="empty">Pick a repository, then a pull request.</p>
+        <template v-else>
+          <FileTree v-if="treeVisible" :store="store" class="tree" :style="{ width: `${treeWidth}px` }" />
+          <Splitter
+            v-if="treeVisible"
+            v-model="treeWidth"
+            orientation="vertical"
+            :min="160"
+            :max="600"
+          />
+          <!-- Docked right, questions sit beside the diff; docked bottom, under both the
+               diff and the tree, which is what gives the diff the full window width. -->
+          <div class="workspace" :class="questionsDock">
+            <DiffPane :store="store" :editor-settings="editorSettings.settings.editor" class="diff" />
+            <template v-if="drawerOpen">
+              <Splitter
+                v-model="questionsSize"
+                :orientation="questionsDock === 'right' ? 'vertical' : 'horizontal'"
+                :min="questionsDock === 'right' ? 220 : 120"
+                :max="700"
+                inverted
+              />
+              <QuestionsDrawer
+                :store="store"
+                class="drawer"
+                :dock="questionsDock"
+                @dock="questionsDock = $event"
+                :style="questionsDock === 'right'
+                  ? { width: `${questionsWidth}px` }
+                  : { height: `${questionsHeight}px` }"
+                @close="drawerOpen = false"
+              />
+            </template>
+          </div>
+        </template>
+      </div>
     </main>
     <StatusBar :store="store" :tree-visible="treeVisible" @toggle-tree="treeVisible = !treeVisible" />
     <QuestionCapture :store="store" :open="capturing" @close="capturing = false" />
@@ -166,6 +198,7 @@ onBeforeUnmount(() => {
 /* Flex rather than grid: panel sizes are dragged, so they are inline styles on the panels
    themselves and the container only has to decide direction. */
 .body { display: flex; min-height: 0; }
+.review-surface { flex: 1; display: flex; min-width: 0; min-height: 0; }
 .workspace { flex: 1; display: flex; min-width: 0; min-height: 0; }
 .workspace.right { flex-direction: row; }
 .workspace.bottom { flex-direction: column; }

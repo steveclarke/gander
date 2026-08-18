@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_APP_SETTINGS,
+  DEFAULT_EDITOR_FONT_FAMILY,
+  parseAppSettings,
+  settingsFromJson,
+  settingsToJson,
+} from "./settings.js";
+
+describe("editor settings", () => {
+  it("uses the issue defaults without changing the ordered fallback list", () => {
+    expect(DEFAULT_APP_SETTINGS).toEqual({
+      editor: {
+        fontFamily: "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
+        fontSize: 16,
+      },
+    });
+    expect(DEFAULT_APP_SETTINGS.editor.fontFamily).toBe(DEFAULT_EDITOR_FONT_FAMILY);
+  });
+
+  it("accepts VS Code-compatible fractional font sizes", () => {
+    expect(parseAppSettings({ editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 } }))
+      .toEqual({ editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 } });
+  });
+
+  it.each([
+    [{ editor: { fontFamily: "", fontSize: 16 } }, "fontFamily"],
+    [{ editor: { fontFamily: "monospace", fontSize: 5 } }, "fontSize"],
+    [{ editor: { fontFamily: "monospace", fontSize: 101 } }, "fontSize"],
+    [{ editor: { fontFamily: "monospace", fontSize: Number.NaN } }, "fontSize"],
+  ])("rejects invalid persisted or IPC input", (value, field) => {
+    expect(() => parseAppSettings(value)).toThrow(new RegExp(field));
+  });
+
+  it("round-trips the public VS Code-style JSON keys without exposing private config", () => {
+    const source = settingsToJson(DEFAULT_APP_SETTINGS);
+    expect(JSON.parse(source)).toEqual({
+      "editor.fontFamily": DEFAULT_EDITOR_FONT_FAMILY,
+      "editor.fontSize": 16,
+    });
+    expect(source).not.toContain("serviceToken");
+    expect(settingsFromJson(source, DEFAULT_APP_SETTINGS)).toEqual(DEFAULT_APP_SETTINGS);
+  });
+
+  it("preserves future app settings when applying the current public JSON", () => {
+    const current = { ...DEFAULT_APP_SETTINGS, futureSetting: true };
+    expect(settingsFromJson(JSON.stringify({
+      "editor.fontFamily": "Consolas, monospace",
+      "editor.fontSize": 18,
+    }), current)).toEqual({
+      futureSetting: true,
+      editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
+    });
+  });
+
+  it.each([
+    ["{", /Invalid settings JSON/],
+    [JSON.stringify({ "editor.fontFamily": "monospace" }), /editor\.fontSize/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, serviceToken: "nope" }), /Unrecognized key/],
+  ])("rejects invalid or non-public settings JSON", (source, message) => {
+    expect(() => settingsFromJson(source, DEFAULT_APP_SETTINGS)).toThrow(message);
+  });
+});

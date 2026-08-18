@@ -3,11 +3,13 @@ import * as monaco from "monaco-editor";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { languageForPath } from "../languages.js";
 import { setupMonacoWorkers } from "../monaco.js";
+import { codeEditorOptions, diffEditorOptions, editorFontOptions } from "../editor-options.js";
 import type { Store } from "../store.js";
+import type { EditorSettings } from "../../../settings.js";
 import { currentLine, pendingReveal } from "../selection.js";
 import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
 
-const props = defineProps<{ store: Store }>();
+const props = defineProps<{ store: Store; editorSettings: EditorSettings }>();
 const host = ref<HTMLElement | null>(null);
 const view = ref<"diff" | "full" | "since">("diff");
 
@@ -76,13 +78,7 @@ function render(): void {
     const original = monaco.editor.createModel(file.baseContent ?? "", lang);
     const modified = monaco.editor.createModel(file.headContent ?? "", lang);
     models = [original, modified];
-    const diff = monaco.editor.createDiffEditor(host.value, {
-      renderSideBySide: false,
-      readOnly: true,
-      automaticLayout: true,
-      hideUnchangedRegions: { enabled: true },
-      theme: "vs-dark",
-    });
+    const diff = monaco.editor.createDiffEditor(host.value, diffEditorOptions(props.editorSettings));
     diff.setModel({ original, modified });
     editor = diff;
     trackCursor();
@@ -92,25 +88,14 @@ function render(): void {
     const original = monaco.editor.createModel(snapshot.value ?? "", lang);
     const modified = monaco.editor.createModel(file.headContent ?? "", lang);
     models = [original, modified];
-    const diff = monaco.editor.createDiffEditor(host.value, {
-      renderSideBySide: false,
-      readOnly: true,
-      automaticLayout: true,
-      hideUnchangedRegions: { enabled: true },
-      theme: "vs-dark",
-    });
+    const diff = monaco.editor.createDiffEditor(host.value, diffEditorOptions(props.editorSettings));
     diff.setModel({ original, modified });
     editor = diff;
     trackCursor();
   } else {
     const model = monaco.editor.createModel(file.headContent ?? "", lang);
     models = [model];
-    editor = monaco.editor.create(host.value, {
-      model,
-      readOnly: true,
-      automaticLayout: true,
-      theme: "vs-dark",
-    });
+    editor = monaco.editor.create(host.value, { model, ...codeEditorOptions(props.editorSettings) });
     trackCursor();
   }
   reveal();
@@ -177,6 +162,10 @@ function reveal(): void {
 }
 
 watch(renderKey, render, { flush: "post" });
+watch(
+  () => [props.editorSettings.fontFamily, props.editorSettings.fontSize] as const,
+  () => editor?.updateOptions(editorFontOptions(props.editorSettings)),
+);
 // A jump into the file already on screen needs no rebuild; render() handles the case
 // where the drawer also switched files, by calling reveal() once the editor exists.
 watch(pendingReveal, (line) => { if (line !== null) reveal(); }, { flush: "post" });

@@ -23,11 +23,14 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     refreshPr: async () => prView(),
     lastReview: async () => null,
     initialTarget: async () => null,
-    onOpenTarget: () => {},
+    onOpenTarget: () => () => {},
     serviceHealthy: async () => true,
     reviewedSnapshot: async () => null,
     addQuestion: async () => prView(),
     deleteQuestion: async () => prView(),
+    getSettings: async () => ({ editor: { fontFamily: "monospace", fontSize: 16 } }),
+    updateSettings: async (settings) => settings,
+    onOpenSettings: () => () => {},
     ...overrides,
   };
 }

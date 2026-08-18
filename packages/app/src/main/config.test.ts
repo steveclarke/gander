@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { platform } from "node:process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig, resolveServiceConnection, saveConfig } from "./config.js";
+import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_FONT_FAMILY } from "../settings.js";
 
 let dir: string; let cfgPath: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "gander-cfg-")); cfgPath = join(dir, "config.json"); });
@@ -18,9 +19,31 @@ describe("config", () => {
     expect(() => loadConfig(cfgPath)).toThrow(/serviceToken/);
   });
   it("round-trips repos through save/load", () => {
-    saveConfig({ serviceUrl: "http://h:8390", serviceToken: "t", repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas" }] }, cfgPath);
+    saveConfig({ serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas" }] }, cfgPath);
     const cfg = loadConfig(cfgPath);
     expect(cfg.repos[0]?.repoId).toBe("acme/atlas");
+  });
+
+  it("adds editor defaults to an existing config", () => {
+    writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://h:8390", serviceToken: "t", repos: [] }));
+    expect(loadConfig(cfgPath).settings).toEqual(DEFAULT_APP_SETTINGS);
+  });
+
+  it("persists editor settings across save and load", () => {
+    saveConfig({
+      serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
+      settings: { editor: { fontFamily: "'Fira Code', monospace", fontSize: 18.5 } },
+    }, cfgPath);
+    expect(loadConfig(cfgPath).settings.editor).toEqual({ fontFamily: "'Fira Code', monospace", fontSize: 18.5 });
+  });
+
+  it.each([
+    { editor: { fontFamily: "", fontSize: 16 } },
+    { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY, fontSize: 1000 } },
+    { editor: { fontFamily: DEFAULT_EDITOR_FONT_FAMILY } },
+  ])("falls back safely when persisted editor settings are invalid", (settings) => {
+    writeFileSync(cfgPath, JSON.stringify({ serviceUrl: "http://h:8390", serviceToken: "t", repos: [], settings }));
+    expect(loadConfig(cfgPath).settings).toEqual(DEFAULT_APP_SETTINGS);
   });
 
   it("rejects a repoId that isn't owner/repo shaped", () => {
@@ -33,7 +56,7 @@ describe("config", () => {
 
   // chmod bits aren't meaningful on Windows.
   (platform === "win32" ? it.skip : it)("writes the config file and its directory with owner-only permissions", () => {
-    saveConfig({ serviceUrl: "http://h:8390", serviceToken: "t", repos: [] }, cfgPath);
+    saveConfig({ serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [] }, cfgPath);
     expect(statSync(cfgPath).mode & 0o777).toBe(0o600);
     expect(statSync(dir).mode & 0o777).toBe(0o700);
   });
@@ -51,7 +74,7 @@ describe("config", () => {
       if (saved.token === undefined) delete process.env.GANDER_TOKEN; else process.env.GANDER_TOKEN = saved.token;
     });
 
-    const fileCfg = { serviceUrl: "http://from-file:8390", serviceToken: "file-token", repos: [] };
+    const fileCfg = { serviceUrl: "http://from-file:8390", serviceToken: "file-token", settings: DEFAULT_APP_SETTINGS, repos: [] };
 
     it("falls back to the config file when the env is unset", () => {
       delete process.env.GANDER_SERVICE_URL;

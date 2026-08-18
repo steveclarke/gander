@@ -1,0 +1,194 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
+import { Braces, Settings2, SlidersHorizontal, Type, X } from "lucide-vue-next";
+import type { EditorSettingsStore } from "../editor-settings-store.js";
+import { settingsFromJson, settingsToJson, type AppSettings } from "../../../settings.js";
+import EditorSettings from "./EditorSettings.vue";
+import SettingsJsonEditor from "./SettingsJsonEditor.vue";
+
+const props = defineProps<{ store: EditorSettingsStore }>();
+const emit = defineEmits<{ close: [] }>();
+
+const mode = shallowRef<"ui" | "json">("ui");
+const saveState = shallowRef<"idle" | "saving" | "saved" | "error">("idle");
+const jsonSource = shallowRef(settingsToJson(props.store.settings));
+const jsonError = shallowRef<string | null>(null);
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingJsonSettings: AppSettings | null = null;
+let revision = 0;
+
+const status = computed(() => {
+  if (props.store.error) return props.store.error;
+  if (jsonError.value) return jsonError.value;
+  if (saveState.value === "saving") return "Saving…";
+  if (saveState.value === "saved") return "Saved automatically";
+  return null;
+});
+
+async function setMode(next: "ui" | "json"): Promise<void> {
+  if (mode.value === "json" && next === "ui") await flushJsonSave();
+  mode.value = next;
+  jsonError.value = null;
+  saveState.value = "idle";
+  if (next === "json") jsonSource.value = settingsToJson(props.store.settings);
+}
+
+function onUiSaved(success: boolean): void {
+  saveState.value = success ? "saved" : "error";
+}
+
+function onJsonChange(source: string): void {
+  jsonSource.value = source;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  const currentRevision = ++revision;
+
+  let settings;
+  try {
+    settings = settingsFromJson(source, props.store.settings);
+    jsonError.value = null;
+    saveState.value = "saving";
+  } catch (error) {
+    pendingJsonSettings = null;
+    jsonError.value = (error as Error).message;
+    saveState.value = "error";
+    return;
+  }
+
+  pendingJsonSettings = settings;
+  saveTimer = setTimeout(async () => {
+    saveTimer = null;
+    pendingJsonSettings = null;
+    const success = await props.store.update(settings);
+    if (currentRevision === revision) saveState.value = success ? "saved" : "error";
+  }, 400);
+}
+
+async function flushJsonSave(): Promise<void> {
+  if (!saveTimer || !pendingJsonSettings) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const settings = pendingJsonSettings;
+  pendingJsonSettings = null;
+  const success = await props.store.update(settings);
+  saveState.value = success ? "saved" : "error";
+}
+
+watch(
+  () => props.store.settings,
+  (settings) => {
+    if (mode.value === "ui") jsonSource.value = settingsToJson(settings);
+  },
+);
+
+onBeforeUnmount(() => {
+  void flushJsonSave();
+});
+</script>
+
+<template>
+  <section class="settings-pane" aria-labelledby="settings-title">
+    <header class="titlebar">
+      <div class="title">
+        <Settings2 :size="20" />
+        <div>
+          <h1 id="settings-title">Settings</h1>
+          <p>Changes are saved automatically.</p>
+        </div>
+      </div>
+      <div class="title-actions">
+        <div class="view-switcher" role="tablist" aria-label="Settings view">
+          <button
+            role="tab"
+            :aria-selected="mode === 'ui'"
+            :class="{ active: mode === 'ui' }"
+            @click="setMode('ui')"
+          >
+            <SlidersHorizontal :size="14" />UI
+          </button>
+          <button
+            role="tab"
+            :aria-selected="mode === 'json'"
+            :class="{ active: mode === 'json' }"
+            @click="setMode('json')"
+          >
+            <Braces :size="14" />JSON
+          </button>
+        </div>
+        <button class="close" aria-label="Close settings" title="Close settings" @click="emit('close')">
+          <X :size="17" />
+        </button>
+      </div>
+    </header>
+
+    <div class="settings-body">
+      <nav class="categories" aria-label="Settings categories">
+        <p>Categories</p>
+        <button class="category active" aria-current="page">
+          <Type :size="15" />Editor
+        </button>
+      </nav>
+
+      <div class="content">
+        <EditorSettings v-if="mode === 'ui'" :store="store" @saved="onUiSaved" />
+        <div v-else class="json-view">
+          <div class="json-heading">
+            <div>
+              <h2>Settings JSON</h2>
+              <p>Edit the public VS Code-style keys directly. Valid JSON saves after you stop typing.</p>
+            </div>
+          </div>
+          <SettingsJsonEditor
+            :model-value="jsonSource"
+            :editor-settings="store.settings.editor"
+            @update:model-value="onJsonChange"
+          />
+        </div>
+      </div>
+    </div>
+
+    <footer class="settings-status">
+      <span :class="{ error: jsonError || store.error }" role="status" aria-live="polite">{{ status }}</span>
+      <span v-if="mode === 'json'" class="format">Only public application settings are shown.</span>
+    </footer>
+  </section>
+</template>
+
+<style scoped>
+.settings-pane { flex: 1; display: grid; grid-template-rows: auto 1fr 28px; min-width: 0; min-height: 0; background: var(--bg); }
+.titlebar { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.title > svg { color: var(--dim); flex: none; }
+.title h1 { color: var(--text); font-size: 16px; line-height: 1.25; }
+.title p, .json-heading p { color: var(--faint); font-size: 11.5px; }
+.title-actions, .view-switcher { display: flex; align-items: center; gap: 4px; }
+.view-switcher { padding: 2px; border-radius: 7px; background: #14161b; }
+.view-switcher button, .close {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; border: 0; border-radius: 5px; background: transparent;
+  color: var(--dim); cursor: pointer; font: inherit; font-size: 12px;
+}
+.view-switcher button { padding: 0 10px; }
+.view-switcher button.active { background: #2c3340; color: var(--text); }
+.view-switcher button:focus-visible, .close:focus-visible, .category:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.close { width: 28px; }
+.close:hover { background: rgba(255,255,255,.06); color: var(--text); }
+.settings-body { display: grid; grid-template-columns: 190px 1fr; min-width: 0; min-height: 0; }
+.categories { padding: 18px 10px; border-right: 1px solid var(--border); background: var(--panel2); }
+.categories > p { padding: 0 10px 8px; color: var(--faint); font-size: 10.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
+.category { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: default; font: inherit; text-align: left; }
+.category.active { background: rgba(77,159,236,.12); color: var(--text); }
+.content { min-width: 0; min-height: 0; overflow: hidden; }
+.json-view { display: grid; grid-template-rows: auto 1fr; height: 100%; min-width: 0; min-height: 0; }
+.json-heading { padding: 22px 28px 16px; }
+.json-heading h2 { color: var(--text); font-size: 17px; margin-bottom: 3px; }
+.settings-status { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 12px; border-top: 1px solid var(--border); background: var(--panel); color: var(--green); font-size: 11px; }
+.settings-status .error { color: var(--red); }
+.format { margin-left: auto; color: var(--faint); }
+@media (max-width: 720px) {
+  .settings-body { grid-template-columns: 1fr; }
+  .categories { display: none; }
+  .titlebar { padding-inline: 12px; }
+  .content { min-width: 0; }
+}
+</style>

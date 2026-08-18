@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const props = defineProps<{ open: boolean; left?: number; width?: number }>();
+const props = defineProps<{ open: boolean; left?: number; right?: number; width?: number }>();
 const emit = defineEmits<{ close: [] }>();
 </script>
 
@@ -9,7 +9,11 @@ const emit = defineEmits<{ close: [] }>();
     <div
       v-if="open"
       class="dd"
-      :style="{ left: `${props.left ?? 0}px`, width: props.width ? `${props.width}px` : undefined }"
+      :style="{
+        left: props.right === undefined ? `${props.left ?? 0}px` : undefined,
+        right: props.right === undefined ? undefined : `${props.right}px`,
+        width: props.width ? `${props.width}px` : undefined,
+      }"
     >
       <slot />
     </div>

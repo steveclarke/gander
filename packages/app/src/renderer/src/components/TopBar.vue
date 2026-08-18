@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Store } from "../store.js";
-import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw } from "lucide-vue-next";
+import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw, Settings } from "lucide-vue-next";
 import SwitcherDropdown from "./SwitcherDropdown.vue";
 
-const props = defineProps<{ store: Store; questions: number }>();
-defineEmits<{ toggleQuestions: [] }>();
+const props = defineProps<{ store: Store; questions: number; settingsActive: boolean }>();
+const emit = defineEmits<{ toggleQuestions: []; toggleSettings: [] }>();
 
 const repoOpen = ref(false);
 const reviewOpen = ref(false);
@@ -21,6 +21,11 @@ function toggleRepo() {
 function toggleReview() {
   repoOpen.value = false;
   reviewOpen.value = !reviewOpen.value;
+}
+
+function toggleSettings(): void {
+  closeAll();
+  emit("toggleSettings");
 }
 
 function closeAll() {
@@ -112,6 +117,16 @@ const progress = computed(() => props.store.progress());
     <div class="spacer" />
     <div class="right">
       <button
+        class="fetch"
+        :class="{ active: settingsActive }"
+        aria-label="Editor settings"
+        title="Editor settings"
+        :aria-pressed="settingsActive"
+        @click.stop="toggleSettings"
+      >
+        <Settings :size="16" />
+      </button>
+      <button
         v-if="store.view"
         class="fetch"
         aria-label="Questions"
@@ -183,6 +198,7 @@ const progress = computed(() => props.store.progress());
       <span class="nm">{{ pr.title }}</span>
     </div>
   </SwitcherDropdown>
+
 </template>
 
 <style scoped>
@@ -213,6 +229,7 @@ const progress = computed(() => props.store.progress());
   color: var(--fg); cursor: pointer;
 }
 .fetch:hover:not(:disabled) { background: rgba(255,255,255,.06); }
+.fetch.active { border-color: var(--accent); background: rgba(77,159,236,.14); color: var(--accent); }
 .fetch:disabled { cursor: default; color: var(--faint); }
 .fetch { position: relative; }
 .badge {
