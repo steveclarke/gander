@@ -32,7 +32,7 @@ beforeEach(async () => {
 
   reviewer = createReviewer({
     git: createGitEngine(clonesRoot),
-    service: createServiceClient(`http://127.0.0.1:${port}`, "t"),
+    service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
     listPrs: async () => [await currentPr(fixture)],
     repoUrl: () => fixture.dir,
     machine: "test-machine",
@@ -177,7 +177,7 @@ describe("review pipeline", () => {
     };
     const instrumented = createReviewer({
       git: countingEngine,
-      service: createServiceClient(`http://127.0.0.1:${port}`, "t"),
+      service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
       repoUrl: () => fixture.dir,
       machine: "test-machine",

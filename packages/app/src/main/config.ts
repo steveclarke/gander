@@ -13,8 +13,11 @@ const RepoIdSchema = z.string().regex(/^[^/]+\/[^/]+$/, "must look like owner/re
 // trips through load -> mutate -> save instead of being silently dropped on the next write.
 const ConfigSchema = z
   .object({
-    serviceUrl: z.string().url(),
-    serviceToken: z.string().min(1),
+    // Empty until the reviewer enters a connection. An installed app has no dev stack to
+    // generate one, so it has to start unconfigured, show its settings, and be told —
+    // and a config saved in that state must load again rather than being rejected.
+    serviceUrl: z.string().url().or(z.literal("")).default(""),
+    serviceToken: z.string().default(""),
     githubToken: z.string().min(1).optional(),
     // Electron zoom level: 0 is 100%, each step is a 20% change. Persisted so the
     // window reopens at the size the reader last chose.
@@ -40,8 +43,15 @@ export interface GanderConfig {
 
 const defaultPath = (): string => process.env.GANDER_CONFIG ?? join(homedir(), ".config", "gander", "config.json");
 
+/** The shape a first run starts from: no connection, no repositories, stock settings. */
+export function unconfigured(): GanderConfig {
+  return { serviceUrl: "", serviceToken: "", settings: DEFAULT_APP_SETTINGS, repos: [] };
+}
+
 export function loadConfig(path = defaultPath()): GanderConfig {
-  if (!existsSync(path)) throw new Error(`Gander config file not found at ${path} — create it with serviceUrl and serviceToken`);
+  // A missing file is a first run, not a failure. Anything present but malformed still
+  // throws: that is a file someone edited, and silently replacing it would lose their work.
+  if (!existsSync(path)) return unconfigured();
   const parsed = ConfigSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
   if (!parsed.success) throw new Error(`Invalid config at ${path}: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
   return parsed.data as GanderConfig;
@@ -72,4 +82,9 @@ export function resolveServiceConnection(
     url: process.env.GANDER_SERVICE_URL ?? cfg.serviceUrl,
     token: process.env.GANDER_TOKEN ?? cfg.serviceToken,
   };
+}
+
+/** True when the environment is deciding the connection, and the settings pane cannot. */
+export function connectionIsFromEnvironment(): boolean {
+  return process.env.GANDER_SERVICE_URL !== undefined || process.env.GANDER_TOKEN !== undefined;
 }

@@ -25,6 +25,9 @@ onMounted(async () => {
   unsubscribeOpenTarget = api.onOpenTarget((target) => { void store.openTarget(target); });
   unsubscribeOpenSettings = api.onOpenSettings(openSettings);
   void editorSettings.load();
+  // An installed app starts with no connection at all. Knowing that here is what lets the
+  // window say where to set one instead of showing an empty review that cannot be filled.
+  unconfigured.value = (await api.getConnection()).url === "";
   await store.checkService();
   await store.loadRepos();
   const target = await api.initialTarget();
@@ -32,6 +35,7 @@ onMounted(async () => {
   else await store.restoreLastReview();
 });
 
+const unconfigured = ref(false);
 const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
@@ -139,6 +143,11 @@ onBeforeUnmount(() => {
         <p v-if="store.busy && !store.view" class="empty working">
           <span class="spinner" />Opening pull request…
         </p>
+        <p v-else-if="unconfigured" class="empty">
+          No review service yet.
+          <button class="link" type="button" @click="openSettings">Set its URL and token</button>
+          to start reviewing.
+        </p>
         <p v-else-if="!store.view" class="empty">Pick a repository, then a pull request.</p>
         <template v-else>
           <FileTree v-if="treeVisible" :store="store" class="tree" :style="{ width: `${treeWidth}px` }" />
@@ -187,6 +196,7 @@ onBeforeUnmount(() => {
 .error-banner span { flex: 1; }
 .error-banner button { background: none; border: none; color: inherit; cursor: pointer; display: flex; flex: none; }
 .empty { color: var(--faint-foreground); padding: 2rem; }
+.empty .link { border: 0; padding: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
 .working { display: flex; align-items: center; gap: 10px; }
 .spinner {
   width: 14px; height: 14px; border-radius: 50%;
