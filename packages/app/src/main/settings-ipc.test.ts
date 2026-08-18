@@ -29,7 +29,7 @@ describe("settings IPC", () => {
 
     const next = {
       editor: { fontFamily: "Consolas, monospace", fontSize: 20 },
-      workbench: { colorTheme: "Gander Dark" as const },
+      workbench: { colorTheme: "Gander Dark" as const, iconTheme: "catppuccin-mocha" as const },
     };
     await expect(handlers.get("gander:updateSettings")?.({}, next)).resolves.toEqual(next);
     expect(cfg.settings).toEqual(next);

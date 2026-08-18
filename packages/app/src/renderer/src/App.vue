@@ -141,7 +141,13 @@ onBeforeUnmount(() => {
         </p>
         <p v-else-if="!store.view" class="empty">Pick a repository, then a pull request.</p>
         <template v-else>
-          <FileTree v-if="treeVisible" :store="store" class="tree" :style="{ width: `${treeWidth}px` }" />
+          <FileTree
+            v-if="treeVisible"
+            :store="store"
+            :icon-theme="editorSettings.settings.workbench.iconTheme"
+            class="tree"
+            :style="{ width: `${treeWidth}px` }"
+          />
           <Splitter
             v-if="treeVisible"
             v-model="treeWidth"

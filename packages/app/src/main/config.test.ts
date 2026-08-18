@@ -34,7 +34,7 @@ describe("config", () => {
       serviceUrl: "http://h:8390", serviceToken: "t", repos: [],
       settings: {
         editor: { fontFamily: "'Fira Code', monospace", fontSize: 18.5 },
-        workbench: { colorTheme: "Gander Dark" },
+        workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
       },
     }, cfgPath);
     expect(loadConfig(cfgPath).settings.editor).toEqual({ fontFamily: "'Fira Code', monospace", fontSize: 18.5 });
@@ -48,7 +48,7 @@ describe("config", () => {
     }));
     expect(loadConfig(cfgPath).settings).toEqual({
       editor: { fontFamily: "Consolas, monospace", fontSize: 19 },
-      workbench: { colorTheme: "Catppuccin Mocha" },
+      workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
     });
   });
 

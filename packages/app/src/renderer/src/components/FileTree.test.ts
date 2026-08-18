@@ -87,7 +87,7 @@ describe("FileTree", () => {
 
   it("checking a directory issues exactly one batched setCheckedMany call covering every descendant, and never calls setChecked", async () => {
     const { store, calls } = fakeStore(prView(1, treeFiles));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     await dirRow(wrapper, "app").find(".cb").trigger("click");
 
@@ -100,7 +100,7 @@ describe("FileTree", () => {
 
   it("clicking a file's checkbox toggles it without changing selectedPath", async () => {
     const { store, calls } = fakeStore(prView(1, treeFiles));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
     const before = store.selectedPath;
 
     await fileRow(wrapper, "config/routes.rb").find(".cb").trigger("click");
@@ -111,7 +111,7 @@ describe("FileTree", () => {
 
   it("clicking a directory row toggles collapse without touching checked state", async () => {
     const { store, calls } = fakeStore(prView(1, treeFiles));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     await dirRow(wrapper, "app").trigger("click");
 
@@ -121,7 +121,7 @@ describe("FileTree", () => {
 
   it("resets collapse state when the reviewed PR changes, even though view is reassigned without an intermediate null", async () => {
     const { store } = fakeStore(prView(1, treeFiles));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     // collapse "app"
     await dirRow(wrapper, "app").trigger("click");
@@ -161,7 +161,7 @@ describe("FileTree", () => {
       createdAt: "2026-08-18T00:00:00.000Z",
       replies: [],
     }]));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     const rows = [
       { row: dirRow(wrapper, "src"), paddingLeft: "10px" },
@@ -177,6 +177,7 @@ describe("FileTree", () => {
       expect((row.element as HTMLElement).style.paddingLeft).toBe(paddingLeft);
       expect(row.element.children[0]?.classList).toContain("hierarchy-slot");
       expect(row.element.children[1]?.classList).toContain("cb");
+      expect(row.element.children[2]?.classList).toContain("file-icon");
     }
 
     const leafRow = fileRow(wrapper, leaf.path);
@@ -184,5 +185,35 @@ describe("FileTree", () => {
     expect(leafRow.find(".delta-mark").exists()).toBe(true);
     expect(leafRow.find(".st").text()).toBe("A");
     expect(wrapper.findAll(".tnode.isdir .chev")).toHaveLength(3);
+  });
+
+  it("renders representative Catppuccin file and folder icons with expanded state", async () => {
+    const { store } = fakeStore(prView(1, [
+      file("Gemfile"),
+      file("README.md"),
+      file("app/models/member.rb"),
+      file("config/settings.json"),
+      file("src/App.vue"),
+      file("src/main.ts"),
+      file("types/index.d.ts"),
+      file("unknown/file.mystery"),
+    ]));
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
+
+    expect(fileRow(wrapper, "Gemfile").find(".file-icon").attributes("data-icon-id")).toBe("ruby-gem");
+    expect(fileRow(wrapper, "README.md").find(".file-icon").attributes("data-icon-id")).toBe("readme");
+    expect(fileRow(wrapper, "app/models/member.rb").find(".file-icon").attributes("data-icon-id")).toBe("ruby");
+    expect(fileRow(wrapper, "config/settings.json").find(".file-icon").attributes("data-icon-id")).toBe("json");
+    expect(fileRow(wrapper, "src/App.vue").find(".file-icon").attributes("data-icon-id")).toBe("vue");
+    expect(fileRow(wrapper, "src/main.ts").find(".file-icon").attributes("data-icon-id")).toBe("typescript");
+    expect(fileRow(wrapper, "types/index.d.ts").find(".file-icon").attributes("data-icon-id")).toBe("typescript-def");
+    expect(fileRow(wrapper, "unknown/file.mystery").find(".file-icon").attributes("data-icon-id")).toBe("_file");
+
+    const src = dirRow(wrapper, "src");
+    expect(src.find(".file-icon").attributes("data-icon-id")).toBe("folder_src_open");
+    expect(src.find(".chev").exists()).toBe(true);
+    await src.trigger("click");
+    expect(dirRow(wrapper, "src").find(".file-icon").attributes("data-icon-id")).toBe("folder_src");
+    expect(store.selectedPath).toBe("Gemfile");
   });
 });

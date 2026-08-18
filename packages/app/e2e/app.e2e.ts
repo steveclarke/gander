@@ -51,11 +51,24 @@ function fileCheckbox(filename: string) {
   return $(`//div[contains(@class, 'tnode')][.//span[contains(@class, 'fname') and normalize-space()='${filename}']]//span[@role='checkbox']`);
 }
 
+function treeRow(name: string) {
+  return $(`//div[contains(@class, 'tnode')][.//span[contains(@class, 'fname') and normalize-space()='${name}']]`);
+}
+
 async function selectColorTheme(value: "Catppuccin Mocha" | "Gander Dark"): Promise<void> {
   await browser.execute((colorTheme) => {
     const select = document.querySelector<HTMLSelectElement>("select[name='workbench.colorTheme']");
     if (!select) throw new Error("workbench.colorTheme select is missing");
     select.value = colorTheme;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+}
+
+async function selectIconTheme(value: "catppuccin-mocha"): Promise<void> {
+  await browser.execute((iconTheme) => {
+    const select = document.querySelector<HTMLSelectElement>("select[name='workbench.iconTheme']");
+    if (!select) throw new Error("workbench.iconTheme select is missing");
+    select.value = iconTheme;
     select.dispatchEvent(new Event("change", { bubbles: true }));
   }, value);
 }
@@ -70,7 +83,9 @@ describe("Gander end to end", () => {
     await $("button[aria-label='Editor settings']").click();
     await expect($(".settings-pane h1")).toHaveText("Settings");
     const theme = await $("select[name='workbench.colorTheme']");
+    const iconTheme = await $("select[name='workbench.iconTheme']");
     await expect(theme).toHaveValue("Catppuccin Mocha");
+    await expect(iconTheme).toHaveValue("catppuccin-mocha");
     await selectColorTheme("Gander Dark");
     await browser.waitUntil(async () => await browser.execute(() =>
       document.querySelector(".settings-pane [role='status']")?.textContent === "Saved automatically",
@@ -108,6 +123,7 @@ describe("Gander end to end", () => {
     expect(jsonSource).toContain("editor.fontFamily");
     expect(jsonSource).toContain("editor.fontSize");
     expect(jsonSource).toContain("workbench.colorTheme");
+    expect(jsonSource).toContain("workbench.iconTheme");
     expect(jsonSource).toContain("Gander Dark");
     await $("button[aria-label='Close settings']").click();
     await expect($(".settings-pane")).not.toBeDisplayed();
@@ -122,6 +138,7 @@ describe("Gander end to end", () => {
 
     await $("button[aria-label='Editor settings']").click();
     await expect($("select[name='workbench.colorTheme']")).toHaveValue("Gander Dark");
+    await expect($("select[name='workbench.iconTheme']")).toHaveValue("catppuccin-mocha");
     await $("//button[contains(@class, 'category') and normalize-space()='Editor']").click();
     await expect($("input[name='editor.fontFamily']")).toHaveValue("'Courier New', monospace");
     await expect($("input[name='editor.fontSize']")).toHaveValue("18.5");
@@ -152,6 +169,10 @@ describe("Gander end to end", () => {
     });
     await $("button[aria-label='Editor settings']").click();
     await expect($(".settings-pane")).toBeDisplayed();
+    await selectIconTheme("catppuccin-mocha");
+    await browser.waitUntil(async () => await browser.execute(() =>
+      document.querySelector(".settings-pane [role='status']")?.textContent === "Saved automatically",
+    ));
     await selectColorTheme("Catppuccin Mocha");
     await browser.waitUntil(async () => await browser.execute(() =>
       document.documentElement.dataset.colorTheme === "Catppuccin Mocha"
@@ -210,6 +231,43 @@ describe("Gander end to end", () => {
     await expect($(".seg-review")).toHaveText(expect.stringContaining("Open from the command line"));
     await expect($(".progress")).toHaveText("0/2 reviewed");
     await expect($(".error-banner")).not.toBeDisplayed();
+  });
+
+  it("renders Catppuccin icons without disturbing file-tree interaction or status alignment", async () => {
+    await registerAndSelect(requiredEnv("GANDER_E2E_ICONS_URL"), "icons");
+    await openPullRequest("Render file icons");
+
+    const expectedIcons: Record<string, string> = {
+      Gemfile: "ruby-gem",
+      "README.md": "readme",
+      "App.vue": "vue",
+      "main.ts": "typescript",
+      "index.d.ts": "typescript-def",
+      "settings.json": "json",
+      "file.mystery": "_file",
+    };
+    for (const [file, icon] of Object.entries(expectedIcons)) {
+      const image = treeRow(file).$(".file-icon");
+      await expect(image).toHaveAttribute("data-icon-id", icon);
+      await browser.waitUntil(async () => await image.getProperty("naturalWidth") === 16);
+    }
+
+    const src = treeRow("src");
+    await expect(src.$(".chev")).toBeDisplayed();
+    await expect(src.$(".file-icon")).toHaveAttribute("data-icon-id", "folder_src_open");
+    await treeRow("App.vue").click();
+    await expect(treeRow("App.vue")).toHaveElementClass(expect.stringContaining("sel"));
+    await src.click();
+    await expect(treeRow("src").$(".file-icon")).toHaveAttribute("data-icon-id", "folder_src");
+    await expect(treeRow("App.vue")).not.toBeDisplayed();
+    await treeRow("src").click();
+    await expect(treeRow("App.vue")).toHaveElementClass(expect.stringContaining("sel"));
+
+    const statusRightEdges = await browser.execute(() =>
+      [...document.querySelectorAll<HTMLElement>(".tnode:not(.isdir) .st")]
+        .map((status) => Math.round(status.getBoundingClientRect().right)),
+    );
+    expect(new Set(statusRightEdges).size).toBe(1);
   });
 
   it("answers a command that names nothing openable", async () => {

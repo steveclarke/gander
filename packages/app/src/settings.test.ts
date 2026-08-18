@@ -15,7 +15,7 @@ describe("application settings", () => {
         fontFamily: "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
         fontSize: 16,
       },
-      workbench: { colorTheme: "Catppuccin Mocha" },
+      workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
     });
     expect(DEFAULT_APP_SETTINGS.editor.fontFamily).toBe(DEFAULT_EDITOR_FONT_FAMILY);
   });
@@ -24,14 +24,14 @@ describe("application settings", () => {
     expect(parseAppSettings({ editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 } }))
       .toEqual({
         editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 },
-        workbench: { colorTheme: "Catppuccin Mocha" },
+        workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
       });
   });
 
   it("normalizes Vue settings proxies into data Electron can clone", () => {
     const reactiveSettings = reactive({
       editor: { ...DEFAULT_APP_SETTINGS.editor },
-      workbench: { colorTheme: "Gander Dark" as const },
+      workbench: { colorTheme: "Gander Dark" as const, iconTheme: "catppuccin-mocha" as const },
     });
     const parsed = parseAppSettings(reactiveSettings);
 
@@ -47,6 +47,7 @@ describe("application settings", () => {
     [{ editor: { fontFamily: "monospace", fontSize: 101 } }, "fontSize"],
     [{ editor: { fontFamily: "monospace", fontSize: Number.NaN } }, "fontSize"],
     [{ editor: { fontFamily: "monospace", fontSize: 16 }, workbench: { colorTheme: "Unknown" } }, "colorTheme"],
+    [{ editor: { fontFamily: "monospace", fontSize: 16 }, workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "Unknown" } }, "iconTheme"],
   ])("rejects invalid persisted or IPC input", (value, field) => {
     expect(() => parseAppSettings(value)).toThrow(new RegExp(field));
   });
@@ -57,6 +58,7 @@ describe("application settings", () => {
       "editor.fontFamily": DEFAULT_EDITOR_FONT_FAMILY,
       "editor.fontSize": 16,
       "workbench.colorTheme": "Catppuccin Mocha",
+      "workbench.iconTheme": "catppuccin-mocha",
     });
     expect(source).not.toContain("serviceToken");
     expect(settingsFromJson(source, DEFAULT_APP_SETTINGS)).toEqual(DEFAULT_APP_SETTINGS);
@@ -68,19 +70,31 @@ describe("application settings", () => {
       "editor.fontFamily": "Consolas, monospace",
       "editor.fontSize": 18,
       "workbench.colorTheme": "Gander Dark",
+      "workbench.iconTheme": "catppuccin-mocha",
     }), current)).toEqual({
       futureSetting: true,
       editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
-      workbench: { colorTheme: "Gander Dark" },
+      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
     });
   });
 
   it.each([
     ["{", /Invalid settings JSON/],
     [JSON.stringify({ "editor.fontFamily": "monospace" }), /editor\.fontSize/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Unknown" }), /workbench\.colorTheme/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", serviceToken: "nope" }), /Unrecognized key/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Unknown", "workbench.iconTheme": "catppuccin-mocha" }), /workbench\.colorTheme/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "Unknown" }), /workbench\.iconTheme/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "catppuccin-mocha", serviceToken: "nope" }), /Unrecognized key/],
   ])("rejects invalid or non-public settings JSON", (source, message) => {
     expect(() => settingsFromJson(source, DEFAULT_APP_SETTINGS)).toThrow(message);
+  });
+
+  it("adds the file icon default to settings written by the color-theme release", () => {
+    expect(parseAppSettings({
+      editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
+      workbench: { colorTheme: "Gander Dark" },
+    })).toEqual({
+      editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
+      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+    });
   });
 });

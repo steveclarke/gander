@@ -1,20 +1,31 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { EditorSettingsStore } from "../editor-settings-store.js";
-import { DEFAULT_APP_SETTINGS, type ThemeId } from "../../../settings.js";
+import { DEFAULT_APP_SETTINGS, type FileIconThemeId, type ThemeId } from "../../../settings.js";
 import { THEME_IDS, themeFor } from "../../../themes.js";
+import { FILE_ICON_THEME_IDS, fileIconThemeFor } from "../../../file-icon-themes.js";
 
 const props = defineProps<{ store: EditorSettingsStore }>();
 const emit = defineEmits<{ saved: [success: boolean] }>();
 
 const activeTheme = computed(() => themeFor(props.store.settings.workbench.colorTheme));
 const themes = THEME_IDS.map(themeFor);
+const iconThemes = FILE_ICON_THEME_IDS.map(fileIconThemeFor);
+const activeIconTheme = computed(() => fileIconThemeFor(props.store.settings.workbench.iconTheme));
 
 async function selectTheme(event: Event): Promise<void> {
   const colorTheme = (event.currentTarget as HTMLSelectElement).value as ThemeId;
   emit("saved", await props.store.update({
     ...props.store.settings,
-    workbench: { colorTheme },
+    workbench: { ...props.store.settings.workbench, colorTheme },
+  }));
+}
+
+async function selectIconTheme(event: Event): Promise<void> {
+  const iconTheme = (event.currentTarget as HTMLSelectElement).value as FileIconThemeId;
+  emit("saved", await props.store.update({
+    ...props.store.settings,
+    workbench: { ...props.store.settings.workbench, iconTheme },
   }));
 }
 
@@ -49,6 +60,21 @@ async function reset(): Promise<void> {
         <option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
       </select>
       <p class="source">Source: {{ activeTheme.source }}</p>
+    </div>
+
+    <div class="setting">
+      <label for="workbench-icon-theme">File icon theme</label>
+      <p>Controls <code>workbench.iconTheme</code>. Icon themes are bundled with Gander.</p>
+      <select
+        id="workbench-icon-theme"
+        name="workbench.iconTheme"
+        :value="store.settings.workbench.iconTheme"
+        :disabled="store.busy"
+        @change="selectIconTheme"
+      >
+        <option v-for="theme in iconThemes" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
+      </select>
+      <p class="source">Source: {{ activeIconTheme.source }}</p>
     </div>
 
     <div class="swatches" role="img" :aria-label="`${activeTheme.label} color palette`">

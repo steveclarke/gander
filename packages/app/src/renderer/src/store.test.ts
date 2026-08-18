@@ -31,7 +31,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     deleteQuestion: async () => prView(),
     getSettings: async () => ({
       editor: { fontFamily: "monospace", fontSize: 16 },
-      workbench: { colorTheme: "Catppuccin Mocha" },
+      workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
     }),
     updateSettings: async (settings) => settings,
     onOpenSettings: () => () => {},
