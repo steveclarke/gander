@@ -9,11 +9,11 @@ import FileTree from "./FileTree.vue";
 const file = (path: string, checked = false): PrFile =>
   ({ path, status: "M", baseContent: "", headContent: "", baseHash: "b", headHash: "h", checked, changedSince: false });
 
-function prView(prNumber: number, files: PrFile[]): PrView {
+function prView(prNumber: number, files: PrFile[], questions: PrView["questions"] = []): PrView {
   return {
     pr: { number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
     files,
-    questions: [],
+    questions,
   };
 }
 
@@ -136,5 +136,50 @@ describe("FileTree", () => {
 
     expect(dirRow(wrapper, "app").find(".chev").classes()).toContain("lucide-chevron-down");
     expect(wrapper.text()).toContain("member.rb");
+  });
+
+  it("keeps file and directory hierarchy columns aligned at every depth", () => {
+    const leaf = file("src/nested/deeper/leaf.rb");
+    leaf.status = "A";
+    leaf.changedSince = true;
+    const { store } = fakeStore(prView(1, [
+      file("root.rb"),
+      file("src/top.rb"),
+      file("src/nested/middle.rb"),
+      leaf,
+    ], [{
+      id: 1,
+      path: leaf.path,
+      line: 1,
+      text: "Check this line",
+      state: "open",
+      headSha: "b",
+      commitRef: null,
+      note: null,
+      createdAt: "2026-08-18T00:00:00.000Z",
+    }]));
+    const wrapper = mount(FileTree, { props: { store } });
+
+    const rows = [
+      { row: dirRow(wrapper, "src"), paddingLeft: "10px" },
+      { row: fileRow(wrapper, "root.rb"), paddingLeft: "10px" },
+      { row: dirRow(wrapper, "nested"), paddingLeft: "26px" },
+      { row: fileRow(wrapper, "src/top.rb"), paddingLeft: "26px" },
+      { row: dirRow(wrapper, "deeper"), paddingLeft: "42px" },
+      { row: fileRow(wrapper, "src/nested/middle.rb"), paddingLeft: "42px" },
+      { row: fileRow(wrapper, "src/nested/deeper/leaf.rb"), paddingLeft: "58px" },
+    ];
+
+    for (const { row, paddingLeft } of rows) {
+      expect((row.element as HTMLElement).style.paddingLeft).toBe(paddingLeft);
+      expect(row.element.children[0]?.classList).toContain("hierarchy-slot");
+      expect(row.element.children[1]?.classList).toContain("cb");
+    }
+
+    const leafRow = fileRow(wrapper, leaf.path);
+    expect(leafRow.find(".qmark").exists()).toBe(true);
+    expect(leafRow.find(".delta-mark").exists()).toBe(true);
+    expect(leafRow.find(".st").text()).toBe("A");
+    expect(wrapper.findAll(".tnode.isdir .chev")).toHaveLength(3);
   });
 });

@@ -73,7 +73,7 @@ function fileName(path: string): string {
         @click="toggleCollapsed(node.path)"
         @keydown.enter.space.prevent="toggleCollapsed(node.path)"
       >
-        <component :is="collapsed.has(node.path) ? ChevronRight : ChevronDown" class="chev" :size="14" />
+        <component :is="collapsed.has(node.path) ? ChevronRight : ChevronDown" class="hierarchy-slot chev" :size="14" />
         <span
           class="cb"
           :class="{ on: dirStateFor(node) === 'all', part: dirStateFor(node) === 'some' }"
@@ -104,6 +104,7 @@ function fileName(path: string): string {
         @click="store.select(node.file.path)"
         @keydown.enter.space.prevent="store.select(node.file.path)"
       >
+        <span class="hierarchy-slot" aria-hidden="true" />
         <span
           class="cb"
           :class="{ on: node.file.checked }"
@@ -132,6 +133,7 @@ function fileName(path: string): string {
 .tnode { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 0; cursor: pointer; white-space: nowrap; }
 .tnode:hover { background: #232833; }
 .tnode.sel { background: rgba(77, 159, 236, 0.14); box-shadow: inset 2px 0 0 var(--accent); }
+.tnode .hierarchy-slot { width: 14px; flex: none; }
 .tnode .chev { flex: none; color: var(--faint); }
 .tnode .fname { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; }
 .tnode.isdir .fname { font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--dim); }
