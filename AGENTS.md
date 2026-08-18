@@ -10,6 +10,8 @@ human reviews it. One window over every repo and pull request, a Monaco diff,
 hierarchical file checkoff, and a question pipeline that carries the reviewer's
 notes to coding agents over MCP.
 
+`docs/deploy.md` covers running the service on a host.
+
 `docs/superpowers/specs/2026-08-15-gander-design.md` is the approved, binding
 design spec — read it before changing behaviour. `docs/STATE.md` says where the
 project stands. Interface work and the agent reply channel are GitHub issues.
