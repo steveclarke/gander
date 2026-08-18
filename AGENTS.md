@@ -99,6 +99,12 @@ time, not load time (`resolveServiceConnection` in `main/config.ts`) — otherwi
 saving config would write a machine-specific allocated port into
 `.gander/config.json`.
 
+App config is intentionally not backward-compatible while its shape remains in
+major flux and there is only one maintainer install. Keep validation strict; when
+Steve asks to repair a stale local config, update that file directly instead of
+adding migrations or compatibility branches. Add explicit schema versions and
+migrations only when backward compatibility becomes a product requirement.
+
 `SCHEMA` in `storage.ts` is the only supported SQLite shape. There is no upgrade
 path for databases created by an earlier build; recreate the sole user's database
 after a schema change.
