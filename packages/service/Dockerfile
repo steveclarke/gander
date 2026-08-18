@@ -20,7 +20,6 @@ COPY packages/service/package.json packages/service/
 RUN pnpm install --frozen-lockfile --filter @gander/service...
 
 FROM node:24-slim AS runtime
-RUN corepack enable
 WORKDIR /app
 
 COPY --from=deps /app/node_modules node_modules
@@ -40,4 +39,8 @@ EXPOSE 8390
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.GANDER_PORT??8390)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["pnpm", "--filter", "@gander/service", "start"]
+# tsx directly rather than through pnpm: corepack resolves and downloads a package
+# manager on first run, which made starting the container need the network and the
+# npm registry to be up.
+WORKDIR /app/packages/service
+CMD ["node_modules/.bin/tsx", "src/main.ts"]
