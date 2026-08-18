@@ -54,7 +54,6 @@ checkout.
 |---------|---------|-----------|
 | `service` | `@gander/service` — Fastify + SQLite review state | — |
 | `app` | `@gander/app` — electron-vite dev | `service` healthy |
-| `urls` | Prints allocated ports, then idles | `service` healthy |
 
 `service` is probed with `curl -sf $GANDER_SERVICE_URL/healthz`. `app` is set to
 `restart: "no"` — closing the Electron window is a quit, not a crash.

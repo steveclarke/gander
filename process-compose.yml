@@ -30,9 +30,3 @@ processes:
     # would reopen a window that was just dismissed.
     availability:
       restart: "no"
-
-  urls:
-    command: bin/dev-urls
-    depends_on:
-      service:
-        condition: process_healthy
