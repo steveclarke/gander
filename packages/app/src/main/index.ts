@@ -1,10 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { repoIdFromUrl, type RepoEntry } from "@gander/shared";
+import { repoIdFromUrl, type OpenTarget, type RepoEntry } from "@gander/shared";
 import { loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
+import { parseOpenTarget } from "./cli.js";
 import { createGitEngine } from "./git.js";
 import { listOpenPrs, resolveGithubToken } from "./github.js";
+import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
 import { registerSettingsIpc } from "./settings-ipc.js";
@@ -37,6 +39,7 @@ async function bootstrap(): Promise<GanderConfig> {
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, ghToken));
   ipcMain.handle("gander:serviceHealthy", async () => service.healthy());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
+  ipcMain.handle("gander:initialTarget", async () => launchTarget);
   ipcMain.handle("gander:openPr", async (_e, repoId: string, n: number) => {
     const view = await reviewer.openPr(repoId, n);
     // Recorded only once the open succeeded, so a pull request that fails to open
@@ -109,6 +112,32 @@ function createWindow(cfg: GanderConfig): void {
   else win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
 }
 
+function socketPath(): string {
+  // process-compose passes the per-checkout path outport computed. A launch without it —
+  // the end-to-end suite, or running the built app directly — gets one beside its own
+  // user data, which is still the right pairing for that launch.
+  return process.env.GANDER_APP_SOCKET ?? join(app.getPath("userData"), "app.sock");
+}
+
+function deliver(target: OpenTarget): void {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win === undefined) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.send("gander:openTarget", target);
+}
+
+// What this launch was asked to open. Parsed before anything starts, so a failure is a
+// message on stderr rather than a window opened on the wrong review.
+let launchTarget: OpenTarget | null = null;
+try {
+  launchTarget = parseOpenTarget(process.argv.slice(1));
+} catch (err) {
+  console.error((err as Error).message);
+  app.exit(2);
+}
+
 app.whenReady().then(async () => {
   let cfg: GanderConfig;
   try {
@@ -120,5 +149,13 @@ app.whenReady().then(async () => {
   }
   installMenu(cfg);
   createWindow(cfg);
+
+  try {
+    const stop = await startOpenServer({ socketPath: socketPath(), onTarget: deliver });
+    app.on("will-quit", stop);
+  } catch (err) {
+    // Losing the socket costs `bin/gander`, not the app. Reviewing by hand still works.
+    console.error(`Could not listen for open requests: ${(err as Error).message}`);
+  }
 });
 app.on("window-all-closed", () => app.quit());

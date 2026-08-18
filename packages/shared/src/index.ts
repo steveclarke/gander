@@ -119,3 +119,10 @@ export function repoIdFromUrl(url: string): string {
   if (!m) throw new Error(`Not a GitHub repository URL: ${url}`);
   return `${m[1]}/${m[2]}`;
 }
+
+/** A repository, and optionally a pull request in it, that the app was asked to open. */
+export const OpenTargetSchema = z.object({
+  repoId: z.string().regex(/^[^/]+\/[^/]+$/),
+  prNumber: z.number().int().positive().nullable(),
+});
+export type OpenTarget = z.infer<typeof OpenTargetSchema>;

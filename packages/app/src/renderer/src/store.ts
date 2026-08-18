@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import type { PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 
 export interface Store {
@@ -21,6 +21,8 @@ export interface Store {
   /** Reopen the pull request that was open when the app last closed. */
   restoreLastReview(): Promise<void>;
   addRepo(url: string): Promise<void>;
+  /** Open what the command line asked for: a repository, and its pull request when one was named. */
+  openTarget(target: OpenTarget): Promise<void>;
   selectRepo(repoId: string): Promise<void>;
   openPr(prNumber: number): Promise<void>;
   refresh(): Promise<void>;
@@ -74,6 +76,27 @@ export function createStore(api: GanderApi): Store {
       await userAction(() => withBusy(() => guard(async () => {
         await api.addRepo(url);
         store.repos = await api.listRepos();
+      })));
+    },
+    async openTarget(target: OpenTarget) {
+      await userAction(() => withBusy(() => guard(async () => {
+        // Registering on the spot rather than refusing: whoever ran the command already
+        // knows which repository they mean, and an error here would cost the reviewer a
+        // detour to add it by hand.
+        if (!store.repos.some((r) => r.repoId === target.repoId)) {
+          await api.addRepo(`https://github.com/${target.repoId}`);
+          store.repos = await api.listRepos();
+        }
+        // The bodies of selectRepo and openPr, inlined: nesting their busy wrappers would
+        // clear the busy flag halfway through this one.
+        store.prs = await api.listPrs(target.repoId);
+        store.currentRepoId = target.repoId;
+        store.view = null;
+        store.selectedPath = null;
+        if (target.prNumber === null) return;
+        store.view = await api.openPr(target.repoId, target.prNumber);
+        store.selectedPath = store.view.files[0]?.path ?? null;
+        store.lastFetchAt = new Date().toISOString();
       })));
     },
     async selectRepo(repoId: string) {

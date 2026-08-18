@@ -1,20 +1,56 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# process-compose reads .pc_env at startup and picks up PC_SOCKET_PATH, which
-# outport writes with a per-instance value. That auto-enables UDS mode with a
-# unique socket per worktree — no flags needed here.
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+PC_ENV_FILE="$SCRIPT_ROOT/.pc_env"
 
-cd "$(dirname "$0")/.."
+main() {
+  cd "$SCRIPT_ROOT"
+  load_worktree_env
 
-case "${1:-}" in
-  -D)        shift; process-compose up -D "$@" ;;
-  stop)      process-compose down ;;
-  status)
-    fmt="--output wide"; [[ "${2:-}" == "--json" ]] && fmt="--output json"
-    process-compose process list $fmt 2>/dev/null || { echo "Dev environment is not running. Start it with: bin/dev"; exit 1; }
-    ;;
-  logs)      process-compose process logs "${2:?specify a service}" ;;
-  restart)   process-compose process restart "${2:?specify a service}" ;;
-  *)         process-compose up "$@" ;;
-esac
+  case "${1:-}" in
+    -D)        shift; process-compose up -D "$@" ;;
+    stop)      process-compose down ;;
+    status)    show_status "${2:-}" ;;
+    logs)      process-compose process logs "${2:?specify a service}" ;;
+    restart)   process-compose process restart "${2:?specify a service}" ;;
+    *)         process-compose up "$@" ;;
+  esac
+}
+
+fail() {
+  printf 'Error: %s\n' "$1" >&2
+  exit 1
+}
+
+load_worktree_env() {
+  [[ -f "$PC_ENV_FILE" ]] || fail "$PC_ENV_FILE is missing. Run bin/setup first."
+
+  # Load the generated environment ourselves instead of relying on
+  # process-compose's implicit dotenv discovery. This makes every command use
+  # the socket belonging to this worktree, regardless of its caller's cwd or
+  # environment.
+  set -a
+  # shellcheck disable=SC1090
+  source "$PC_ENV_FILE"
+  set +a
+
+  [[ -n "${PC_SOCKET_PATH:-}" ]] || fail "PC_SOCKET_PATH is missing from $PC_ENV_FILE. Run bin/setup first."
+}
+
+show_status() {
+  local format="${1:-}"
+  local -a output_args=(--output wide)
+  [[ "$format" == "--json" ]] && output_args=(--output json)
+
+  local output
+  if ! output="$(process-compose process list "${output_args[@]}")"; then
+    printf 'Dev environment is not running or could not be reached. Start it with: bin/dev\n' >&2
+    return 1
+  fi
+
+  [[ -n "$output" ]] || fail "process-compose returned no process status. Check the worktree socket and restart with bin/dev."
+  printf '%s\n' "$output"
+}
+
+main "$@"

@@ -6,9 +6,10 @@ shell:
   shell_command: "bash"
   shell_argument: "-lc"
 
-# GANDER_PORT, GANDER_TOKEN and GANDER_SERVICE_URL come from .env / .pc_env,
-# which process-compose loads before anything starts. Paths are built from $PWD
-# rather than hardcoded, so a worktree keeps its own database and config.
+# GANDER_PORT, GANDER_TOKEN and GANDER_SERVICE_URL are generated in .env and
+# .pc_env. bin/dev loads .pc_env before invoking process-compose, which also
+# reads .env by default. Paths are built from $PWD rather than hardcoded, so a
+# worktree keeps its own database and config.
 
 processes:
   service:

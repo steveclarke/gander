@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
 allowBuilds:
+  '@modelcontextprotocol/inspector': true
   better-sqlite3: true
   edgedriver: false
   electron: true

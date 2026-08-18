@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Opens a review in the app already running for this checkout.
+#
+#   bin/gander --repo owner/name
+#   bin/gander --repo owner/name --pr 42
+#   bin/gander --pr https://github.com/owner/name/pull/42
+#
+# The arguments travel to the app as they were typed; it does the parsing and
+# answers with what it opened, or why it could not.
+
+cd "$(dirname "$0")/.."
+
+set -a
+# shellcheck disable=SC1091
+source .env
+set +a
+
+: "${GANDER_APP_SOCKET:?No app socket allocated. Run bin/setup.}"
+
+exec node -e '
+const { connect } = require("node:net");
+const socketPath = process.env.GANDER_APP_SOCKET;
+// Everything after the -- separator, which is what keeps node from reading --repo as
+// an option of its own.
+const argv = process.argv.slice(1);
+const socket = connect(socketPath, () => socket.write(JSON.stringify({ argv }) + "\n"));
+let out = "";
+socket.setEncoding("utf8");
+socket.on("data", (chunk) => { out += chunk; });
+socket.on("end", () => {
+  let reply;
+  try { reply = JSON.parse(out); } catch { console.error("The app sent a reply this version does not understand."); process.exit(1); }
+  if (reply.error) { console.error(reply.error); process.exit(1); }
+  const { repoId, prNumber } = reply.target;
+  console.log(prNumber === null ? `Opened ${repoId}` : `Opened ${repoId}#${prNumber}`);
+});
+socket.on("error", () => {
+  console.error("Gander is not running in this checkout. Start it with `bin/dev -D`, then try again.");
+  process.exit(1);
+});
+' -- "$@"

@@ -1,7 +1,8 @@
 import type { GanderApi } from "../api.js";
+import type { OpenTarget } from "@gander/shared";
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>;
-type Subscribe = (channel: string, listener: () => void) => () => void;
+type Subscribe = (channel: string, listener: (...args: any[]) => void) => () => void;
 
 export function createGanderApi(invoke: Invoke, subscribe: Subscribe): GanderApi {
   const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
@@ -12,6 +13,8 @@ export function createGanderApi(invoke: Invoke, subscribe: Subscribe): GanderApi
     addRepo: (url) => call("addRepo", url),
     listPrs: (repoId) => call("listPrs", repoId),
     lastReview: () => call("lastReview"),
+    initialTarget: () => call("initialTarget"),
+    onOpenTarget: (listener) => subscribe("gander:openTarget", (target: OpenTarget) => listener(target)),
     serviceHealthy: () => call("serviceHealthy"),
     openPr: (repoId, prNumber) => call("openPr", repoId, prNumber),
     setChecked: (repoId, prNumber, path, checked) => call("setChecked", repoId, prNumber, path, checked),

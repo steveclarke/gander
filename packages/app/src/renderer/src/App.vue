@@ -17,18 +17,25 @@ import "./theme.css";
 
 const store = createStore(api);
 const editorSettings = createEditorSettingsStore(api);
+let unsubscribeOpenTarget: (() => void) | null = null;
+let unsubscribeOpenSettings: (() => void) | null = null;
+
 onMounted(async () => {
+  // Registered first, so commands arriving while the app restores its last review are not dropped.
+  unsubscribeOpenTarget = api.onOpenTarget((target) => { void store.openTarget(target); });
+  unsubscribeOpenSettings = api.onOpenSettings(openSettings);
   void editorSettings.load();
   await store.checkService();
   await store.loadRepos();
-  await store.restoreLastReview();
+  const target = await api.initialTarget();
+  if (target !== null) await store.openTarget(target);
+  else await store.restoreLastReview();
 });
 
 const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const activeSurface = shallowRef<"review" | "settings">("review");
-let unsubscribeOpenSettings: (() => void) | null = null;
 
 function openSettings(): void {
   activeSurface.value = "settings";
@@ -37,10 +44,6 @@ function openSettings(): void {
 function toggleSettings(): void {
   activeSurface.value = activeSurface.value === "settings" ? "review" : "settings";
 }
-
-onMounted(() => {
-  unsubscribeOpenSettings = api.onOpenSettings(openSettings);
-});
 
 // v-model needs something assignable, and which dimension the questions splitter drags
 // depends on where the panel is docked.
@@ -108,6 +111,7 @@ onBeforeUnmount(() => {
   clearInterval(healthTimer);
   window.removeEventListener("focus", onFocus);
   window.removeEventListener("keydown", onKey, true);
+  unsubscribeOpenTarget?.();
   unsubscribeOpenSettings?.();
 });
 </script>

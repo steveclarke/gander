@@ -14,6 +14,25 @@ describe("preload API", () => {
     expect(invoke).toHaveBeenLastCalledWith("gander:updateSettings", settings);
   });
 
+  it("routes launch targets and subscribes to later open-target events", async () => {
+    const invoke = vi.fn(async () => ({ repoId: "acme/atlas", prNumber: 4 }));
+    const cleanup = vi.fn();
+    let subscribed: ((...args: any[]) => void) | undefined;
+    const subscribe: Parameters<typeof createGanderApi>[1] = vi.fn((_channel, listener) => {
+      subscribed = listener;
+      return cleanup;
+    });
+    const api = createGanderApi(invoke, subscribe);
+    const listener = vi.fn();
+
+    await api.initialTarget();
+    expect(invoke).toHaveBeenLastCalledWith("gander:initialTarget");
+    expect(api.onOpenTarget(listener)).toBe(cleanup);
+    expect(subscribe).toHaveBeenCalledWith("gander:openTarget", expect.any(Function));
+    subscribed?.({ repoId: "acme/atlas", prNumber: 4 });
+    expect(listener).toHaveBeenCalledWith({ repoId: "acme/atlas", prNumber: 4 });
+  });
+
   it("subscribes to the typed open-settings event and returns its cleanup", () => {
     const cleanup = vi.fn();
     const subscribe = vi.fn(() => cleanup);

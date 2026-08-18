@@ -22,6 +22,8 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     setCheckedMany: async (_r, _n, paths) => prView(paths),
     refreshPr: async () => prView(),
     lastReview: async () => null,
+    initialTarget: async () => null,
+    onOpenTarget: () => () => {},
     serviceHealthy: async () => true,
     reviewedSnapshot: async () => null,
     addQuestion: async () => prView(),
@@ -34,6 +36,37 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
 }
 
 describe("store", () => {
+  it("opens a target naming a repository and pull request", async () => {
+    const store = createStore(fakeApi());
+    await store.loadRepos();
+    await store.openTarget({ repoId: "acme/atlas", prNumber: 1 });
+    expect(store.currentRepoId).toBe("acme/atlas");
+    expect(store.view?.files).toHaveLength(2);
+    expect(store.selectedPath).toBe("a.rb");
+  });
+
+  it("opens a target naming only a repository", async () => {
+    const store = createStore(fakeApi());
+    await store.loadRepos();
+    await store.openTarget({ repoId: "acme/atlas", prNumber: null });
+    expect(store.currentRepoId).toBe("acme/atlas");
+    expect(store.prs).toHaveLength(1);
+    expect(store.view).toBeNull();
+  });
+
+  it("registers a repository the target names but the app has never seen", async () => {
+    const added: string[] = [];
+    const store = createStore(fakeApi({
+      addRepo: async (url) => { added.push(url); return { repoId: "acme/new", url }; },
+      listRepos: async () => (added.length === 0 ? [] : [{ repoId: "acme/new", url: added[0] as string }]),
+    }));
+    await store.loadRepos();
+    await store.openTarget({ repoId: "acme/new", prNumber: null });
+    expect(added).toEqual(["https://github.com/acme/new"]);
+    expect(store.currentRepoId).toBe("acme/new");
+    expect(store.error).toBeNull();
+  });
+
   it("loads repos, selects one, opens a PR, tracks progress", async () => {
     const store = createStore(fakeApi());
     await store.loadRepos();
