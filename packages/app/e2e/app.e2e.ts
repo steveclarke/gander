@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { connect } from "node:net";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -29,6 +30,20 @@ async function openPullRequest(title: string, twice = false): Promise<void> {
   await option.waitForDisplayed();
   if (twice) await option.doubleClick();
   else await option.click();
+}
+
+/** The round trip bin/gander makes: raw argv in, the app's answer out. */
+function ganderCommand(argv: string[]): Promise<{ ok?: boolean; error?: string }> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(requiredEnv("GANDER_E2E_APP_SOCKET"), () => {
+      socket.write(`${JSON.stringify({ argv })}\n`);
+    });
+    let out = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk: string) => { out += chunk; });
+    socket.on("end", () => resolve(JSON.parse(out) as { ok?: boolean; error?: string }));
+    socket.on("error", reject);
+  });
 }
 
 function fileCheckbox(filename: string) {
@@ -68,5 +83,21 @@ describe("Gander end to end", () => {
     const matchingClones = readdirSync(clonesRoot).filter((entry) => entry.startsWith("acme__race.git"));
     expect(matchingClones).toEqual(["acme__race.git"]);
     await run("git", ["-C", join(clonesRoot, "acme__race.git"), "fsck", "--full", "--no-dangling"]);
+  });
+
+  it("opens a pull request named on the command line", async () => {
+    const repoId = requiredEnv("GANDER_E2E_LAUNCHER_REPO");
+    // The repository has never been registered in the app — naming it is enough.
+    const reply = await ganderCommand(["--repo", repoId, "--pr", "1"]);
+    expect(reply).toEqual({ ok: true, target: { repoId, prNumber: 1 } });
+
+    await expect($(".seg-review")).toHaveText(expect.stringContaining("Open from the command line"));
+    await expect($(".progress")).toHaveText("0/2 reviewed");
+    await expect($(".error-banner")).not.toBeDisplayed();
+  });
+
+  it("answers a command that names nothing openable", async () => {
+    const reply = await ganderCommand(["--repo", "notarepoid"]);
+    expect(reply.error).toContain("owner/name");
   });
 });

@@ -27,3 +27,12 @@ computed:
   PC_SOCKET_PATH:
     value: "/tmp/process-compose-${project_name}${instance:+-${instance}}.sock"
     env_file: .pc_env
+
+  # Where the running app listens for `bin/gander`. Kept in /tmp, not the checkout,
+  # for the same reason as the control socket above: a Unix socket path is capped
+  # near 104 characters, and a worktree path can run long.
+  GANDER_APP_SOCKET:
+    value: "/tmp/gander-app-${project_name}${instance:+-${instance}}.sock"
+    env_file:
+      - .env
+      - .pc_env

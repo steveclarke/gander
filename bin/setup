@@ -66,7 +66,8 @@ else
     'GANDER_PORT=8390' \
     'GANDER_SERVICE_URL=http://127.0.0.1:8390' \
     'MCP_INSPECTOR_CLIENT_PORT=6274' \
-    'MCP_INSPECTOR_SANDBOX_PORT=6275' > .env
+    'MCP_INSPECTOR_SANDBOX_PORT=6275' \
+    "GANDER_APP_SOCKET=/tmp/gander-app-gander-$socket_id.sock" > .env
   cp .env .pc_env
   printf 'PC_SOCKET_PATH=/tmp/process-compose-gander-%s.sock\n' "$socket_id" >> .pc_env
 fi

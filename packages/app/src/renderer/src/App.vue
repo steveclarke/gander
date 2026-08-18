@@ -15,9 +15,14 @@ import "./theme.css";
 
 const store = createStore(api);
 onMounted(async () => {
+  // Registered first, so a `gander` command that arrives while the app is still opening
+  // its last review is not dropped.
+  api.onOpenTarget((target) => { void store.openTarget(target); });
   await store.checkService();
   await store.loadRepos();
-  await store.restoreLastReview();
+  const target = await api.initialTarget();
+  if (target !== null) await store.openTarget(target);
+  else await store.restoreLastReview();
 });
 
 const capturing = ref(false);
