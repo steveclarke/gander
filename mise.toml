@@ -1,5 +1,5 @@
 [tools]
-# 24, not the 22 in .nvmrc: better-sqlite3 and Electron's native modules are
-# built against the installed runtime, and a major-version change breaks them.
+# Keep the app and native module builds on Node 24. bin/setup uses Node 22 only
+# for Electron's archive download scripts when their Node 24 extraction fails.
 node = "24"
 pnpm = "11"

@@ -24,14 +24,13 @@ suite.
 
 ### When the suite cannot start Electron
 
-`electron` and `electron-chromedriver` download an archive in a postinstall
-script and unpack it into the package. Adding them to a checkout whose
-`node_modules` predates them can leave that unpacking truncated — `electron/dist`
-ends up a few hundred kilobytes rather than roughly 250 MB — while the install
-script still reports success and exits 0. The suite then fails with
+`electron` and `electron-chromedriver` download archives in package lifecycle
+scripts. Electron 33's `extract-zip` step can silently stop after the first
+archive entry when it runs under Node 24. `electron/dist` then ends up a few
+hundred kilobytes rather than roughly 250 MB while the install script still
+reports success and exits 0. The suite then fails with
 `spawn ... chromedriver ENOENT`, or Electron starts and dies with
-`DevToolsActivePort file doesn't exist`. Reinstalling does not help: pnpm sees
-the packages as present and never re-runs the step.
+`DevToolsActivePort file doesn't exist`.
 
 Check for it, from the repository root:
 
@@ -40,9 +39,11 @@ Check for it, from the repository root:
 ```
 
 A working install prints the version. A truncated one raises
-`Electron failed to install correctly`. The reliable repair is a worktree with a
-clean install of its own — `bin/worktree add` runs one — which unpacks correctly
-because nothing was there before.
+`Electron failed to install correctly`. `bin/setup` checks both Electron and
+chromedriver after `pnpm install`. If either is incomplete, it keeps pnpm and
+native module builds on Node 24 but reruns only the official Electron download
+scripts under Node 22 through mise. Rerun `bin/setup` to repair an existing
+checkout.
 
 ## Processes
 
