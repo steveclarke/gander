@@ -1,0 +1,40 @@
+name: Release (Linux)
+
+# macOS artifacts are built and signed on the maintainer's machine; this adds the
+# Linux AppImage to the release that build created.
+on:
+  release:
+    types: [published]
+
+jobs:
+  appimage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          # Node 22, not 24: Electron 33's archive extraction truncates silently
+          # under 24, which bin/setup works around locally for the same reason.
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @gander/app run dist:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload the AppImage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            packages/app/dist/*.AppImage \
+            packages/app/dist/latest-linux.yml \
+            --clobber
