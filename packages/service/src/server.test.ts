@@ -101,6 +101,22 @@ describe("service API", () => {
       expect((await server.inject({ method: "GET", url, headers: AUTH })).json()).toEqual([]);
     });
 
+    it("lists a resolved question with the agent's commit and note", async () => {
+      const question = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+      storage.markQuestionAddressed(question.id, { commitRef: "abc1234", note: "Dropped the retry" });
+      storage.putFileState("acme/atlas", 7, {
+        checked: true, path: "a.rb", baseHash: "base", headHash: "head",
+        baseContent: "before", headContent: "after", machine: "studio",
+      });
+
+      const listed = await server.inject({ method: "GET", url, headers: AUTH });
+      expect(listed.json()).toEqual([
+        expect.objectContaining({
+          id: question.id, state: "resolved", commitRef: "abc1234", note: "Dropped the retry",
+        }),
+      ]);
+    });
+
     it("rejects an empty question rather than storing a blank note", async () => {
       const res = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: null, text: "", headSha: null } });
       expect(res.statusCode).toBe(400);
