@@ -67,6 +67,18 @@ describe("review pipeline", () => {
     expect(reopened.files.find((f) => f.path === "a.rb")!.checked).toBe(true);
   });
 
+  it("adds a reviewer reply through the real service and keeps it on reopen", async () => {
+    await reviewer.openPr("acme/atlas", 1);
+    const withQuestion = await reviewer.addQuestion("acme/atlas", 1, { path: "a.rb", line: 2, text: "Why?" });
+    const id = withQuestion.questions[0]!.id;
+
+    const replied = await reviewer.addReviewerReply("acme/atlas", 1, id, "Because the caller retries.");
+    expect(replied.questions[0]).toMatchObject({
+      state: "open", replies: [{ author: "reviewer", text: "Because the caller retries." }],
+    });
+    expect((await reviewer.openPr("acme/atlas", 1)).questions[0]?.replies).toHaveLength(1);
+  });
+
   it("setCheckedMany checks a batch from the cached view and persists it", async () => {
     await reviewer.openPr("acme/atlas", 1);
     const view = await reviewer.setCheckedMany("acme/atlas", 1, ["a.rb", "b.rb"], true);

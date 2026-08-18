@@ -171,11 +171,12 @@ claude mcp add --transport http gander "$GANDER_SERVICE_URL/mcp" \
   --header "Authorization: Bearer $GANDER_TOKEN"
 ```
 
-Run it in the repository being reviewed, not in this one. Two tools appear:
+Run it in the repository being reviewed, not in this one. Three tools appear:
 
 | Tool | Purpose |
 |------|---------|
 | `get_review_questions` | Open questions for a repo + branch (or pull request number), with file and line |
+| `reply_to_question` | Adds an agent reply to a question without changing its lifecycle state |
 | `mark_question_addressed` | Flags one as acted on, with an optional commit ref and note |
 
 Nothing over MCP resolves a question. That stays the reviewer's act, made by

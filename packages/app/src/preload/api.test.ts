@@ -14,6 +14,14 @@ describe("preload API", () => {
     expect(invoke).toHaveBeenLastCalledWith("gander:updateSettings", settings);
   });
 
+  it("routes reviewer replies through the reply IPC channel", async () => {
+    const invoke = vi.fn(async () => ({}));
+    const api = createGanderApi(invoke, vi.fn());
+
+    await api.addReviewerReply("acme/atlas", 7, 12, "A reviewer reply");
+    expect(invoke).toHaveBeenLastCalledWith("gander:addReviewerReply", "acme/atlas", 7, 12, "A reviewer reply");
+  });
+
   it("routes launch targets and subscribes to later open-target events", async () => {
     const invoke = vi.fn(async () => ({ repoId: "acme/atlas", prNumber: 4 }));
     const cleanup = vi.fn();

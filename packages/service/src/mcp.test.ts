@@ -49,10 +49,10 @@ afterEach(async () => {
 });
 
 describe("MCP endpoint", () => {
-  it("offers exactly the two tools the contract defines", async () => {
+  it("offers the three question conversation tools", async () => {
     const client = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["get_review_questions", "mark_question_addressed"]);
+    expect(names).toEqual(["get_review_questions", "mark_question_addressed", "reply_to_question"]);
     await client.close();
   });
 
@@ -72,8 +72,39 @@ describe("MCP endpoint", () => {
     expect(payload.title).toBe("Feature");
     expect(payload.questions).toEqual([{
       id: expect.any(Number), file: "a.rb", line: 12, text: "Why the retry here?", state: "open",
-      capturedAtSha: null, lineMayHaveMoved: false,
+      replies: [], capturedAtSha: null, lineMayHaveMoved: false,
     }]);
+    await client.close();
+  });
+
+  it("lets an agent reply and returns the thread without changing question state", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
+
+    const client = await connect();
+    const replied = await client.callTool({
+      name: "reply_to_question",
+      arguments: { id: q.id, text: "This belongs in the model because both callers need it." },
+    });
+    expect(textOf(replied as { content?: unknown })).toContain("state was not changed");
+
+    const payload = JSON.parse(textOf((await client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", branch: "feat/thing" },
+    })) as { content?: unknown })) as { questions: Array<{ state: string; replies: Array<{ author: string; text: string }> }> };
+    expect(payload.questions[0]).toMatchObject({
+      state: "open",
+      replies: [{ author: "agent", text: "This belongs in the model because both callers need it." }],
+    });
+    expect(storage.listQuestions("acme/atlas", 7)[0]?.state).toBe("open");
+    await client.close();
+  });
+
+  it("reports an unknown question when an agent tries to reply", async () => {
+    const client = await connect();
+    const result = await client.callTool({ name: "reply_to_question", arguments: { id: 999, text: "Anyone there?" } });
+    expect(result.isError).toBe(true);
+    expect(textOf(result as { content?: unknown })).toContain("does not exist");
     await client.close();
   });
 

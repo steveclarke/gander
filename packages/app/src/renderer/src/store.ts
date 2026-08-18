@@ -32,6 +32,7 @@ export interface Store {
   setCheckedMany(paths: string[], checked: boolean): Promise<void>;
   reviewedSnapshot(path: string): Promise<string | null>;
   addQuestion(text: string, path: string | null, line: number | null): Promise<void>;
+  addReviewerReply(id: number, text: string): Promise<void>;
   deleteQuestion(id: number): Promise<void>;
   select(path: string): void;
   progress(): { done: number; total: number };
@@ -151,6 +152,12 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         if (!store.currentRepoId || !store.view) throw new Error("no PR open");
         store.view = await api.deleteQuestion(store.currentRepoId, store.view.pr.number, id);
+      });
+    },
+    async addReviewerReply(id: number, text: string) {
+      await guard(async () => {
+        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
+        store.view = await api.addReviewerReply(store.currentRepoId, store.view.pr.number, id, text);
       });
     },
     select(path: string) {

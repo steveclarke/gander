@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, MarkAddressed, NewQuestion, PrContext, PutFileState, Question, ReviewState } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, NewQuestion, NewQuestionReply, PrContext, PutFileState, Question, QuestionReply, ReviewState } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -40,6 +40,14 @@ CREATE TABLE IF NOT EXISTS questions (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS questions_by_review ON questions(review_id);
+CREATE TABLE IF NOT EXISTS question_replies (
+  id INTEGER PRIMARY KEY,
+  question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  author TEXT NOT NULL CHECK(author IN ('reviewer', 'agent')),
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS question_replies_by_question ON question_replies(question_id, id);
 `;
 
 export interface Storage {
@@ -55,18 +63,29 @@ export interface Storage {
   markQuestionAddressed(id: number, input: MarkAddressed): Question | null;
   listQuestions(repoId: string, prNumber: number): Question[];
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Question;
+  addReviewerReply(repoId: string, prNumber: number, id: number, input: NewQuestionReply): QuestionReply | null;
+  addAgentReply(id: number, input: NewQuestionReply): QuestionReply | null;
   deleteQuestion(repoId: string, prNumber: number, id: number): boolean;
   close(): void;
 }
 
 interface QuestionRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; commit_ref: string | null; note: string | null; created_at: string }
+interface QuestionReplyRow { id: number; question_id: number; author: string; text: string; created_at: string }
 
-const rowToQuestion = (r: QuestionRow): Question => ({
+const rowToReply = (r: QuestionReplyRow): QuestionReply => ({
+  id: r.id,
+  author: r.author as QuestionReply["author"],
+  text: r.text,
+  createdAt: r.created_at,
+});
+
+const rowToQuestion = (r: QuestionRow, replies: QuestionReply[] = []): Question => ({
   id: r.id, path: r.path, line: r.line, text: r.text,
   state: r.state as Question["state"],
   headSha: r.head_sha,
   commitRef: r.commit_ref, note: r.note,
   createdAt: r.created_at,
+  replies,
 });
 
 const QUESTION_COLUMNS = "id, path, line, text, state, head_sha, commit_ref, note, created_at";
@@ -99,6 +118,7 @@ const unpack = (b: Buffer | null): string | null => (b === null ? null : gunzipS
 
 export function openStorage(dbPath: string): Storage {
   const db = new Database(dbPath);
+  db.pragma("foreign_keys = ON");
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
   migrate(db);
@@ -114,6 +134,13 @@ export function openStorage(dbPath: string): Storage {
     baseHash: r.base_hash, headHash: r.head_hash,
     checkedAt: r.checked_at, machine: r.machine,
   });
+
+  const repliesForQuestion = (id: number): QuestionReply[] =>
+    (db.prepare("SELECT id, question_id, author, text, created_at FROM question_replies WHERE question_id = ? ORDER BY id").all(id) as QuestionReplyRow[])
+      .map(rowToReply);
+
+  const replyById = (id: number | bigint): QuestionReply =>
+    rowToReply(db.prepare("SELECT id, question_id, author, text, created_at FROM question_replies WHERE id = ?").get(id) as QuestionReplyRow);
 
   return {
     getReview(repoId, prNumber) {
@@ -202,13 +229,26 @@ export function openStorage(dbPath: string): Storage {
         WHERE id = ? AND state = 'open'
       `).run(input.commitRef, input.note, id).changes;
       if (changed === 0) return null;
-      return rowToQuestion(db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(id) as QuestionRow);
+      return rowToQuestion(db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(id) as QuestionRow, repliesForQuestion(id));
     },
 
     listQuestions(repoId, prNumber) {
       const rid = reviewId(repoId, prNumber);
       const rows = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE review_id = ? ORDER BY id`).all(rid) as QuestionRow[];
-      return rows.map(rowToQuestion);
+      const replyRows = db.prepare(`
+        SELECT qr.id, qr.question_id, qr.author, qr.text, qr.created_at
+        FROM question_replies qr
+        JOIN questions q ON q.id = qr.question_id
+        WHERE q.review_id = ?
+        ORDER BY qr.id
+      `).all(rid) as QuestionReplyRow[];
+      const replies = new Map<number, QuestionReply[]>();
+      for (const row of replyRows) {
+        const current = replies.get(row.question_id) ?? [];
+        current.push(rowToReply(row));
+        replies.set(row.question_id, current);
+      }
+      return rows.map((row) => rowToQuestion(row, replies.get(row.id) ?? []));
     },
 
     addQuestion(repoId, prNumber, input) {
@@ -218,6 +258,23 @@ export function openStorage(dbPath: string): Storage {
         .run(rid, input.path, input.line, input.text, input.headSha);
       const row = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(lastInsertRowid) as QuestionRow;
       return rowToQuestion(row);
+    },
+
+    addReviewerReply(repoId, prNumber, id, input) {
+      const rid = reviewId(repoId, prNumber);
+      const result = db.prepare(`
+        INSERT INTO question_replies (question_id, author, text)
+        SELECT q.id, 'reviewer', ? FROM questions q WHERE q.id = ? AND q.review_id = ?
+      `).run(input.text, id, rid);
+      return result.changes === 0 ? null : replyById(result.lastInsertRowid);
+    },
+
+    addAgentReply(id, input) {
+      const result = db.prepare(`
+        INSERT INTO question_replies (question_id, author, text)
+        SELECT id, 'agent', ? FROM questions WHERE id = ?
+      `).run(input.text, id);
+      return result.changes === 0 ? null : replyById(result.lastInsertRowid);
     },
 
     deleteQuestion(repoId, prNumber, id) {

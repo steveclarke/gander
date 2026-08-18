@@ -111,6 +111,49 @@ describe("storage", () => {
       expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", note: "Dropped the retry" });
     });
 
+    it("appends reviewer and agent replies without changing the question state", () => {
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 4, text: "Why?", headSha: null });
+
+      expect(storage.addReviewerReply("acme/atlas", 7, q.id, { text: "Because this runs twice." })).toMatchObject({
+        author: "reviewer", text: "Because this runs twice.",
+      });
+      expect(storage.addAgentReply(q.id, { text: "That constraint belongs in the model." })).toMatchObject({
+        author: "agent", text: "That constraint belongs in the model.",
+      });
+
+      expect(storage.listQuestions("acme/atlas", 7)[0]).toMatchObject({
+        state: "open",
+        replies: [
+          { author: "reviewer", text: "Because this runs twice." },
+          { author: "agent", text: "That constraint belongs in the model." },
+        ],
+      });
+
+      storage.markQuestionAddressed(q.id, { commitRef: null, note: null });
+      storage.addAgentReply(q.id, { text: "One more detail." });
+      expect(storage.listQuestions("acme/atlas", 7)[0]?.state).toBe("addressed");
+
+      storage.putFileState("acme/atlas", 7, {
+        checked: true, path: "a.rb", baseHash: "b", headHash: "h",
+        baseContent: "old", headContent: "new", machine: "studio",
+      });
+      storage.addReviewerReply("acme/atlas", 7, q.id, { text: "Closing note." });
+      expect(storage.listQuestions("acme/atlas", 7)[0]?.state).toBe("resolved");
+    });
+
+    it("scopes reviewer replies to the question's review", () => {
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+      expect(storage.addReviewerReply("acme/atlas", 8, q.id, { text: "Wrong review" })).toBeNull();
+      expect(storage.listQuestions("acme/atlas", 7)[0]?.replies).toEqual([]);
+    });
+
+    it("deletes a question's reply thread with the question", () => {
+      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+      storage.addAgentReply(q.id, { text: "Here is why." });
+      expect(storage.deleteQuestion("acme/atlas", 7, q.id)).toBe(true);
+      expect(storage.addAgentReply(q.id, { text: "Too late" })).toBeNull();
+    });
+
     it("refuses to re-address a question the reviewer already resolved", () => {
       const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
       storage.markQuestionAddressed(q.id, { commitRef: null, note: null });
@@ -192,6 +235,8 @@ describe("storage", () => {
         // And the new columns work rather than throwing on first write.
         const id = upgraded.listQuestions("acme/atlas", 7)[0]!.id;
         expect(upgraded.markQuestionAddressed(id, { commitRef: "abc", note: "done" })?.state).toBe("addressed");
+        expect(upgraded.addAgentReply(id, { text: "Reply after upgrade" })?.author).toBe("agent");
+        expect(upgraded.listQuestions("acme/atlas", 7)[0]?.replies).toMatchObject([{ text: "Reply after upgrade" }]);
         upgraded.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
         expect(upgraded.findPrByHeadRef("acme/atlas", "feat/thing")).toBe(7);
       } finally {

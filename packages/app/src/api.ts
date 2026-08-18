@@ -17,6 +17,7 @@ export interface GanderApi {
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   addQuestion(repoId: string, prNumber: number, input: Omit<NewQuestion, "headSha">): Promise<PrView>;
+  addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<PrView>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
   getSettings(): Promise<AppSettings>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;

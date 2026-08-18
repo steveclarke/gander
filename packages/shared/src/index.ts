@@ -37,6 +37,22 @@ export type PutFileState = z.infer<typeof PutFileStateSchema>;
 export const QuestionStateSchema = z.enum(["open", "addressed", "resolved"]);
 export type QuestionState = z.infer<typeof QuestionStateSchema>;
 
+export const QuestionReplyAuthorSchema = z.enum(["reviewer", "agent"]);
+export type QuestionReplyAuthor = z.infer<typeof QuestionReplyAuthorSchema>;
+
+export const QuestionReplySchema = z.object({
+  id: z.number().int().positive(),
+  author: QuestionReplyAuthorSchema,
+  text: z.string().min(1),
+  createdAt: z.string(),
+});
+export type QuestionReply = z.infer<typeof QuestionReplySchema>;
+
+export const NewQuestionReplySchema = z.object({
+  text: z.string().trim().min(1),
+});
+export type NewQuestionReply = z.infer<typeof NewQuestionReplySchema>;
+
 export const QuestionSchema = z.object({
   id: z.number().int().positive(),
   /** null for a note about the pull request as a whole rather than one file. */
@@ -52,6 +68,7 @@ export const QuestionSchema = z.object({
   /** One-line note an agent left when it marked the question addressed. */
   note: z.string().nullable(),
   createdAt: z.string(),
+  replies: z.array(QuestionReplySchema),
 });
 export type Question = z.infer<typeof QuestionSchema>;
 

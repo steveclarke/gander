@@ -46,6 +46,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async fetchNow() {},
     async reviewedSnapshot() { return null; },
     async addQuestion() {},
+    async addReviewerReply() {},
     async deleteQuestion() {},
     async setChecked(path: string, checked: boolean) {
       calls.setChecked.push([path, checked]);
@@ -158,6 +159,7 @@ describe("FileTree", () => {
       commitRef: null,
       note: null,
       createdAt: "2026-08-18T00:00:00.000Z",
+      replies: [],
     }]));
     const wrapper = mount(FileTree, { props: { store } });
 

@@ -22,6 +22,7 @@ export function createGanderApi(invoke: Invoke, subscribe: Subscribe): GanderApi
     refreshPr: (repoId, prNumber) => call("refreshPr", repoId, prNumber),
     reviewedSnapshot: (repoId, prNumber, path) => call("reviewedSnapshot", repoId, prNumber, path),
     addQuestion: (repoId, prNumber, input) => call("addQuestion", repoId, prNumber, input),
+    addReviewerReply: (repoId, prNumber, id, text) => call("addReviewerReply", repoId, prNumber, id, text),
     deleteQuestion: (repoId, prNumber, id) => call("deleteQuestion", repoId, prNumber, id),
     getSettings: () => call("getSettings"),
     updateSettings: (settings) => call("updateSettings", settings),

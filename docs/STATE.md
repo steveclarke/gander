@@ -47,6 +47,10 @@ an agent has acted on one, and `resolved` when the reviewer re-checks the file.
 Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`
 for registration.
 
+Questions also carry reply threads. Reviewer and agent replies remain attached
+to the question and do not change its lifecycle state; agents add replies with
+the dedicated MCP reply tool.
+
 Each opened pull request records its own branch, which is how the service maps an
 agent's working branch to a pull request without holding GitHub credentials.
 
