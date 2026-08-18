@@ -28,6 +28,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     deleteQuestion: async () => prView(),
     getSettings: async () => ({ editor: { fontFamily: "monospace", fontSize: 16 } }),
     updateSettings: async (settings) => settings,
+    onOpenSettings: () => () => {},
     ...overrides,
   };
 }

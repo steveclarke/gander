@@ -16,4 +16,5 @@ export interface GanderApi {
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
   getSettings(): Promise<AppSettings>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;
+  onOpenSettings(listener: () => void): () => void;
 }

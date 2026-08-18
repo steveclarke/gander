@@ -8,6 +8,7 @@ import { listOpenPrs, resolveGithubToken } from "./github.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
 import { registerSettingsIpc } from "./settings-ipc.js";
+import { buildMenuTemplate } from "./menu.js";
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
@@ -58,7 +59,6 @@ async function bootstrap(): Promise<GanderConfig> {
 // Electron's built-in zoom roles change the level but forget it on quit. These do the
 // same steps — 0.5 matches Chromium's own increment — and write the result to the
 // config, so the window reopens at the size the reader chose.
-const ZOOM_STEP = 0.5;
 const ZOOM_MIN = -3;
 const ZOOM_MAX = 6;
 
@@ -71,25 +71,11 @@ function installMenu(cfg: GanderConfig): void {
   };
   const currentZoom = (): number => BrowserWindow.getFocusedWindow()?.webContents.getZoomLevel() ?? cfg.zoomLevel ?? 0;
 
-  const template: Electron.MenuItemConstructorOptions[] = [
-    ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
-    { role: "editMenu" },
-    {
-      label: "View",
-      submenu: [
-        { label: "Zoom In", accelerator: "CommandOrControl+Plus", click: () => setZoom(currentZoom() + ZOOM_STEP) },
-        // Chromium delivers Cmd+= for an unshifted Cmd+ on most layouts; both are bound
-        // so the key next to Backspace works without reaching for Shift.
-        { label: "Zoom In", accelerator: "CommandOrControl+=", visible: false, click: () => setZoom(currentZoom() + ZOOM_STEP) },
-        { label: "Zoom Out", accelerator: "CommandOrControl+-", click: () => setZoom(currentZoom() - ZOOM_STEP) },
-        { label: "Actual Size", accelerator: "CommandOrControl+0", click: () => setZoom(0) },
-        { type: "separator" },
-        { role: "togglefullscreen" },
-        { role: "toggleDevTools" },
-      ],
-    },
-    { role: "windowMenu" },
-  ];
+  const openSettings = (): void => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    win?.webContents.send("gander:openSettings");
+  };
+  const template = buildMenuTemplate(process.platform, app.name, { openSettings, setZoom, currentZoom });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 

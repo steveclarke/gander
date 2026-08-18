@@ -28,6 +28,19 @@ const capturing = ref(false);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const activeSurface = shallowRef<"review" | "settings">("review");
+let unsubscribeOpenSettings: (() => void) | null = null;
+
+function openSettings(): void {
+  activeSurface.value = "settings";
+}
+
+function toggleSettings(): void {
+  activeSurface.value = activeSurface.value === "settings" ? "review" : "settings";
+}
+
+onMounted(() => {
+  unsubscribeOpenSettings = api.onOpenSettings(openSettings);
+});
 
 // v-model needs something assignable, and which dimension the questions splitter drags
 // depends on where the panel is docked.
@@ -95,6 +108,7 @@ onBeforeUnmount(() => {
   clearInterval(healthTimer);
   window.removeEventListener("focus", onFocus);
   window.removeEventListener("keydown", onKey, true);
+  unsubscribeOpenSettings?.();
 });
 </script>
 
@@ -105,7 +119,7 @@ onBeforeUnmount(() => {
       :questions="questionCount"
       :settings-active="activeSurface === 'settings'"
       @toggle-questions="drawerOpen = !drawerOpen"
-      @toggle-settings="activeSurface = activeSurface === 'settings' ? 'review' : 'settings'"
+      @toggle-settings="toggleSettings"
     />
     <div v-if="store.error" class="error-banner">
       <span>{{ store.error }}</span>

@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { $, browser, expect } from "@wdio/globals";
+import "@wdio/electron-service";
 
 const run = promisify(execFile);
 
@@ -71,6 +72,12 @@ describe("Gander end to end", () => {
     expect(jsonSource).toContain("editor.fontSize");
     await $("button[aria-label='Close settings']").click();
     await expect($(".settings-pane")).not.toBeDisplayed();
+
+    await browser.electron.execute((electron) => {
+      electron.Menu.getApplicationMenu()?.getMenuItemById("settings")?.click();
+    });
+    await expect($(".settings-pane h1")).toHaveText("Settings");
+    await $("button[aria-label='Close settings']").click();
 
     await browser.reloadSession();
 

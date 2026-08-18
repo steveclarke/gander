@@ -1,8 +1,9 @@
 import type { GanderApi } from "../api.js";
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>;
+type Subscribe = (channel: string, listener: () => void) => () => void;
 
-export function createGanderApi(invoke: Invoke): GanderApi {
+export function createGanderApi(invoke: Invoke, subscribe: Subscribe): GanderApi {
   const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
     invoke(`gander:${channel}`, ...args) as Promise<T>;
 
@@ -21,5 +22,6 @@ export function createGanderApi(invoke: Invoke): GanderApi {
     deleteQuestion: (repoId, prNumber, id) => call("deleteQuestion", repoId, prNumber, id),
     getSettings: () => call("getSettings"),
     updateSettings: (settings) => call("updateSettings", settings),
+    onOpenSettings: (listener) => subscribe("gander:openSettings", listener),
   };
 }
