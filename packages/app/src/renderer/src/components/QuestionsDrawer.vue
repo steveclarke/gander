@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive } from "vue";
-import { MessageSquare, PanelBottom, PanelRight, Trash2, X } from "lucide-vue-next";
+import { MessageSquare, PanelBottom, PanelRight, Plus, Trash2, X } from "lucide-vue-next";
 import type { Store } from "../store.js";
 import { revealLine } from "../selection.js";
 
 const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
-defineEmits<{ close: []; dock: ["right" | "bottom"] }>();
+const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addQuestion: [] }>();
 
 const questions = computed(() => props.store.view?.questions ?? []);
 const drafts = reactive<Record<number, string>>({});
@@ -44,6 +44,15 @@ async function reply(questionId: number): Promise<void> {
       <span class="title">Questions</span>
       <span class="count">{{ questions.length }}</span>
       <button
+        class="add"
+        aria-label="Add question (N)"
+        title="Add question (N)"
+        @click="emit('addQuestion')"
+      >
+        <Plus :size="14" aria-hidden="true" />
+        <span>Add</span>
+      </button>
+      <button
         class="close dockbtn"
         :aria-label="dock === 'right' ? 'Dock questions below the diff' : 'Dock questions beside the diff'"
         :title="dock === 'right' ? 'Dock below the diff' : 'Dock beside the diff'"
@@ -56,9 +65,13 @@ async function reply(questionId: number): Promise<void> {
       </button>
     </header>
 
-    <p v-if="questions.length === 0" class="empty">
-      Press <kbd>n</kbd> while a file is selected to capture a question against it.
-    </p>
+    <div v-if="questions.length === 0" class="empty">
+      <p>Capture a question about the selected file or line.</p>
+      <button type="button" @click="emit('addQuestion')">
+        <Plus :size="14" aria-hidden="true" />
+        Add question <kbd>N</kbd>
+      </button>
+    </div>
 
     <ul v-else>
       <li v-for="q in questions" :key="q.id" :class="{ current: q.path === store.selectedPath }">
@@ -102,12 +115,28 @@ async function reply(questionId: number): Promise<void> {
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--workbench-border); color: var(--muted-foreground); flex: none; }
 .title { font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
 .count { font: 11px var(--mono); background: var(--badge-background); border-radius: 9px; padding: 1px 7px; }
-.dockbtn { margin-left: auto; }
+.add {
+  margin-left: auto; display: flex; align-items: center; gap: 4px;
+  background: none; border: 1px solid var(--workbench-border); border-radius: 5px;
+  color: var(--workbench-foreground); padding: 3px 7px; font: inherit; font-size: 11px; cursor: pointer;
+}
+.add:hover { border-color: var(--accent); color: var(--accent); }
+.dockbtn { margin-left: 0; }
 .dockbtn + .close { margin-left: 0; }
 .close { margin-left: auto; background: none; border: none; color: var(--faint-foreground); cursor: pointer; display: flex; }
 .close:hover { color: var(--workbench-foreground); }
 
 .empty { color: var(--faint-foreground); font-size: 12px; padding: 16px 12px; line-height: 1.6; }
+.empty p { margin-bottom: 10px; }
+.empty button {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+  color: var(--accent-foreground); padding: 5px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.empty button kbd { color: var(--workbench-foreground); }
+.add:focus-visible, .empty button:focus-visible, .close:focus-visible, .del:focus-visible, .file:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
 kbd { font: 11px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: 4px; padding: 1px 5px; }
 
 ul { list-style: none; margin: 0; padding: 0; }

@@ -7,9 +7,11 @@ import { codeEditorOptions, diffEditorOptions, editorFontOptions } from "../edit
 import type { Store } from "../store.js";
 import type { EditorSettings } from "../../../settings.js";
 import { currentLine, pendingReveal } from "../selection.js";
+import type { QuestionTarget } from "../selection.js";
 import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
 
 const props = defineProps<{ store: Store; editorSettings: EditorSettings }>();
+const emit = defineEmits<{ addQuestion: [target: QuestionTarget] }>();
 const host = ref<HTMLElement | null>(null);
 const view = ref<"diff" | "full" | "since">("diff");
 
@@ -23,6 +25,8 @@ const snapshotFor = ref<string | null>(null);
 const canShowDelta = computed(() => current.value?.changedSince === true);
 let editor: monaco.editor.IStandaloneDiffEditor | monaco.editor.IStandaloneCodeEditor | null = null;
 let models: monaco.editor.ITextModel[] = [];
+let lineAction: HTMLButtonElement | null = null;
+let lineActionLine: number | null = null;
 
 const current = computed(
   () => props.store.view?.files.find((f) => f.path === props.store.selectedPath) ?? null,
@@ -55,12 +59,59 @@ function trackCursor(): void {
   const ed = headEditor();
   if (!ed) return;
   currentLine.value = ed.getPosition()?.lineNumber ?? null;
-  ed.onDidChangeCursorPosition((e) => { currentLine.value = e.position.lineNumber; });
+  installLineAction(ed);
+  ed.onDidChangeCursorPosition((e) => {
+    currentLine.value = e.position.lineNumber;
+    showLineAction(ed, e.position.lineNumber);
+  });
+}
+
+function showLineAction(ed: monaco.editor.ICodeEditor, line: number): void {
+  if (!lineAction) return;
+  const position = ed.getScrolledVisiblePosition({ lineNumber: line, column: 1 });
+  if (!position) {
+    lineAction.hidden = true;
+    return;
+  }
+  lineActionLine = line;
+  lineAction.hidden = false;
+  lineAction.style.top = `${position.top + Math.max(0, (position.height - 18) / 2)}px`;
+  lineAction.style.left = `${ed.getLayoutInfo().glyphMarginLeft + 2}px`;
+  lineAction.setAttribute("aria-label", `Add question on line ${line} (N)`);
+  lineAction.title = `Add question on line ${line} (N)`;
+}
+
+function installLineAction(ed: monaco.editor.ICodeEditor): void {
+  const dom = ed.getDomNode();
+  if (!dom) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "gander-line-question";
+  button.textContent = "+";
+  button.addEventListener("click", () => {
+    const path = current.value?.path;
+    if (path && lineActionLine !== null) emit("addQuestion", { path, line: lineActionLine });
+  });
+  dom.append(button);
+  lineAction = button;
+  const initialLine = ed.getPosition()?.lineNumber ?? 1;
+  showLineAction(ed, initialLine);
+  ed.onMouseMove((event) => {
+    if (event.target.position) showLineAction(ed, event.target.position.lineNumber);
+  });
+  ed.onDidScrollChange(() => {
+    if (lineActionLine !== null) showLineAction(ed, lineActionLine);
+  });
+  ed.onDidLayoutChange(() => {
+    if (lineActionLine !== null) showLineAction(ed, lineActionLine);
+  });
 }
 
 function dispose(): void {
   editor?.dispose();
   editor = null;
+  lineAction = null;
+  lineActionLine = null;
   // A line number from a file that is no longer on screen would stamp the next
   // question with a line the reader never looked at.
   currentLine.value = null;
@@ -324,5 +375,29 @@ onBeforeUnmount(dispose);
   justify-content: center;
   color: var(--faint-foreground);
   font-size: 13px;
+}
+:deep(.gander-line-question) {
+  position: absolute;
+  z-index: 10;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 4px;
+  background: var(--elevated-background);
+  color: var(--workbench-foreground);
+  font: 700 16px/1 var(--mono);
+  cursor: pointer;
+}
+:deep(.gander-line-question:hover) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:deep(.gander-line-question:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 </style>
