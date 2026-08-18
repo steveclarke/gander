@@ -202,61 +202,61 @@ const progress = computed(() => props.store.progress());
 </template>
 
 <style scoped>
-.topbar { display: flex; align-items: stretch; background: var(--panel); border-bottom: 1px solid var(--border); height: 50px; }
-.seg { display: flex; align-items: center; gap: 10px; padding: 0 14px; min-width: 0; border-right: 1px solid var(--border); cursor: pointer; position: relative; }
-.seg:hover { background: #232833; }
+.topbar { display: flex; align-items: stretch; background: var(--panel-background); border-bottom: 1px solid var(--workbench-border); height: 50px; }
+.seg { display: flex; align-items: center; gap: 10px; padding: 0 14px; min-width: 0; border-right: 1px solid var(--workbench-border); cursor: pointer; position: relative; }
+.seg:hover { background: var(--hover-background); }
 .seg:focus-visible, .sw-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.seg .ic { color: var(--dim); flex: none; }
+.seg .ic { color: var(--muted-foreground); flex: none; }
 .seg .col { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-.seg .lbl { font-size: 10px; letter-spacing: .4px; color: var(--faint); text-transform: uppercase; }
+.seg .lbl { font-size: 10px; letter-spacing: .4px; color: var(--faint-foreground); text-transform: uppercase; }
 .seg .val { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
-.seg .caret { color: var(--faint); flex: none; margin-left: 4px; }
+.seg .caret { color: var(--faint-foreground); flex: none; margin-left: 4px; }
 .seg-repo { width: 190px; }
 .seg-review { flex: 1; max-width: 430px; }
 
-.chip { font: 10.5px var(--mono); background: #262b34; color: var(--dim); border-radius: 9px; padding: 0 7px; white-space: nowrap; flex: none; }
-.chip.draft { color: var(--yellow); border: 1px solid rgba(210,153,34,.4); background: rgba(210,153,34,.08); }
+.chip { font: 10.5px var(--mono); background: var(--badge-background); color: var(--muted-foreground); border-radius: 9px; padding: 0 7px; white-space: nowrap; flex: none; }
+.chip.draft { color: var(--warning); border: 1px solid var(--warning); background: var(--warning-background); }
 
 .spacer { flex: 1; }
 .right { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
-.progress { font-size: 12px; color: var(--dim); background: #262b34; border-radius: 10px; padding: 2px 10px; white-space: nowrap; }
-.progress b { color: var(--green); }
+.progress { font-size: 12px; color: var(--muted-foreground); background: var(--badge-background); border-radius: 10px; padding: 2px 10px; white-space: nowrap; }
+.progress b { color: var(--success); }
 /* Icon-only, sized to stay a comfortable pointer target at any zoom level. */
 .fetch {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px;
-  background: none; border: 1px solid var(--border); border-radius: 6px;
-  color: var(--fg); cursor: pointer;
+  background: none; border: 1px solid var(--workbench-border); border-radius: 6px;
+  color: var(--workbench-foreground); cursor: pointer;
 }
-.fetch:hover:not(:disabled) { background: rgba(255,255,255,.06); }
-.fetch.active { border-color: var(--accent); background: rgba(77,159,236,.14); color: var(--accent); }
-.fetch:disabled { cursor: default; color: var(--faint); }
+.fetch:hover:not(:disabled) { background: var(--hover-background); }
+.fetch.active { border-color: var(--accent); background: var(--selection-background); color: var(--accent); }
+.fetch:disabled { cursor: default; color: var(--faint-foreground); }
 .fetch { position: relative; }
 .badge {
   position: absolute; top: -5px; right: -5px;
   min-width: 15px; height: 15px; padding: 0 3px;
-  border-radius: 8px; background: var(--accent); color: #0d1117;
+  border-radius: 8px; background: var(--accent); color: var(--accent-foreground);
   font: 700 9.5px var(--mono); display: flex; align-items: center; justify-content: center;
 }
 .fetch .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .fetch .spin { animation: none; } }
 
-.sw-h { font-size: 10.5px; letter-spacing: .8px; color: var(--faint); font-weight: 700; padding: 10px 14px 4px; }
-.sw-empty { padding: 10px 14px; color: var(--faint); font-size: 12px; }
+.sw-h { font-size: 10.5px; letter-spacing: .8px; color: var(--faint-foreground); font-weight: 700; padding: 10px 14px 4px; }
+.sw-empty { padding: 10px 14px; color: var(--faint-foreground); font-size: 12px; }
 .sw-item { display: flex; align-items: center; gap: 8px; padding: 6px 14px; cursor: pointer; }
-.sw-item:hover { background: rgba(77,159,236,.12); }
-.sw-item .ic { color: var(--dim); flex: none; }
-.sw-item .num { font: 12px var(--mono); color: var(--dim); }
+.sw-item:hover { background: var(--selection-background); }
+.sw-item .ic { color: var(--muted-foreground); flex: none; }
+.sw-item .num { font: 12px var(--mono); color: var(--muted-foreground); }
 .sw-item .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sw-item .nm.add { color: var(--accent); }
-.sw-item .meta { margin-left: auto; font: 11px var(--mono); color: var(--faint); }
+.sw-item .meta { margin-left: auto; font: 11px var(--mono); color: var(--faint-foreground); }
 
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-.dot.draft { background: var(--yellow); }
-.dot.open { background: var(--green); }
+.dot.draft { background: var(--warning); }
+.dot.open { background: var(--success); }
 
 .add-row { padding: 10px 12px; }
-.add-row input { width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 13px; padding: 7px 10px; outline: none; }
+.add-row input { width: 100%; background: var(--secondary-panel-background); border: 1px solid var(--workbench-border); border-radius: 7px; color: var(--workbench-foreground); font-size: 13px; padding: 7px 10px; outline: none; }
 .add-row input:focus { border-color: var(--accent); }
 </style>

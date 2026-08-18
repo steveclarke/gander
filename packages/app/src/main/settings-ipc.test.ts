@@ -27,7 +27,10 @@ describe("settings IPC", () => {
     const { cfg, handlers, persist } = fixture();
     await expect(handlers.get("gander:getSettings")?.()).resolves.toEqual(DEFAULT_APP_SETTINGS);
 
-    const next = { editor: { fontFamily: "Consolas, monospace", fontSize: 20 } };
+    const next = {
+      editor: { fontFamily: "Consolas, monospace", fontSize: 20 },
+      workbench: { colorTheme: "Gander Dark" as const, iconTheme: "catppuccin-mocha" as const },
+    };
     await expect(handlers.get("gander:updateSettings")?.({}, next)).resolves.toEqual(next);
     expect(cfg.settings).toEqual(next);
     expect(persist).toHaveBeenCalledOnce();
@@ -38,6 +41,7 @@ describe("settings IPC", () => {
     const { cfg, handlers, persist } = fixture();
     await expect(handlers.get("gander:updateSettings")?.({}, {
       editor: { fontFamily: "monospace", fontSize: 200 },
+      workbench: DEFAULT_APP_SETTINGS.workbench,
     })).rejects.toThrow(/fontSize/);
     expect(cfg.settings).toEqual(DEFAULT_APP_SETTINGS);
     expect(persist).not.toHaveBeenCalled();
@@ -48,6 +52,7 @@ describe("settings IPC", () => {
     persist.mockImplementation(() => { throw new Error("disk full"); });
     await expect(handlers.get("gander:updateSettings")?.({}, {
       editor: { fontFamily: "Consolas, monospace", fontSize: 20 },
+      workbench: DEFAULT_APP_SETTINGS.workbench,
     })).rejects.toThrow(/disk full/);
     expect(cfg.settings).toEqual(DEFAULT_APP_SETTINGS);
   });

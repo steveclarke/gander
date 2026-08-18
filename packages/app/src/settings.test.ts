@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { reactive } from "vue";
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_EDITOR_FONT_FAMILY,
@@ -7,20 +8,37 @@ import {
   settingsToJson,
 } from "./settings.js";
 
-describe("editor settings", () => {
+describe("application settings", () => {
   it("uses the issue defaults without changing the ordered fallback list", () => {
     expect(DEFAULT_APP_SETTINGS).toEqual({
       editor: {
         fontFamily: "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",
         fontSize: 16,
       },
+      workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
     });
     expect(DEFAULT_APP_SETTINGS.editor.fontFamily).toBe(DEFAULT_EDITOR_FONT_FAMILY);
   });
 
   it("accepts VS Code-compatible fractional font sizes", () => {
     expect(parseAppSettings({ editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 } }))
-      .toEqual({ editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 } });
+      .toEqual({
+        editor: { fontFamily: "Fira Code, monospace", fontSize: 15.5 },
+        workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "catppuccin-mocha" },
+      });
+  });
+
+  it("normalizes Vue settings proxies into data Electron can clone", () => {
+    const reactiveSettings = reactive({
+      editor: { ...DEFAULT_APP_SETTINGS.editor },
+      workbench: { colorTheme: "Gander Dark" as const, iconTheme: "catppuccin-mocha" as const },
+    });
+    const parsed = parseAppSettings(reactiveSettings);
+
+    expect(() => structuredClone(parsed)).not.toThrow();
+    expect(parsed).not.toBe(reactiveSettings);
+    expect(parsed.editor).not.toBe(reactiveSettings.editor);
+    expect(parsed.workbench).not.toBe(reactiveSettings.workbench);
   });
 
   it.each([
@@ -28,6 +46,8 @@ describe("editor settings", () => {
     [{ editor: { fontFamily: "monospace", fontSize: 5 } }, "fontSize"],
     [{ editor: { fontFamily: "monospace", fontSize: 101 } }, "fontSize"],
     [{ editor: { fontFamily: "monospace", fontSize: Number.NaN } }, "fontSize"],
+    [{ editor: { fontFamily: "monospace", fontSize: 16 }, workbench: { colorTheme: "Unknown" } }, "colorTheme"],
+    [{ editor: { fontFamily: "monospace", fontSize: 16 }, workbench: { colorTheme: "Catppuccin Mocha", iconTheme: "Unknown" } }, "iconTheme"],
   ])("rejects invalid persisted or IPC input", (value, field) => {
     expect(() => parseAppSettings(value)).toThrow(new RegExp(field));
   });
@@ -37,6 +57,8 @@ describe("editor settings", () => {
     expect(JSON.parse(source)).toEqual({
       "editor.fontFamily": DEFAULT_EDITOR_FONT_FAMILY,
       "editor.fontSize": 16,
+      "workbench.colorTheme": "Catppuccin Mocha",
+      "workbench.iconTheme": "catppuccin-mocha",
     });
     expect(source).not.toContain("serviceToken");
     expect(settingsFromJson(source, DEFAULT_APP_SETTINGS)).toEqual(DEFAULT_APP_SETTINGS);
@@ -47,17 +69,32 @@ describe("editor settings", () => {
     expect(settingsFromJson(JSON.stringify({
       "editor.fontFamily": "Consolas, monospace",
       "editor.fontSize": 18,
+      "workbench.colorTheme": "Gander Dark",
+      "workbench.iconTheme": "catppuccin-mocha",
     }), current)).toEqual({
       futureSetting: true,
       editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
+      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
     });
   });
 
   it.each([
     ["{", /Invalid settings JSON/],
     [JSON.stringify({ "editor.fontFamily": "monospace" }), /editor\.fontSize/],
-    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, serviceToken: "nope" }), /Unrecognized key/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Unknown", "workbench.iconTheme": "catppuccin-mocha" }), /workbench\.colorTheme/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "Unknown" }), /workbench\.iconTheme/],
+    [JSON.stringify({ "editor.fontFamily": "monospace", "editor.fontSize": 16, "workbench.colorTheme": "Catppuccin Mocha", "workbench.iconTheme": "catppuccin-mocha", serviceToken: "nope" }), /Unrecognized key/],
   ])("rejects invalid or non-public settings JSON", (source, message) => {
     expect(() => settingsFromJson(source, DEFAULT_APP_SETTINGS)).toThrow(message);
+  });
+
+  it("adds the file icon default to settings written by the color-theme release", () => {
+    expect(parseAppSettings({
+      editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
+      workbench: { colorTheme: "Gander Dark" },
+    })).toEqual({
+      editor: { fontFamily: "Consolas, monospace", fontSize: 18 },
+      workbench: { colorTheme: "Gander Dark", iconTheme: "catppuccin-mocha" },
+    });
   });
 });

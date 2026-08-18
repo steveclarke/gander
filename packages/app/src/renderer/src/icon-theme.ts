@@ -1,4 +1,5 @@
 import catppuccinMochaThemeJson from "./icon-themes/catppuccin-mocha/theme.json";
+import type { FileIconThemeId } from "../../file-icon-themes.js";
 
 export interface FileIconTheme {
   hidesExplorerArrows?: boolean;
@@ -103,3 +104,21 @@ export function catppuccinFolderIcon(input: FolderIconInput): ResolvedFileIcon {
 }
 
 export const CATPPUCCIN_MOCHA_SHOWS_EXPLORER_ARROWS = !CATPPUCCIN_MOCHA_THEME.hidesExplorerArrows;
+
+export function fileIconFor(themeId: FileIconThemeId, input: FileIconInput): ResolvedFileIcon {
+  switch (themeId) {
+    case "catppuccin-mocha": return catppuccinFileIcon(input);
+  }
+}
+
+export function folderIconFor(themeId: FileIconThemeId, input: FolderIconInput): ResolvedFileIcon {
+  switch (themeId) {
+    case "catppuccin-mocha": return catppuccinFolderIcon(input);
+  }
+}
+
+export function iconThemeShowsExplorerArrows(themeId: FileIconThemeId): boolean {
+  switch (themeId) {
+    case "catppuccin-mocha": return CATPPUCCIN_MOCHA_SHOWS_EXPLORER_ARROWS;
+  }
+}

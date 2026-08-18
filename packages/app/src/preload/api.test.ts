@@ -9,7 +9,10 @@ describe("preload API", () => {
     await api.getSettings();
     expect(invoke).toHaveBeenLastCalledWith("gander:getSettings");
 
-    const settings = { editor: { fontFamily: "Fira Code, monospace", fontSize: 17 } };
+    const settings = {
+      editor: { fontFamily: "Fira Code, monospace", fontSize: 17 },
+      workbench: { colorTheme: "Gander Dark" as const, iconTheme: "catppuccin-mocha" as const },
+    };
     await api.updateSettings(settings);
     expect(invoke).toHaveBeenLastCalledWith("gander:updateSettings", settings);
   });

@@ -63,3 +63,14 @@ The URL and the token are needed on every machine you review from, and by every
 agent you want reading your questions. Keep them in your password manager as one
 item, with the `claude mcp add` line written out — then setting up a new machine
 is reading one card rather than reconstructing a deployment.
+
+## Building the app
+
+`pnpm --filter @gander/app run dist:unsigned` produces an unsigned
+`dist/mac-arm64/Gander.app` — enough to run what a package will contain.
+
+A release is `bin/release <version>`: it tags, creates the GitHub Release,
+builds and notarizes the macOS artifacts on the maintainer's machine, and
+uploads them. The Linux AppImage is built by GitHub Actions when the release is
+published. macOS signing stays local because the certificate belongs in a
+keychain rather than in a public repository's secrets.

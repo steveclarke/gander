@@ -3,15 +3,21 @@ import { computed, reactive, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
 import {
-  CATPPUCCIN_MOCHA_SHOWS_EXPLORER_ARROWS,
-  catppuccinFileIcon,
-  catppuccinFolderIcon,
+  fileIconFor,
+  folderIconFor,
+  iconThemeShowsExplorerArrows,
 } from "../icon-theme.js";
+import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import { languageForPath } from "../languages.js";
 import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
 import FileIcon from "./FileIcon.vue";
 
-const props = defineProps<{ store: Store; nodes?: TreeNode[]; depth?: number }>();
+const props = defineProps<{
+  store: Store;
+  iconTheme: FileIconThemeId;
+  nodes?: TreeNode[];
+  depth?: number;
+}>();
 
 const collapsed = reactive(new Set<string>());
 
@@ -67,11 +73,14 @@ function fileName(path: string): string {
 
 function fileIcon(path: string) {
   const languageId = languageForPath(path);
-  return catppuccinFileIcon({ path, languageId: languageId === "plaintext" ? undefined : languageId });
+  return fileIconFor(props.iconTheme, {
+    path,
+    languageId: languageId === "plaintext" ? undefined : languageId,
+  });
 }
 
 function folderIcon(node: TreeNode & { type: "dir" }) {
-  return catppuccinFolderIcon({ name: node.name, expanded: !collapsed.has(node.path) });
+  return folderIconFor(props.iconTheme, { name: node.name, expanded: !collapsed.has(node.path) });
 }
 </script>
 
@@ -89,7 +98,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
       >
         <component
           :is="collapsed.has(node.path) ? ChevronRight : ChevronDown"
-          v-if="CATPPUCCIN_MOCHA_SHOWS_EXPLORER_ARROWS"
+          v-if="iconThemeShowsExplorerArrows(iconTheme)"
           class="hierarchy-slot chev"
           :size="14"
         />
@@ -112,6 +121,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
       <FileTree
         v-if="node.type === 'dir' && !collapsed.has(node.path)"
         :store="store"
+        :icon-theme="iconTheme"
         :nodes="node.children"
         :depth="depth + 1"
       />
@@ -153,21 +163,21 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 <style scoped>
 .tree.root { padding: 8px 0; }
 .tnode { display: flex; align-items: center; gap: 6px; padding: 3px 12px 3px 0; cursor: pointer; white-space: nowrap; }
-.tnode:hover { background: #232833; }
-.tnode.sel { background: rgba(77, 159, 236, 0.14); box-shadow: inset 2px 0 0 var(--accent); }
+.tnode:hover { background: var(--hover-background); }
+.tnode.sel { background: var(--selection-background); box-shadow: inset 2px 0 0 var(--accent); }
 .tnode .hierarchy-slot { width: 14px; flex: none; }
-.tnode .chev { flex: none; color: var(--faint); }
+.tnode .chev { flex: none; color: var(--faint-foreground); }
 .tnode .fname { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; }
-.tnode.isdir .fname { font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--dim); }
+.tnode.isdir .fname { font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; color: var(--muted-foreground); }
 .tnode .st { margin-left: auto; font: 11px var(--mono); flex: none; }
-.st.M { color: var(--yellow); }
-.st.A { color: var(--green); }
-.st.D { color: var(--red); }
-.st.R { color: var(--purple); }
-.cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
-.cb.on { border-color: var(--green); color: var(--green); }
-.cb.part { border-color: var(--green); color: var(--green); }
-.tnode.checked .fname { color: var(--faint); }
+.st.M { color: var(--warning); }
+.st.A { color: var(--success); }
+.st.D { color: var(--danger); }
+.st.R { color: var(--info); }
+.cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint-foreground); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
+.cb.on { border-color: var(--success); color: var(--success); }
+.cb.part { border-color: var(--success); color: var(--success); }
+.tnode.checked .fname { color: var(--faint-foreground); }
 .qmark { color: var(--accent); flex: none; }
-.delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); flex: none; }
+.delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; }
 </style>

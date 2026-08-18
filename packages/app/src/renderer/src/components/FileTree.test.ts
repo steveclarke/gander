@@ -87,7 +87,7 @@ describe("FileTree", () => {
 
   it("checking a directory issues exactly one batched setCheckedMany call covering every descendant, and never calls setChecked", async () => {
     const { store, calls } = fakeStore(prView(1, treeFiles));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     await dirRow(wrapper, "app").find(".cb").trigger("click");
 
@@ -100,7 +100,7 @@ describe("FileTree", () => {
 
   it("clicking a file's checkbox toggles it without changing selectedPath", async () => {
     const { store, calls } = fakeStore(prView(1, treeFiles));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
     const before = store.selectedPath;
 
     await fileRow(wrapper, "config/routes.rb").find(".cb").trigger("click");
@@ -111,7 +111,7 @@ describe("FileTree", () => {
 
   it("clicking a directory row toggles collapse without touching checked state", async () => {
     const { store, calls } = fakeStore(prView(1, treeFiles));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     await dirRow(wrapper, "app").trigger("click");
 
@@ -121,7 +121,7 @@ describe("FileTree", () => {
 
   it("resets collapse state when the reviewed PR changes, even though view is reassigned without an intermediate null", async () => {
     const { store } = fakeStore(prView(1, treeFiles));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     // collapse "app"
     await dirRow(wrapper, "app").trigger("click");
@@ -161,7 +161,7 @@ describe("FileTree", () => {
       createdAt: "2026-08-18T00:00:00.000Z",
       replies: [],
     }]));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     const rows = [
       { row: dirRow(wrapper, "src"), paddingLeft: "10px" },
@@ -198,7 +198,7 @@ describe("FileTree", () => {
       file("types/index.d.ts"),
       file("unknown/file.mystery"),
     ]));
-    const wrapper = mount(FileTree, { props: { store } });
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
     expect(fileRow(wrapper, "Gemfile").find(".file-icon").attributes("data-icon-id")).toBe("ruby-gem");
     expect(fileRow(wrapper, "README.md").find(".file-icon").attributes("data-icon-id")).toBe("readme");

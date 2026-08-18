@@ -55,15 +55,48 @@ function treeRow(name: string) {
   return $(`//div[contains(@class, 'tnode')][.//span[contains(@class, 'fname') and normalize-space()='${name}']]`);
 }
 
+async function selectColorTheme(value: "Catppuccin Mocha" | "Gander Dark"): Promise<void> {
+  await browser.execute((colorTheme) => {
+    const select = document.querySelector<HTMLSelectElement>("select[name='workbench.colorTheme']");
+    if (!select) throw new Error("workbench.colorTheme select is missing");
+    select.value = colorTheme;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+}
+
+async function selectIconTheme(value: "catppuccin-mocha"): Promise<void> {
+  await browser.execute((iconTheme) => {
+    const select = document.querySelector<HTMLSelectElement>("select[name='workbench.iconTheme']");
+    if (!select) throw new Error("workbench.iconTheme select is missing");
+    select.value = iconTheme;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+}
+
 describe("Gander end to end", () => {
   it("opens the built application with the Gander title", async () => {
     await expect(browser).toHaveTitle("Gander");
     await expect($(".empty")).toHaveText("Pick a repository, then a pull request.");
   });
 
-  it("changes editor font settings in the UI and keeps them after restart", async () => {
+  it("changes workbench and editor settings live and keeps them after restart", async () => {
     await $("button[aria-label='Editor settings']").click();
     await expect($(".settings-pane h1")).toHaveText("Settings");
+    const theme = await $("select[name='workbench.colorTheme']");
+    const iconTheme = await $("select[name='workbench.iconTheme']");
+    await expect(theme).toHaveValue("Catppuccin Mocha");
+    await expect(iconTheme).toHaveValue("catppuccin-mocha");
+    await selectColorTheme("Gander Dark");
+    await browser.waitUntil(async () => await browser.execute(() =>
+      document.querySelector(".settings-pane [role='status']")?.textContent === "Saved automatically",
+    ));
+    expect(await browser.execute(() => ({
+      selected: document.querySelector<HTMLSelectElement>("select[name='workbench.colorTheme']")?.value,
+      theme: document.documentElement.dataset.colorTheme,
+      background: document.documentElement.style.getPropertyValue("--workbench-background"),
+      status: document.querySelector(".settings-pane [role='status']")?.textContent,
+    }))).toEqual({ selected: "Gander Dark", theme: "Gander Dark", background: "#16181d", status: "Saved automatically" });
+    await $("//button[contains(@class, 'category') and normalize-space()='Editor']").click();
     const family = await $("input[name='editor.fontFamily']");
     const size = await $("input[name='editor.fontSize']");
     await expect($("#editor-preview-label")).toHaveText("Preview");
@@ -84,11 +117,14 @@ describe("Gander end to end", () => {
 
     await $("//button[@role='tab' and normalize-space()='JSON']").click();
     await $(".settings-json-editor .monaco-editor").waitForDisplayed();
-    const jsonSource = await browser.execute(() =>
+    const jsonSource = (await browser.execute(() =>
       document.querySelector(".settings-json-editor .view-lines")?.textContent ?? "",
-    );
+    )).replaceAll("\u00a0", " ");
     expect(jsonSource).toContain("editor.fontFamily");
     expect(jsonSource).toContain("editor.fontSize");
+    expect(jsonSource).toContain("workbench.colorTheme");
+    expect(jsonSource).toContain("workbench.iconTheme");
+    expect(jsonSource).toContain("Gander Dark");
     await $("button[aria-label='Close settings']").click();
     await expect($(".settings-pane")).not.toBeDisplayed();
 
@@ -101,6 +137,9 @@ describe("Gander end to end", () => {
     await browser.reloadSession();
 
     await $("button[aria-label='Editor settings']").click();
+    await expect($("select[name='workbench.colorTheme']")).toHaveValue("Gander Dark");
+    await expect($("select[name='workbench.iconTheme']")).toHaveValue("catppuccin-mocha");
+    await $("//button[contains(@class, 'category') and normalize-space()='Editor']").click();
     await expect($("input[name='editor.fontFamily']")).toHaveValue("'Courier New', monospace");
     await expect($("input[name='editor.fontSize']")).toHaveValue("18.5");
     await $("button[aria-label='Close settings']").click();
@@ -130,6 +169,15 @@ describe("Gander end to end", () => {
     });
     await $("button[aria-label='Editor settings']").click();
     await expect($(".settings-pane")).toBeDisplayed();
+    await selectIconTheme("catppuccin-mocha");
+    await browser.waitUntil(async () => await browser.execute(() =>
+      document.querySelector(".settings-pane [role='status']")?.textContent === "Saved automatically",
+    ));
+    await selectColorTheme("Catppuccin Mocha");
+    await browser.waitUntil(async () => await browser.execute(() =>
+      document.documentElement.dataset.colorTheme === "Catppuccin Mocha"
+      && document.documentElement.style.getPropertyValue("--workbench-background") === "#1e1e2e",
+    ));
     await $("button[aria-label='Close settings']").click();
     await expect($(".diff .monaco-editor[data-mount-marker='preserved']")).toBeDisplayed();
 

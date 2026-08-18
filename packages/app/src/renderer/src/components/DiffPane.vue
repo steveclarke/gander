@@ -240,25 +240,25 @@ onBeforeUnmount(dispose);
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--panel-background);
   flex: none;
 }
 .path {
   font: 12.5px var(--mono);
-  color: var(--text);
+  color: var(--workbench-foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .path .dir {
-  color: var(--faint);
+  color: var(--faint-foreground);
 }
 .tabs {
   margin-left: auto;
   display: flex;
   gap: 2px;
-  background: #14161b;
+  background: var(--input-background);
   border-radius: 7px;
   padding: 2px;
   flex: none;
@@ -271,45 +271,45 @@ onBeforeUnmount(dispose);
   height: 22px;
   background: none;
   border: none;
-  color: var(--dim);
+  color: var(--muted-foreground);
   border-radius: 5px;
   cursor: pointer;
 }
 .tabs button.active {
-  background: #2c3340;
-  color: var(--text);
+  background: var(--elevated-background);
+  color: var(--workbench-foreground);
 }
 .check {
   flex: none;
   display: flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid var(--border);
-  background: #22262e;
-  color: var(--text);
+  border: 1px solid var(--workbench-border);
+  background: var(--elevated-background);
+  color: var(--workbench-foreground);
   border-radius: 6px;
   padding: 4px 12px;
   font-size: 12px;
   cursor: pointer;
 }
 .check:hover {
-  border-color: var(--green);
-  color: var(--green);
+  border-color: var(--success);
+  color: var(--success);
 }
 .check.on {
-  border-color: var(--green);
-  color: var(--green);
-  background: rgba(63, 185, 80, 0.15);
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-background);
 }
 .banner {
   display: flex;
   align-items: center;
   gap: 7px;
-  background: rgba(210, 153, 34, 0.08);
-  color: var(--yellow);
+  background: var(--warning-background);
+  color: var(--warning);
   padding: 7px 14px;
   font-size: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--workbench-border);
   flex: none;
 }
 .editor {
@@ -322,7 +322,7 @@ onBeforeUnmount(dispose);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--faint);
+  color: var(--faint-foreground);
   font-size: 13px;
 }
 </style>

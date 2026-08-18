@@ -6,6 +6,8 @@ allowBuilds:
   edgedriver: false
   electron: true
   electron-chromedriver: true
+  # Pulled in by electron-builder. There is no Windows target.
+  electron-winstaller: false
   esbuild: true
   geckodriver: false
 minimumReleaseAgeExclude:
