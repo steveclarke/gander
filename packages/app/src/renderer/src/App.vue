@@ -23,25 +23,35 @@ const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const questionCount = computed(() => store.view?.questions.length ?? 0);
 
-// `n` captures a question, from anywhere that isn't a text field — Monaco is read-only,
-// so the diff itself never swallows the key.
+// Monaco takes keyboard input through a hidden textarea, so clicking a line to position
+// the cursor makes the diff the focused "text field" — and a naive typing check hands it
+// every keystroke, including the one that opens capture. Every editor in this app is
+// read-only, so a key pressed inside one is never being typed into anything.
+function isTyping(target: HTMLElement | null): boolean {
+  if (target === null) return false;
+  if (target.closest(".monaco-editor") !== null) return false;
+  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+}
+
 function onKey(e: KeyboardEvent): void {
   const target = e.target as HTMLElement | null;
-  const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable === true;
-  if (typing) return;
+  if (isTyping(target)) return;
   if (e.key === "b" && (e.metaKey || e.ctrlKey)) {
     // Same shortcut VS Code uses for its side bar.
     e.preventDefault();
+    e.stopPropagation();
     treeVisible.value = !treeVisible.value;
     return;
   }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "n" && store.view) {
     e.preventDefault();
+    // Monaco would otherwise still handle it and flash "Cannot edit in read-only editor".
+    e.stopPropagation();
     capturing.value = true;
   }
 }
-window.addEventListener("keydown", onKey);
+window.addEventListener("keydown", onKey, true);
 
 const POLL_MS = 30_000;
 let refreshing = false;
@@ -66,7 +76,7 @@ onBeforeUnmount(() => {
   clearInterval(timer);
   clearInterval(healthTimer);
   window.removeEventListener("focus", onFocus);
-  window.removeEventListener("keydown", onKey);
+  window.removeEventListener("keydown", onKey, true);
 });
 </script>
 
