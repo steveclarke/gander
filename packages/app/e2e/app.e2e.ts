@@ -14,15 +14,23 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-async function registerAndSelect(url: string, repoName: string): Promise<void> {
+async function registerAndSelect(url: string, repoName: string, source: "github" | "url" = "github"): Promise<void> {
   await $(".seg-repo").click();
   await $("//div[@role='button'][.//span[contains(normalize-space(.), 'Add repository')]]").click();
-  const input = await $("input[placeholder='https://github.com/owner/repo']");
-  await input.setValue(url);
-  await browser.keys("Enter");
-  const option = await $(`//div[@role='option'][.//span[contains(@class, 'nm') and normalize-space()='${repoName}']]`);
-  await option.waitForDisplayed();
-  await option.click();
+  if (source === "url") {
+    await $("#repository-url-tab").click();
+    const input = await $("input[placeholder='https://github.com/owner/repo']");
+    await input.setValue(url);
+    await browser.keys("Enter");
+  } else {
+    const filter = await $("#repository-filter");
+    await filter.waitForDisplayed();
+    await filter.setValue(repoName);
+    const option = await $(`//ul[@aria-label='Available repositories']//button[.//span[contains(@class, 'repo-name') and normalize-space()='${repoName}']]`);
+    await option.waitForDisplayed();
+    await option.click();
+  }
+  await expect($(".seg-repo .val")).toHaveText(expect.stringContaining(repoName));
 }
 
 async function openPullRequest(title: string, twice = false): Promise<void> {
@@ -315,7 +323,7 @@ describe("Gander end to end", () => {
   });
 
   it("opens a pull request twice quickly with one valid clone", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_RACE_URL"), "race");
+    await registerAndSelect(requiredEnv("GANDER_E2E_RACE_URL"), "race", "url");
     await openPullRequest("Open without corrupting the clone", true);
     await expect($(".progress")).toHaveText("0/2 reviewed");
     await expect($(".error-banner")).not.toBeDisplayed();

@@ -61,6 +61,7 @@ export function createGanderApi(
   return {
     initialWindowState,
     listRepos: () => call("listRepos"),
+    listGithubRepos: () => call("listGithubRepos"),
     addRepo: (url) => call("addRepo", url),
     listPrs: (repoId) => call("listPrs", repoId),
     lastReview: () => call("lastReview"),

@@ -22,6 +22,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
       worktreeLabel: null,
     },
     listRepos: async () => [{ repoId: "acme/atlas", url: "u" }],
+    listGithubRepos: async () => [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", private: true }],
     addRepo: async (url) => ({ repoId: "acme/new", url }),
     listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" }],
     openPr: async () => prView(),
@@ -92,6 +93,23 @@ describe("store", () => {
     expect(store.progress()).toEqual({ done: 0, total: 2 });
     await store.setChecked("a.rb", true);
     expect(store.progress()).toEqual({ done: 1, total: 2 });
+  });
+
+  it("loads GitHub repositories separately from registered repositories", async () => {
+    const store = createStore(fakeApi());
+    await store.loadGithubRepos();
+    expect(store.githubRepos).toEqual([{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", private: true }]);
+    expect(store.githubReposError).toBeNull();
+  });
+
+  it("registers and selects a repository in one action", async () => {
+    const store = createStore(fakeApi({
+      addRepo: async (url) => ({ repoId: "acme/new", url }),
+      listRepos: async () => [{ repoId: "acme/new", url: "https://github.com/acme/new" }],
+    }));
+    await store.addRepo("https://github.com/acme/new");
+    expect(store.currentRepoId).toBe("acme/new");
+    expect(store.prs).toHaveLength(1);
   });
 
   it("captures errors into store.error instead of throwing", async () => {

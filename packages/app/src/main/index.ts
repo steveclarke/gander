@@ -6,7 +6,7 @@ import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, save
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine } from "./git.js";
-import { checkGithubToken, listOpenPrs, resolveGithubToken } from "./github.js";
+import { checkGithubToken, listGithubRepositories, listOpenPrs, resolveGithubToken } from "./github.js";
 import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
@@ -38,6 +38,7 @@ async function bootstrap(): Promise<GanderConfig> {
   });
 
   ipcMain.handle("gander:listRepos", async () => cfg.repos);
+  ipcMain.handle("gander:listGithubRepos", async () => listGithubRepositories(await githubToken()));
   ipcMain.handle("gander:addRepo", async (_e, url: string): Promise<RepoEntry> => {
     const entry = { repoId: repoIdFromUrl(url), url };
     if (!cfg.repos.some((r) => r.repoId === entry.repoId)) { cfg.repos.push(entry); saveConfig(cfg); }

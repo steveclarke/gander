@@ -64,6 +64,27 @@ async function main(): Promise<void> {
   const raceRequestsReady = new Promise<void>((resolve) => { releaseRaceRequests = resolve; });
   let raceRequestCount = 0;
 
+  github.get<{ Querystring: { page?: string } }>("/user/repos", async (request, reply) => {
+    if (request.headers.authorization !== `Bearer ${GITHUB_TOKEN}`) {
+      return reply.code(401).send({ message: "wrong test token" });
+    }
+    if (request.query.page && request.query.page !== "1") return [];
+    return [
+      ...fixtures.map((fixture, index) => ({
+        full_name: fixture.repoId,
+        html_url: fixture.url,
+        private: index === 0,
+        archived: false,
+      })),
+      {
+        full_name: "acme/archived-example",
+        html_url: "https://github.com/acme/archived-example",
+        private: false,
+        archived: true,
+      },
+    ];
+  });
+
   github.get<{ Params: { owner: string; repo: string }; Querystring: { page?: string } }>(
     "/repos/:owner/:repo/pulls",
     async (request, reply) => {
