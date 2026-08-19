@@ -14,6 +14,7 @@ export type Command =
   | "previous-file"
   | "first-file"
   | "last-file"
+  | "jump-row"
   | "toggle-directory"
   | "dismiss"
   | "toggle-checked"
@@ -46,6 +47,7 @@ export const BINDINGS: Binding[] = [
   { command: "previous-file", keys: ["k", "ArrowUp"], label: "k / ↑", description: "Previous row", group: "Move" },
   { command: "first-file", keys: ["g"], prefix: "g", label: "gg", description: "First row", group: "Move" },
   { command: "last-file", keys: ["G"], label: "⇧G", description: "Last row", group: "Move" },
+  { command: "jump-row", keys: ["f"], label: "f", description: "Jump to a visible row by name", group: "Move" },
   { command: "toggle-directory", keys: ["o"], label: "o", description: "Open the directory and step in, or close the one you are in", group: "Move" },
   { command: "dismiss", keys: ["Escape"], label: "Esc", description: "Close what is open on top", group: "Move" },
 

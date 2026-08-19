@@ -6,6 +6,7 @@ import type { PrFile, PrView } from "@gander/shared";
 import type { Store } from "../store.js";
 import FileTree from "./FileTree.vue";
 import { collapsedDirs } from "../tree-nav.js";
+import { jumpTargets } from "../tree-jump.js";
 
 const file = (path: string, checked = false): PrFile =>
   ({ path, status: "M", baseContent: "", headContent: "", baseHash: "b", headHash: "h", checked, changedSince: false });
@@ -157,6 +158,29 @@ describe("FileTree", () => {
 
     expect(dirRow(wrapper, "app").find(".chev").classes()).toContain("lucide-chevron-down");
     expect(wrapper.text()).toContain("member.rb");
+  });
+
+  it("keeps every row drawn while marking name matches and showing one-key hints", () => {
+    const { store } = fakeStore(prView(1, treeFiles));
+    const targets = jumpTargets(treeFiles, "r");
+    const wrapper = mount(FileTree, {
+      props: {
+        store,
+        iconTheme: "catppuccin-mocha",
+        jumpTargets: new Map(targets.map((target) => [target.path, target])),
+      },
+    });
+
+    expect(wrapper.findAll(".tnode")).toHaveLength(8);
+    expect(dirRow(wrapper, "app").find("mark").exists()).toBe(false);
+    expect(dirRow(wrapper, "services/dues").find("mark").text()).toBe("r");
+
+    const member = fileRow(wrapper, "app/models/member.rb");
+    expect(member.find(".fname").text()).toBe("member.rb");
+    expect(member.find("mark").text()).toBe("r");
+    expect(member.find(".jump-label").text()).toMatch(/^[A-Z]$/);
+    expect(member.find(".jump-label").attributes("aria-hidden")).toBe("true");
+    expect(member.attributes("aria-keyshortcuts")).toBe(`Shift+${member.find(".jump-label").text()}`);
   });
 
   it("keeps file and directory hierarchy columns aligned at every depth", () => {

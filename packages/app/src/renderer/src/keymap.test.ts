@@ -33,6 +33,10 @@ describe("keymap", () => {
     expect(bindingFor(press("o"))?.command).toBe("toggle-directory");
   });
 
+  it("starts the visible-row jump with f", () => {
+    expect(bindingFor(press("f"))?.command).toBe("jump-row");
+  });
+
   // The `?` sheet renders from this table, so a binding outside the printed groups would
   // work while going undocumented.
   it("puts every binding in a group the help sheet prints", () => {

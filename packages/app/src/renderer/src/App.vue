@@ -12,6 +12,7 @@ import type { NoteTarget } from "./selection.js";
 import type { PrFile } from "@gander/shared";
 import { bindingFor, isPrefix, type Command, type Prefix } from "./keymap.js";
 import { collapsedDirs, cursor, edge, filesAt, nextUnmarked, parentOf, rowAt, step } from "./tree-nav.js";
+import { useTreeJump } from "./tree-jump.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -45,6 +46,7 @@ const treeScrolling = shallowRef(false);
 const zoomLevel = shallowRef(DEFAULT_ZOOM_LEVEL);
 const settingsCategory = shallowRef<"workbench" | "editor" | "connection">("workbench");
 const repoPendingRemoval = ref<string | null>(null);
+const treeJump = useTreeJump(() => store.files(), (path) => { moveTo(path); });
 let unsubscribeOpenTarget: (() => void) | null = null;
 let unsubscribeOpenSettings: (() => void) | null = null;
 let unsubscribeZoomChanged: (() => void) | null = null;
@@ -224,11 +226,15 @@ async function openPr(prNumber: number): Promise<void> {
 }
 
 watch(activeMode, (mode) => {
+  treeJump.cancel();
   if (mode !== "pulls") {
     drawerOpen.value = false;
     noteTarget.value = null;
   }
 });
+
+watch(() => `${store.currentRepoId ?? ""}#${store.view?.pr.number ?? ""}`, () => treeJump.cancel());
+watch(treeVisible, (visible) => { if (!visible) treeJump.cancel(); });
 
 function openNote(target?: NoteTarget): void {
   if (!store.view || activeMode.value !== "pulls") return;
@@ -265,6 +271,8 @@ function runCommand(command: Command): boolean {
     case "first-file":
     case "last-file":
       return moveTo(edge(files, command === "first-file" ? "first" : "last"));
+    case "jump-row":
+      return treeVisible.value && store.currentRepoId === store.targetRepoId && treeJump.start();
     case "toggle-directory": {
       if (at === null) return true;
       // Opening a directory is how a reviewer says "let me look in here", so the cursor
@@ -363,6 +371,11 @@ let pending: Prefix | null = null;
 
 function onKey(event: KeyboardEvent): void {
   if (isTyping(event.target as HTMLElement | null)) return;
+  if (treeJump.active.value && treeJump.handleKey(event)) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   const started = isPrefix(event, pending);
   if (started !== null) {
     pending = started;
@@ -450,6 +463,7 @@ onBeforeUnmount(() => {
           :store="store"
           :icon-theme="editorSettings.settings.workbench.iconTheme"
           :typography="treeTypography"
+          :jump-targets="treeJump.targetsByPath.value"
           @select-pr="openPr"
           @scroll="onTreeScroll"
         />
