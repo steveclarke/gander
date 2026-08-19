@@ -14,6 +14,8 @@ files:
   - package.json
 
 mac:
+  # Keep release metadata on the current `files` format supported by electron-updater.
+  electronUpdaterCompatibility: ">= 2.16"
   category: public.app-category.developer-tools
   target:
     - target: dmg
@@ -30,6 +32,7 @@ dmg:
   title: Gander
 
 linux:
+  electronUpdaterCompatibility: ">= 2.16"
   category: Development
   # Without this the binary is named from the package, and "@gander/app" flattens to
   # "@ganderapp" — not a name a file path can carry.

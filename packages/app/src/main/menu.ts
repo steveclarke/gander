@@ -5,6 +5,7 @@ interface MenuActions {
   openSettings(): void;
   setZoom(level: number): void;
   currentZoom(): number;
+  checkForUpdates?: () => void;
 }
 
 export function buildMenuTemplate(
@@ -24,6 +25,9 @@ export function buildMenuTemplate(
         label: appName,
         submenu: [
           { role: "about" },
+          ...(actions.checkForUpdates
+            ? [{ label: "Check for Updates…", click: actions.checkForUpdates } satisfies MenuItemConstructorOptions]
+            : []),
           { type: "separator" },
           settingsItem,
           { type: "separator" },
@@ -45,6 +49,10 @@ export function buildMenuTemplate(
         ],
       };
 
+  const helpMenu: MenuItemConstructorOptions[] = actions.checkForUpdates && platform !== "darwin"
+    ? [{ label: "Help", submenu: [{ label: "Check for Updates…", click: actions.checkForUpdates }] }]
+    : [];
+
   return [
     applicationMenu,
     { role: "editMenu" },
@@ -63,5 +71,6 @@ export function buildMenuTemplate(
       ],
     },
     { role: "windowMenu" },
+    ...helpMenu,
   ];
 }
