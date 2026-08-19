@@ -51,7 +51,19 @@ export function compareServiceVersion(version: string): ServiceStatus {
       reason: `Gander service ${version} is too old for this app. Update the service to ${SERVICE_VERSION}.`,
     };
   }
-  return { state: "newer", serviceVersion: version, supportedVersion: SERVICE_VERSION };
+  // A newer service is only safe when the difference is a patch. Once the major or minor
+  // moves, the contract has changed, and a *removal* — a field this app's schemas still
+  // require — passes the version check and then fails validation mid-review with a raw zod
+  // error. Blocking here gets the reviewer the "update the app" message instead.
+  if (comparison === 2) {
+    return { state: "newer", serviceVersion: version, supportedVersion: SERVICE_VERSION };
+  }
+  return {
+    state: "incompatible",
+    serviceVersion: version,
+    supportedVersion: SERVICE_VERSION,
+    reason: `Gander service ${version} is newer than this app understands. Update the app to a build that supports ${version}.`,
+  };
 }
 
 export async function checkServiceStatus(url: string): Promise<ServiceStatus> {

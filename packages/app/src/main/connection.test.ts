@@ -85,11 +85,11 @@ describe("checkConnection", () => {
     );
   });
 
-  it("allows a newer service with an explicit warning state", async () => {
+  it("allows a service ahead by a patch with an explicit warning state", async () => {
     // Derived rather than written down: the contract version moves whenever the contract
     // does, and a literal here would fail the next time it did.
-    const [major] = SERVICE_VERSION.split(".");
-    const newer = `${Number(major) + 1}.0.0`;
+    const [major, minor, patch] = SERVICE_VERSION.split(".");
+    const newer = `${major}.${minor}.${Number(patch) + 1}`;
     const url = await serve("good-token", newer);
     await expect(checkConnection(url, "good-token")).resolves.toEqual({
       ok: true,
@@ -97,6 +97,20 @@ describe("checkConnection", () => {
       compatibility: "newer",
     });
     await expect(checkServiceStatus(url)).resolves.toMatchObject({ state: "newer", serviceVersion: newer });
+  });
+
+  it("blocks a service whose contract has moved ahead of this app", async () => {
+    // The service dropping a field this app's schemas still require would otherwise pass
+    // the version check and fail as a zod error on the first note read.
+    const [major, minor] = SERVICE_VERSION.split(".");
+    for (const ahead of [`${major}.${Number(minor) + 1}.0`, `${Number(major) + 1}.0.0`]) {
+      const url = await serve("good-token", ahead);
+      await expect(checkConnection(url, "good-token")).resolves.toEqual({
+        ok: false,
+        reason: `Gander service ${ahead} is newer than this app understands. Update the app to a build that supports ${ahead}.`,
+      });
+      await expect(checkServiceStatus(url)).resolves.toMatchObject({ state: "incompatible", serviceVersion: ahead });
+    }
   });
 
   it("rejects a version that cannot participate in the compatibility policy", () => {
