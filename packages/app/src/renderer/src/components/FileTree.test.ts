@@ -9,11 +9,11 @@ import FileTree from "./FileTree.vue";
 const file = (path: string, checked = false): PrFile =>
   ({ path, status: "M", baseContent: "", headContent: "", baseHash: "b", headHash: "h", checked, changedSince: false });
 
-function prView(prNumber: number, files: PrFile[], questions: PrView["questions"] = []): PrView {
+function prView(prNumber: number, files: PrFile[], notes: PrView["notes"] = []): PrView {
   return {
     pr: { number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
     files,
-    questions,
+    notes,
   };
 }
 
@@ -59,9 +59,9 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async fetchNow() {},
     async reviewedSnapshot() { return null; },
     async imagePreview() { return null; },
-    async addQuestion() {},
+    async addNote() {},
     async addReviewerReply() {},
-    async deleteQuestion() {},
+    async deleteNote() {},
     async setChecked(path: string, checked: boolean) {
       calls.setChecked.push([path, checked]);
     },
@@ -173,7 +173,7 @@ describe("FileTree", () => {
       state: "open",
       headSha: "b",
       commitRef: null,
-      note: null,
+      summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",
       replies: [],
     }]));
@@ -197,43 +197,43 @@ describe("FileTree", () => {
     }
 
     const leafRow = fileRow(wrapper, leaf.path);
-    expect(leafRow.find(".qmark").exists()).toBe(true);
+    expect(leafRow.find(".note-mark").exists()).toBe(true);
     expect(leafRow.find(".delta-mark").exists()).toBe(true);
     expect(leafRow.find(".st").text()).toBe("A");
     expect(wrapper.findAll(".tnode.isdir .chev")).toHaveLength(3);
   });
 
-  it("counts unresolved questions on a file and leaves resolved ones out", () => {
+  it("counts unresolved notes on a file and leaves resolved ones out", () => {
     const target = file("app/models/member.rb");
     const other = file("app/models/local.rb");
-    const question = (id: number, path: string, state: "open" | "addressed" | "resolved") => ({
+    const note = (id: number, path: string, state: "open" | "addressed" | "resolved") => ({
       id,
       path,
       line: id,
-      text: `Question ${id}`,
+      text: `Note ${id}`,
       state,
       headSha: "b",
       commitRef: null,
-      note: null,
+      summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",
       replies: [],
     });
     const { store } = fakeStore(prView(1, [target, other], [
-      question(1, target.path, "open"),
-      question(2, target.path, "addressed"),
-      question(3, target.path, "resolved"),
-      question(4, other.path, "resolved"),
+      note(1, target.path, "open"),
+      note(2, target.path, "addressed"),
+      note(3, target.path, "resolved"),
+      note(4, other.path, "resolved"),
     ]));
     const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
-    const marker = fileRow(wrapper, target.path).find(".qmark");
-    expect(marker.find(".qcount").text()).toBe("2");
-    expect(marker.attributes("title")).toBe("2 unresolved questions on this file");
-    // Its only question is resolved, so the file carries no marker at all.
-    expect(fileRow(wrapper, other.path).find(".qmark").exists()).toBe(false);
+    const marker = fileRow(wrapper, target.path).find(".note-mark");
+    expect(marker.find(".note-count").text()).toBe("2");
+    expect(marker.attributes("title")).toBe("2 unresolved notes on this file");
+    // Its only note is resolved, so the file carries no marker at all.
+    expect(fileRow(wrapper, other.path).find(".note-mark").exists()).toBe(false);
   });
 
-  it("shows the marker without a number when a file has a single question", () => {
+  it("shows the marker without a number when a file has a single note", () => {
     const target = file("app/models/member.rb");
     const { store } = fakeStore(prView(1, [target], [{
       id: 1,
@@ -243,16 +243,16 @@ describe("FileTree", () => {
       state: "open" as const,
       headSha: "b",
       commitRef: null,
-      note: null,
+      summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",
       replies: [],
     }]));
     const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
-    const marker = fileRow(wrapper, target.path).find(".qmark");
+    const marker = fileRow(wrapper, target.path).find(".note-mark");
     expect(marker.exists()).toBe(true);
-    expect(marker.find(".qcount").exists()).toBe(false);
-    expect(marker.attributes("title")).toBe("1 unresolved question on this file");
+    expect(marker.find(".note-count").exists()).toBe(false);
+    expect(marker.attributes("title")).toBe("1 unresolved note on this file");
   });
 
   it("applies effective typography once at the root so every nested row inherits it", () => {
@@ -304,7 +304,7 @@ describe("FileTree", () => {
     expect(store.selectedPath).toBe("Gemfile");
   });
 
-  it("renders local changes without checkoffs, snapshots, changed-since markers, or questions", () => {
+  it("renders local changes without checkoffs, snapshots, changed-since markers, or notes", () => {
     const { store } = fakeStore(prView(1, [file("src/local.ts")]));
     store.localView = {
       worktree: { path: "/tmp/local", branch: "feature", headSha: "head", locked: false },
@@ -318,7 +318,7 @@ describe("FileTree", () => {
 
     expect(wrapper.get(".fname").text()).toBe("src");
     expect(wrapper.findAll('[role="checkbox"]')).toHaveLength(0);
-    expect(wrapper.find(".qmark").exists()).toBe(false);
+    expect(wrapper.find(".note-mark").exists()).toBe(false);
     expect(wrapper.find(".delta-mark").exists()).toBe(false);
     expect(fileRow(wrapper, "src/local.ts").get(".st").text()).toBe("M");
   });

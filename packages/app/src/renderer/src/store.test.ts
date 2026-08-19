@@ -10,7 +10,7 @@ const prView = (checkedPaths: string[] = []): PrView => ({
     { path: "a.rb", status: "M", baseContent: "o", headContent: "n", baseHash: "b1", headHash: "h1", checked: checkedPaths.includes("a.rb"), changedSince: false },
     { path: "b.rb", status: "A", baseContent: null, headContent: "x", baseHash: null, headHash: "h2", checked: checkedPaths.includes("b.rb"), changedSince: false },
   ],
-  questions: [],
+  notes: [],
 });
 
 const localView = (files: LocalView["files"] = [{
@@ -56,9 +56,9 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     localImagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
     closeLocal: async () => {},
     onLocalViewChanged: () => () => {},
-    addQuestion: async () => prView(),
+    addNote: async () => prView(),
     addReviewerReply: async () => prView(),
-    deleteQuestion: async () => prView(),
+    deleteNote: async () => prView(),
     getSettings: async () => ({
       editor: { fontFamily: "monospace", fontSize: 16 },
       window: DEFAULT_APP_SETTINGS.window,

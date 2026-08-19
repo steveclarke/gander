@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, MarkAddressed, NewQuestion, NewQuestionReply, PrContext, PutFileState, Question, QuestionReply, ReviewState } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, NewNote, NewNoteReply, PrContext, PutFileState, Note, NoteReply, ReviewState } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS file_states (
   checked_at TEXT, machine TEXT,
   UNIQUE(review_id, path)
 );
-CREATE TABLE IF NOT EXISTS questions (
+CREATE TABLE IF NOT EXISTS notes (
   id INTEGER PRIMARY KEY,
   review_id INTEGER NOT NULL REFERENCES reviews(id),
   path TEXT,
@@ -35,19 +35,19 @@ CREATE TABLE IF NOT EXISTS questions (
   state TEXT NOT NULL DEFAULT 'open',
   head_sha TEXT,
   commit_ref TEXT,
-  note TEXT,
+  summary TEXT,
   addressed_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-CREATE INDEX IF NOT EXISTS questions_by_review ON questions(review_id);
-CREATE TABLE IF NOT EXISTS question_replies (
+CREATE INDEX IF NOT EXISTS notes_by_review ON notes(review_id);
+CREATE TABLE IF NOT EXISTS note_replies (
   id INTEGER PRIMARY KEY,
-  question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
   author TEXT NOT NULL CHECK(author IN ('reviewer', 'agent')),
   text TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-CREATE INDEX IF NOT EXISTS question_replies_by_question ON question_replies(question_id, id);
+CREATE INDEX IF NOT EXISTS note_replies_by_note ON note_replies(note_id, id);
 `;
 
 export interface Storage {
@@ -59,20 +59,20 @@ export interface Storage {
   /** Records what the app knows about a pull request, so agents can be told which one they are on. */
   setPrContext(repoId: string, prNumber: number, context: PrContext): void;
   getPrContext(repoId: string, prNumber: number): PrContext | null;
-  /** Every pull request recorded as part of the same stack, with how many open questions each holds. */
-  listStackMembers(repoId: string, stackId: number): Array<{ prNumber: number; headRef: string | null; title: string | null; position: number | null; openQuestions: number }>;
+  /** Every pull request recorded as part of the same stack, with how many open notes each holds. */
+  listStackMembers(repoId: string, stackId: number): Array<{ prNumber: number; headRef: string | null; title: string | null; position: number | null; openNotes: number }>;
   findPrByHeadRef(repoId: string, headRef: string): number | null;
-  markQuestionAddressed(id: number, input: MarkAddressed): Question | null;
-  listQuestions(repoId: string, prNumber: number): Question[];
-  addQuestion(repoId: string, prNumber: number, input: NewQuestion): Question;
-  addReviewerReply(repoId: string, prNumber: number, id: number, input: NewQuestionReply): QuestionReply | null;
-  addAgentReply(id: number, input: NewQuestionReply): QuestionReply | null;
-  deleteQuestion(repoId: string, prNumber: number, id: number): boolean;
+  markNoteAddressed(id: number, input: MarkAddressed): Note | null;
+  listNotes(repoId: string, prNumber: number): Note[];
+  addNote(repoId: string, prNumber: number, input: NewNote): Note;
+  addReviewerReply(repoId: string, prNumber: number, id: number, input: NewNoteReply): NoteReply | null;
+  addAgentReply(id: number, input: NewNoteReply): NoteReply | null;
+  deleteNote(repoId: string, prNumber: number, id: number): boolean;
   close(): void;
 }
 
-interface QuestionRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; commit_ref: string | null; note: string | null; created_at: string }
-interface QuestionReplyRow { id: number; question_id: number; author: string; text: string; created_at: string }
+interface NoteRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; commit_ref: string | null; summary: string | null; created_at: string }
+interface NoteReplyRow { id: number; note_id: number; author: string; text: string; created_at: string }
 interface FileStateRow { path: string; checked: number; base_hash: string | null; head_hash: string | null; checked_at: string | null; machine: string | null }
 
 const rowToCheckoff = (r: FileStateRow): FileCheckoff => ({
@@ -81,24 +81,24 @@ const rowToCheckoff = (r: FileStateRow): FileCheckoff => ({
   checkedAt: r.checked_at, machine: r.machine,
 });
 
-const rowToReply = (r: QuestionReplyRow): QuestionReply => ({
+const rowToReply = (r: NoteReplyRow): NoteReply => ({
   id: r.id,
-  author: r.author as QuestionReply["author"],
+  author: r.author as NoteReply["author"],
   text: r.text,
   createdAt: r.created_at,
 });
 
-const rowToQuestion = (r: QuestionRow, replies: QuestionReply[] = []): Question => ({
+const rowToNote = (r: NoteRow, replies: NoteReply[] = []): Note => ({
   id: r.id, path: r.path, line: r.line, text: r.text,
-  state: r.state as Question["state"],
+  state: r.state as Note["state"],
   headSha: r.head_sha,
-  commitRef: r.commit_ref, note: r.note,
+  commitRef: r.commit_ref, summary: r.summary,
   createdAt: r.created_at,
   replies,
 });
 
-const QUESTION_COLUMNS = "id, path, line, text, state, head_sha, commit_ref, note, created_at";
-const REPLY_COLUMNS = "id, question_id, author, text, created_at";
+const NOTE_COLUMNS = "id, path, line, text, state, head_sha, commit_ref, summary, created_at";
+const REPLY_COLUMNS = "id, note_id, author, text, created_at";
 const FILE_STATE_COLUMNS = "path, checked, base_hash, head_hash, checked_at, machine";
 
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
@@ -116,12 +116,12 @@ export function openStorage(dbPath: string): Storage {
     return row.id;
   };
 
-  const repliesForQuestion = (id: number): QuestionReply[] =>
-    (db.prepare(`SELECT ${REPLY_COLUMNS} FROM question_replies WHERE question_id = ? ORDER BY id`).all(id) as QuestionReplyRow[])
+  const repliesForNote = (id: number): NoteReply[] =>
+    (db.prepare(`SELECT ${REPLY_COLUMNS} FROM note_replies WHERE note_id = ? ORDER BY id`).all(id) as NoteReplyRow[])
       .map(rowToReply);
 
-  const replyById = (id: number | bigint): QuestionReply =>
-    rowToReply(db.prepare(`SELECT ${REPLY_COLUMNS} FROM question_replies WHERE id = ?`).get(id) as QuestionReplyRow);
+  const replyById = (id: number | bigint): NoteReply =>
+    rowToReply(db.prepare(`SELECT ${REPLY_COLUMNS} FROM note_replies WHERE id = ?`).get(id) as NoteReplyRow);
 
   return {
     getReview(repoId, prNumber) {
@@ -159,8 +159,8 @@ export function openStorage(dbPath: string): Storage {
             checked_at = excluded.checked_at, machine = excluded.machine
         `).run(rid, input.path, input.baseHash, input.headHash, pack(input.baseContent), pack(input.headContent), input.machine);
         // Re-checking a file is the reviewer confirming the agent's work: its addressed
-        // questions become resolved. Open questions survive — they were never answered.
-        db.prepare("UPDATE questions SET state = 'resolved' WHERE review_id = ? AND path = ? AND state = 'addressed'").run(rid, input.path);
+        // notes become resolved. Open notes survive — they were never answered.
+        db.prepare("UPDATE notes SET state = 'resolved' WHERE review_id = ? AND path = ? AND state = 'addressed'").run(rid, input.path);
       } else {
         // Bare un-check: snapshot and hashes are retained as the delta base.
         db.prepare(`
@@ -188,15 +188,15 @@ export function openStorage(dbPath: string): Storage {
     listStackMembers(repoId, stackId) {
       return db.prepare(`
         SELECT r.pr_number, r.head_ref, r.title, r.stack_position,
-               (SELECT COUNT(*) FROM questions q WHERE q.review_id = r.id AND q.state = 'open') AS open_questions
+               (SELECT COUNT(*) FROM notes q WHERE q.review_id = r.id AND q.state = 'open') AS open_notes
         FROM reviews r
         WHERE r.repo_id = ? AND r.stack_id = ?
         ORDER BY r.stack_position
       `).all(repoId, stackId).map((r) => {
-        const row = r as { pr_number: number; head_ref: string | null; title: string | null; stack_position: number | null; open_questions: number };
+        const row = r as { pr_number: number; head_ref: string | null; title: string | null; stack_position: number | null; open_notes: number };
         return {
           prNumber: row.pr_number, headRef: row.head_ref, title: row.title,
-          position: row.stack_position, openQuestions: row.open_questions,
+          position: row.stack_position, openNotes: row.open_notes,
         };
       });
     },
@@ -218,67 +218,67 @@ export function openStorage(dbPath: string): Storage {
       return row?.pr_number ?? null;
     },
 
-    markQuestionAddressed(id, input) {
-      // Only an open question can be addressed. Re-addressing a resolved one would
+    markNoteAddressed(id, input) {
+      // Only an open note can be addressed. Re-addressing a resolved one would
       // undo the reviewer's own act, and the spec puts resolution solely in their hands.
       const changed = db.prepare(`
-        UPDATE questions
-        SET state = 'addressed', commit_ref = ?, note = ?, addressed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        UPDATE notes
+        SET state = 'addressed', commit_ref = ?, summary = ?, addressed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
         WHERE id = ? AND state = 'open'
-      `).run(input.commitRef, input.note, id).changes;
+      `).run(input.commitRef, input.summary, id).changes;
       if (changed === 0) return null;
-      return rowToQuestion(db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(id) as QuestionRow, repliesForQuestion(id));
+      return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow, repliesForNote(id));
     },
 
-    listQuestions(repoId, prNumber) {
+    listNotes(repoId, prNumber) {
       const rid = reviewId(repoId, prNumber);
-      const rows = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE review_id = ? ORDER BY id`).all(rid) as QuestionRow[];
+      const rows = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE review_id = ? ORDER BY id`).all(rid) as NoteRow[];
       const replyRows = db.prepare(`
-        SELECT qr.id, qr.question_id, qr.author, qr.text, qr.created_at
-        FROM question_replies qr
-        JOIN questions q ON q.id = qr.question_id
+        SELECT qr.id, qr.note_id, qr.author, qr.text, qr.created_at
+        FROM note_replies qr
+        JOIN notes q ON q.id = qr.note_id
         WHERE q.review_id = ?
         ORDER BY qr.id
-      `).all(rid) as QuestionReplyRow[];
-      const replies = new Map<number, QuestionReply[]>();
+      `).all(rid) as NoteReplyRow[];
+      const replies = new Map<number, NoteReply[]>();
       for (const row of replyRows) {
-        const current = replies.get(row.question_id) ?? [];
+        const current = replies.get(row.note_id) ?? [];
         current.push(rowToReply(row));
-        replies.set(row.question_id, current);
+        replies.set(row.note_id, current);
       }
-      return rows.map((row) => rowToQuestion(row, replies.get(row.id) ?? []));
+      return rows.map((row) => rowToNote(row, replies.get(row.id) ?? []));
     },
 
-    addQuestion(repoId, prNumber, input) {
+    addNote(repoId, prNumber, input) {
       const rid = reviewId(repoId, prNumber);
       const { lastInsertRowid } = db
-        .prepare("INSERT INTO questions (review_id, path, line, text, head_sha) VALUES (?, ?, ?, ?, ?)")
+        .prepare("INSERT INTO notes (review_id, path, line, text, head_sha) VALUES (?, ?, ?, ?, ?)")
         .run(rid, input.path, input.line, input.text, input.headSha);
-      const row = db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(lastInsertRowid) as QuestionRow;
-      return rowToQuestion(row);
+      const row = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(lastInsertRowid) as NoteRow;
+      return rowToNote(row);
     },
 
     addReviewerReply(repoId, prNumber, id, input) {
       const rid = reviewId(repoId, prNumber);
       const result = db.prepare(`
-        INSERT INTO question_replies (question_id, author, text)
-        SELECT q.id, 'reviewer', ? FROM questions q WHERE q.id = ? AND q.review_id = ?
+        INSERT INTO note_replies (note_id, author, text)
+        SELECT q.id, 'reviewer', ? FROM notes q WHERE q.id = ? AND q.review_id = ?
       `).run(input.text, id, rid);
       return result.changes === 0 ? null : replyById(result.lastInsertRowid);
     },
 
     addAgentReply(id, input) {
       const result = db.prepare(`
-        INSERT INTO question_replies (question_id, author, text)
-        SELECT id, 'agent', ? FROM questions WHERE id = ?
+        INSERT INTO note_replies (note_id, author, text)
+        SELECT id, 'agent', ? FROM notes WHERE id = ?
       `).run(input.text, id);
       return result.changes === 0 ? null : replyById(result.lastInsertRowid);
     },
 
-    deleteQuestion(repoId, prNumber, id) {
+    deleteNote(repoId, prNumber, id) {
       // Scoped to the review so an id from one pull request cannot delete another's.
       const rid = reviewId(repoId, prNumber);
-      return db.prepare("DELETE FROM questions WHERE id = ? AND review_id = ?").run(id, rid).changes > 0;
+      return db.prepare("DELETE FROM notes WHERE id = ? AND review_id = ?").run(id, rid).changes > 0;
     },
 
     close() { db.close(); },

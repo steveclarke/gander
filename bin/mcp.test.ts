@@ -60,7 +60,7 @@ if [[ " $* " == *" --format json "* ]]; then
   if [[ -n "\${MCP_TEST_TOOLS_RESPONSE:-}" ]]; then
     printf '%s\n' "$MCP_TEST_TOOLS_RESPONSE"
   else
-    printf '%s\n' '{"result":{"tools":[{"name":"mark_question_addressed"},{"name":"get_review_questions"}]}}'
+    printf '%s\n' '{"result":{"tools":[{"name":"mark_note_addressed"},{"name":"get_review_notes"}]}}'
   fi
 else
   printf '%s\n' '{"ok":true}'
@@ -83,7 +83,7 @@ describe.skipIf(platform === "win32")("bin/mcp", () => {
 
     expect(result.status, result.output).toBe(0);
     expect(result.output).toContain("MCP OK");
-    expect(result.output).toContain("get_review_questions, mark_question_addressed");
+    expect(result.output).toContain("get_review_notes, mark_note_addressed");
     expect(result.output).not.toContain("test-token");
 
     const args = readFileSync(argsFile, "utf8");
@@ -94,12 +94,12 @@ describe.skipIf(platform === "win32")("bin/mcp", () => {
   });
 
   it("passes tool calls through the Inspector CLI", () => {
-    const result = run("call", "get_review_questions", "repo=steveclarke/gander", "branch=feature/test");
+    const result = run("call", "get_review_notes", "repo=steveclarke/gander", "branch=feature/test");
 
     expect(result.status, result.output).toBe(0);
     const args = readFileSync(argsFile, "utf8");
     expect(args).toContain("tools/call");
-    expect(args).toContain("get_review_questions");
+    expect(args).toContain("get_review_notes");
     expect(args).toContain("repo=steveclarke/gander");
     expect(args).toContain("branch=feature/test");
   });
@@ -107,13 +107,13 @@ describe.skipIf(platform === "win32")("bin/mcp", () => {
   it("fails when a core MCP tool is missing", () => {
     env = {
       ...env,
-      MCP_TEST_TOOLS_RESPONSE: '{"result":{"tools":[{"name":"get_review_questions"}]}}',
+      MCP_TEST_TOOLS_RESPONSE: '{"result":{"tools":[{"name":"get_review_notes"}]}}',
     };
 
     const result = run("check");
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain("Missing core MCP tools: mark_question_addressed");
+    expect(result.output).toContain("Missing core MCP tools: mark_note_addressed");
     expect(result.output).toContain("tool contract is invalid");
   });
 

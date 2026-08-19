@@ -6,7 +6,7 @@ import { ref, watch } from "vue";
  *
  * Built on the native `<dialog>` rather than a floating div: it brings the focus trap,
  * the backdrop, Escape, and the top layer with it, and none of those are worth
- * reimplementing for a two-button question.
+ * reimplementing for a two-button note.
  */
 
 const props = defineProps<{

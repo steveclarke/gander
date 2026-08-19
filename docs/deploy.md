@@ -2,11 +2,11 @@
 
 The app derives everything it shows from Git and GitHub. The service holds the
 part you author: which files you have checked off, the content you checked them
-against, and your questions.
+against, and your notes.
 
 Run it in a development checkout and that state lives on one machine, reachable
 only while a dev stack happens to be up. Run it on a host and a review is
-readable from any machine you review from, and agents reach your questions
+readable from any machine you review from, and agents reach your notes
 whether or not a window is open anywhere.
 
 One reviewer, one token. The service is not built to be internet-facing: put it
@@ -69,7 +69,7 @@ override the saved connection with its generated checkout-local values.
 
 ## Point an agent at it
 
-Agents read your questions over MCP at `/mcp` on the same service, with the same
+Agents read your notes over MCP at `/mcp` on the same service, with the same
 token. Registered once against a hosted service, rather than per checkout:
 
 ```bash
@@ -80,7 +80,7 @@ claude mcp add --transport http gander https://gander.example.internal/mcp \
 ## Keep the details together
 
 The URL and the token are needed on every machine you review from, and by every
-agent you want reading your questions. Keep them in your password manager as one
+agent you want reading your notes. Keep them in your password manager as one
 item, with the `claude mcp add` line written out — then setting up a new machine
 is reading one card rather than reconstructing a deployment.
 

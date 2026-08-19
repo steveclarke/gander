@@ -172,8 +172,8 @@ Codex.
 ```bash
 bin/mcp check
 bin/mcp tools
-bin/mcp call get_review_questions repo=steveclarke/gander branch=master
-bin/mcp call get_review_questions --json '{"repo":"steveclarke/gander","prNumber":4}'
+bin/mcp call get_review_notes repo=steveclarke/gander branch=master
+bin/mcp call get_review_notes --json '{"repo":"steveclarke/gander","prNumber":4}'
 bin/mcp tui
 bin/mcp inspect
 ```
@@ -193,7 +193,7 @@ documented above. It discovers this worktree's connection without changing
 global agent configuration. Direct MCP registration remains available for an
 agent working in another repository that needs to reach this Gander instance.
 
-Agents read the reviewer's questions from the same service, at `/mcp`, with the
+Agents read the reviewer's notes from the same service, at `/mcp`, with the
 same bearer token. Port and token are allocated per checkout, so the command is
 generated rather than committed — read the live values out of `.env`:
 
@@ -207,11 +207,11 @@ Run it in the repository being reviewed, not in this one. Three tools appear:
 
 | Tool | Purpose |
 |------|---------|
-| `get_review_questions` | Questions for a repo + branch (or pull request number), with reply threads and counts for every state; addressed and resolved questions can be included explicitly |
-| `reply_to_question` | Adds an agent reply to a question without changing its lifecycle state |
-| `mark_question_addressed` | Flags one as acted on, with an optional commit ref and note |
+| `get_review_notes` | Notes for a repo + branch (or pull request number), with reply threads and counts for every state; addressed and resolved notes can be included explicitly |
+| `reply_to_note` | Adds an agent reply to a note without changing its lifecycle state |
+| `mark_note_addressed` | Flags one as acted on, with an optional commit ref and summary |
 
-Nothing over MCP resolves a question. That stays the reviewer's act, made by
+Nothing over MCP resolves a note. That stays the reviewer's act, made by
 re-reviewing the file in the app.
 
 ## Config precedence

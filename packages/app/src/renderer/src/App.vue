@@ -5,10 +5,10 @@ import { MessageSquare, Plus, RefreshCw, X } from "lucide-vue-next";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
-import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
+import { notesDock, notesHeight, notesWidth, treeWidth } from "./layout.js";
 import { effectiveTreeTypography } from "../../settings.js";
 import { currentLine } from "./selection.js";
-import type { QuestionTarget } from "./selection.js";
+import type { NoteTarget } from "./selection.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -16,8 +16,8 @@ import DiffPane from "./components/DiffPane.vue";
 import FullFilePane from "./components/FullFilePane.vue";
 import LocalSidebar from "./components/LocalSidebar.vue";
 import PullRequestSidebar from "./components/PullRequestSidebar.vue";
-import QuestionCapture from "./components/QuestionCapture.vue";
-import QuestionsDrawer from "./components/QuestionsDrawer.vue";
+import NoteCapture from "./components/NoteCapture.vue";
+import NotesDrawer from "./components/NotesDrawer.vue";
 import SettingsPane from "./components/SettingsPane.vue";
 import Splitter from "./components/Splitter.vue";
 import StackPosition from "./components/StackPosition.vue";
@@ -33,7 +33,7 @@ const integratedTitleBar = api.initialWindowState.windowStyle === "integrated-ti
 const activeMode = shallowRef<WorkbenchMode>("explorer");
 const modeBeforeSettings = shallowRef<Exclude<WorkbenchMode, "settings">>("explorer");
 const unconfigured = ref(false);
-const questionTarget = shallowRef<QuestionTarget | null>(null);
+const noteTarget = shallowRef<NoteTarget | null>(null);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const treeScrolling = shallowRef(false);
@@ -46,13 +46,13 @@ let unsubscribeZoomChanged: (() => void) | null = null;
 let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
-const questionCount = computed(() => store.view?.questions.length ?? 0);
+const noteCount = computed(() => store.view?.notes.length ?? 0);
 const hasLoadedView = computed(() => store.view !== null || store.localView !== null);
-const questionsSize = computed({
-  get: () => (questionsDock.value === "right" ? questionsWidth.value : questionsHeight.value),
+const notesSize = computed({
+  get: () => (notesDock.value === "right" ? notesWidth.value : notesHeight.value),
   set: (value: number) => {
-    if (questionsDock.value === "right") questionsWidth.value = value;
-    else questionsHeight.value = value;
+    if (notesDock.value === "right") notesWidth.value = value;
+    else notesHeight.value = value;
   },
 });
 
@@ -221,13 +221,13 @@ async function openPr(prNumber: number): Promise<void> {
 watch(activeMode, (mode) => {
   if (mode !== "pulls") {
     drawerOpen.value = false;
-    questionTarget.value = null;
+    noteTarget.value = null;
   }
 });
 
-function openQuestion(target?: QuestionTarget): void {
+function openNote(target?: NoteTarget): void {
   if (!store.view || activeMode.value !== "pulls") return;
-  questionTarget.value = target ?? {
+  noteTarget.value = target ?? {
     path: store.selectedPath,
     line: store.selectedPath === null ? null : currentLine.value,
   };
@@ -259,7 +259,7 @@ function onKey(event: KeyboardEvent): void {
   if (event.key === "n" && store.view && activeMode.value === "pulls") {
     event.preventDefault();
     event.stopPropagation();
-    openQuestion();
+    openNote();
   }
 }
 window.addEventListener("keydown", onKey, true);
@@ -380,8 +380,8 @@ onBeforeUnmount(() => {
               <strong>{{ store.currentRepoId?.split('/').at(-1) }}</strong>
               <span><StackPosition v-if="store.view.pr.stack" class="header-stack-position" :position="store.view.pr.stack.position" :size="store.view.pr.stack.size" /> #{{ store.view.pr.number }} {{ store.view.pr.title }}</span>
             </div>
-            <button aria-label="Add question (N)" title="Add question (N)" @click="openQuestion()"><Plus :size="14" /> Question</button>
-            <button aria-label="Questions" :title="`Questions (${questionCount})`" @click="drawerOpen = !drawerOpen"><MessageSquare :size="15" /><span v-if="questionCount">{{ questionCount }}</span></button>
+            <button aria-label="Add note (N)" title="Add note (N)" @click="openNote()"><Plus :size="14" /> Note</button>
+            <button aria-label="Notes" :title="`Notes (${noteCount})`" @click="drawerOpen = !drawerOpen"><MessageSquare :size="15" /><span v-if="noteCount">{{ noteCount }}</span></button>
             <button :disabled="store.busy" aria-label="Fetch origin" title="Fetch origin" @click="store.fetchNow()"><RefreshCw :size="15" :class="{ spin: store.busy }" /></button>
             <span class="progress">{{ store.progress().done }}/{{ store.progress().total }} reviewed</span>
           </div>
@@ -396,18 +396,18 @@ onBeforeUnmount(() => {
               <h1>Select a pull request</h1>
               <p>Choose a pull request or stack from the sidebar to begin reviewing.</p>
             </div>
-            <div v-else class="workspace" :class="questionsDock">
-              <DiffPane :store="store" :editor-settings="editorSettings.settings.editor" class="diff" @add-question="openQuestion" />
+            <div v-else class="workspace" :class="notesDock">
+              <DiffPane :store="store" :editor-settings="editorSettings.settings.editor" class="diff" @add-note="openNote" />
               <template v-if="drawerOpen">
-                <Splitter v-model="questionsSize" :orientation="questionsDock === 'right' ? 'vertical' : 'horizontal'" :min="questionsDock === 'right' ? 220 : 120" :max="700" inverted />
-                <QuestionsDrawer
+                <Splitter v-model="notesSize" :orientation="notesDock === 'right' ? 'vertical' : 'horizontal'" :min="notesDock === 'right' ? 220 : 120" :max="700" inverted />
+                <NotesDrawer
                   :store="store"
                   class="drawer"
-                  :dock="questionsDock"
-                  :style="questionsDock === 'right' ? { width: `${questionsWidth}px` } : { height: `${questionsHeight}px` }"
-                  @dock="questionsDock = $event"
+                  :dock="notesDock"
+                  :style="notesDock === 'right' ? { width: `${notesWidth}px` } : { height: `${notesHeight}px` }"
+                  @dock="notesDock = $event"
                   @close="drawerOpen = false"
-                  @add-question="openQuestion()"
+                  @add-note="openNote()"
                 />
               </template>
             </div>
@@ -425,7 +425,7 @@ onBeforeUnmount(() => {
       @change-zoom="changeZoom"
       @open-zoom-settings="openSettings('workbench')"
     />
-    <QuestionCapture :store="store" :target="questionTarget" @close="questionTarget = null" />
+    <NoteCapture :store="store" :target="noteTarget" @close="noteTarget = null" />
     <ConfirmDialog
       :open="repoPendingRemoval !== null"
       title="Remove repository?"

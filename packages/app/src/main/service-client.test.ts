@@ -67,29 +67,29 @@ describe("a request with no body", () => {
     // delete from the app failed against a real listener.
     const seen: Array<string | undefined> = [];
     const url = await serve((app) => {
-      app.delete("/api/reviews/:repoId/:prNumber/questions/:id", async (req, reply) => {
+      app.delete("/api/reviews/:repoId/:prNumber/notes/:id", async (req, reply) => {
         seen.push(req.headers["content-type"]);
         return reply.code(204).send();
       });
     });
     const client = createServiceClient(() => ({ url, token: "t" }));
-    await expect(client.deleteQuestion("acme/atlas", 1, 2)).resolves.toBeUndefined();
+    await expect(client.deleteNote("acme/atlas", 1, 2)).resolves.toBeUndefined();
     expect(seen).toEqual([undefined]);
   });
 
   it("still declares it when there is a body", async () => {
     const seen: Array<string | undefined> = [];
     const url = await serve((app) => {
-      app.post("/api/reviews/:repoId/:prNumber/questions", async (req, reply) => {
+      app.post("/api/reviews/:repoId/:prNumber/notes", async (req, reply) => {
         seen.push(req.headers["content-type"]);
         return reply.code(201).send({
           id: 1, path: "a.rb", line: null, text: "why?", state: "open", replies: [],
-          headSha: null, commitRef: null, note: null, createdAt: new Date().toISOString(),
+          headSha: null, commitRef: null, summary: null, createdAt: new Date().toISOString(),
         });
       });
     });
     const client = createServiceClient(() => ({ url, token: "t" }));
-    await client.addQuestion("acme/atlas", 1, { path: "a.rb", line: null, text: "why?", headSha: null });
+    await client.addNote("acme/atlas", 1, { path: "a.rb", line: null, text: "why?", headSha: null });
     expect(seen).toEqual(["application/json"]);
   });
 });

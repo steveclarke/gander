@@ -1,6 +1,6 @@
 ---
 name: review-with-gander
-description: Start a Gander development worktree on its own pull request and exchange review questions through the worktree-local CLI. Use when asked to open the current PR in Gander, dogfood Gander changes, read or address Gander review questions, or verify a worktree's MCP endpoint.
+description: Start a Gander development worktree on its own pull request and exchange review notes through the worktree-local CLI. Use when asked to open the current PR in Gander, dogfood Gander changes, read or address Gander review notes, or verify a worktree's MCP endpoint.
 ---
 
 # Review With Gander
@@ -30,36 +30,36 @@ worktree.
    is ready merely because an Electron process exists.
 6. Tell the reviewer the exact PR and worktree instance that are open.
 
-## Read review questions
+## Read review notes
 
 Use the repository and PR resolved above:
 
 ```bash
-bin/mcp call get_review_questions repo=OWNER/REPO prNumber=NUMBER
+bin/mcp call get_review_notes repo=OWNER/REPO prNumber=NUMBER
 ```
 
-Run the command after the reviewer says questions are ready, or poll at a
+Run the command after the reviewer says notes are ready, or poll at a
 reasonable interval when the reviewer explicitly asks the agent to wait. Do
 not register this endpoint globally in Claude or Codex. `bin/mcp` reads this
 worktree's endpoint and bearer token from `.env`.
 
-## Address a question
+## Address a note
 
-Treat a question as work, not as a checkbox:
+Treat a note as work, not as a checkbox:
 
 1. Inspect the named file, line, and current diff.
 2. Make the requested change or explain why it should not change.
 3. Run the verification appropriate to the change.
 4. Commit and push the result when code changed.
-5. Mark the question addressed with a concrete note:
+5. Mark the note addressed with a concrete summary:
 
 ```bash
-bin/mcp call mark_question_addressed id=QUESTION_ID commitRef=COMMIT_SHA note="WHAT CHANGED"
+bin/mcp call mark_note_addressed id=NOTE_ID commitRef=COMMIT_SHA summary="WHAT CHANGED"
 ```
 
-Only the reviewer resolves a question after re-reviewing the file. The current
+Only the reviewer resolves a note after re-reviewing the file. The current
 MCP contract has no threaded agent reply; the `note` on
-`mark_question_addressed` is the temporary response channel.
+`mark_note_addressed` is the temporary response channel.
 
 ## Diagnose the bridge
 

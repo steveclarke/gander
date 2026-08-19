@@ -7,8 +7,8 @@ to this file, so Claude Code, Codex, and Gemini CLI all read the same text.
 
 A desktop app for reviewing code in the agentic era: agents write the code, the
 human reviews it. One window over every repo and pull request, a Monaco diff,
-hierarchical file checkoff, and a question pipeline that carries the reviewer's
-notes to coding agents over MCP.
+hierarchical file checkoff, and a note pipeline that carries the reviewer's
+remarks to coding agents over MCP.
 
 `docs/deploy.md` covers running the service on a host.
 
@@ -64,7 +64,7 @@ its port and token from the generated `.env`. `DEVSTACK.md` covers the stack,
 worktrees, and MCP registration.
 
 When Steve asks to open the current PR in Gander, dogfood a change, or respond
-to Gander review questions, read
+to Gander review notes, read
 `.agents/skills/review-with-gander/SKILL.md` and follow it. Use the CLI bridge
 from the current worktree; do not register its MCP endpoint globally or reuse
 another worktree's port, token, config, database, or process.
@@ -86,7 +86,7 @@ Three packages in a pnpm workspace, ESM-only, TypeScript strict with
 | Package | Owns |
 |---|---|
 | `@gander/shared` | Domain types as Zod schemas; both other packages validate against them |
-| `@gander/service` | Fastify + better-sqlite3. Everything the *reviewer authors*: checkoffs, snapshot content, questions, PR context. Bearer auth. Hosts `/mcp`. |
+| `@gander/service` | Fastify + better-sqlite3. Everything the *reviewer authors*: checkoffs, snapshot content, notes, PR context. Bearer auth. Hosts `/mcp`. |
 | `@gander/app` | Electron main (git, GitHub, review orchestration) + Vue renderer. Everything *derived* from repos: clones, diffs, rendering. Read-only cache of review state. |
 
 The service is the single source of truth for authored state; cross-machine
@@ -107,12 +107,12 @@ marker, and the snapshot becomes the base for the delta diff. An un-check
 deliberately *retains* the snapshot — absence of a snapshot means "never
 reviewed", not "unchanged".
 
-**Question lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
-over MCP, with optional commit ref and note) → `resolved` (reviewer re-checks
+**Note lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
+over MCP, with optional commit ref and summary) → `resolved` (reviewer re-checks
 the file). Resolution is always the reviewer's act; no MCP tool may resolve
 anything. Replies form a thread without changing that lifecycle. The MCP
-contract is deliberately three tools — `get_review_questions`,
-`reply_to_question`, and `mark_question_addressed`. Agents have `git` and `gh`
+contract is deliberately three tools — `get_review_notes`,
+`reply_to_note`, and `mark_note_addressed`. Agents have `git` and `gh`
 for code; this contract carries only the review conversation. Keep it small.
 
 `GANDER_SERVICE_URL` and `GANDER_TOKEN` override the config file at *connection*

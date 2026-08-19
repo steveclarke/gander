@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import type { ZodError } from "zod";
-import { NewQuestionReplySchema, NewQuestionSchema, PrContextSchema, PutFileStateSchema } from "@gander/shared";
+import { NewNoteReplySchema, NewNoteSchema, PrContextSchema, PutFileStateSchema } from "@gander/shared";
 import { handleMcpRequest } from "./mcp.js";
 import type { Storage } from "./storage.js";
 
@@ -101,57 +101,57 @@ export function buildServer(opts: {
   );
 
   app.get<{ Params: { repoId: string; prNumber: string } }>(
-    "/api/reviews/:repoId/:prNumber/questions",
+    "/api/reviews/:repoId/:prNumber/notes",
     async (req, reply) => {
       const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
-      return opts.storage.listQuestions(req.params.repoId, prNumber);
+      return opts.storage.listNotes(req.params.repoId, prNumber);
     },
   );
 
   app.post<{ Params: { repoId: string; prNumber: string } }>(
-    "/api/reviews/:repoId/:prNumber/questions",
+    "/api/reviews/:repoId/:prNumber/notes",
     async (req, reply) => {
       const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
-      const parsed = NewQuestionSchema.safeParse(req.body);
+      const parsed = NewNoteSchema.safeParse(req.body);
       if (!parsed.success) return badRequest(reply, parsed.error);
-      return reply.code(201).send(opts.storage.addQuestion(req.params.repoId, prNumber, parsed.data));
+      return reply.code(201).send(opts.storage.addNote(req.params.repoId, prNumber, parsed.data));
     },
   );
 
   app.delete<{ Params: { repoId: string; prNumber: string; id: string } }>(
-    "/api/reviews/:repoId/:prNumber/questions/:id",
+    "/api/reviews/:repoId/:prNumber/notes/:id",
     async (req, reply) => {
       const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
       const id = positiveInt("id", req.params.id, reply);
       if (id === undefined) return;
-      if (!opts.storage.deleteQuestion(req.params.repoId, prNumber, id)) {
-        return reply.code(404).send({ error: `no question ${id} on ${req.params.repoId}#${prNumber}` });
+      if (!opts.storage.deleteNote(req.params.repoId, prNumber, id)) {
+        return reply.code(404).send({ error: `no note ${id} on ${req.params.repoId}#${prNumber}` });
       }
       return reply.code(204).send();
     },
   );
 
   app.post<{ Params: { repoId: string; prNumber: string; id: string } }>(
-    "/api/reviews/:repoId/:prNumber/questions/:id/replies",
+    "/api/reviews/:repoId/:prNumber/notes/:id/replies",
     async (req, reply) => {
       const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
       const id = positiveInt("id", req.params.id, reply);
       if (id === undefined) return;
-      const parsed = NewQuestionReplySchema.safeParse(req.body);
+      const parsed = NewNoteReplySchema.safeParse(req.body);
       if (!parsed.success) return badRequest(reply, parsed.error);
       const added = opts.storage.addReviewerReply(req.params.repoId, prNumber, id, parsed.data);
       if (added === null) {
-        return reply.code(404).send({ error: `no question ${id} on ${req.params.repoId}#${prNumber}` });
+        return reply.code(404).send({ error: `no note ${id} on ${req.params.repoId}#${prNumber}` });
       }
       return reply.code(201).send(added);
     },
   );
 
-  // Agents reach the same questions the app writes, over MCP. Same bearer token as
+  // Agents reach the same notes the app writes, over MCP. Same bearer token as
   // /api — one credential per install, not two.
   app.all("/mcp", async (req, reply) => {
     await handleMcpRequest(opts.storage, opts.version, req.raw, reply.raw, req.body);

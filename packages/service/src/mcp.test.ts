@@ -49,94 +49,94 @@ afterEach(async () => {
 });
 
 describe("MCP endpoint", () => {
-  it("offers the three question conversation tools", async () => {
+  it("offers the three note conversation tools", async () => {
     const client = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["get_review_questions", "mark_question_addressed", "reply_to_question"]);
+    expect(names).toEqual(["get_review_notes", "mark_note_addressed", "reply_to_note"]);
     await client.close();
   });
 
-  it("returns the reviewer's open questions for a branch", async () => {
+  it("returns the reviewer's open notes for a branch", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null });
+    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null });
 
     const client = await connect();
     const result = await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
     });
-    const payload = JSON.parse(textOf(result as { content?: unknown })) as { prNumber: number; branch: string; title: string; stack: unknown; questions: Array<{ file: string; line: number; text: string }> };
+    const payload = JSON.parse(textOf(result as { content?: unknown })) as { prNumber: number; branch: string; title: string; stack: unknown; notes: Array<{ file: string; line: number; text: string }> };
     expect(payload.prNumber).toBe(7);
     // The agent must be able to tell which pull request — and which checkout — this is.
     expect(payload.branch).toBe("feat/thing");
     expect(payload.title).toBe("Feature");
-    expect(payload.questions).toEqual([{
+    expect(payload.notes).toEqual([{
       id: expect.any(Number), file: "a.rb", line: 12, text: "Why the retry here?", state: "open",
       replies: [], capturedAtSha: null, lineMayHaveMoved: false,
     }]);
     await client.close();
   });
 
-  it("lets an agent reply and returns the thread without changing question state", async () => {
+  it("lets an agent reply and returns the thread without changing note state", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
+    const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
 
     const client = await connect();
     const replied = await client.callTool({
-      name: "reply_to_question",
+      name: "reply_to_note",
       arguments: { id: q.id, text: "This belongs in the model because both callers need it." },
     });
     expect(textOf(replied as { content?: unknown })).toContain("state was not changed");
 
     const payload = JSON.parse(textOf((await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
-    })) as { content?: unknown })) as { questions: Array<{ state: string; replies: Array<{ author: string; text: string }> }> };
-    expect(payload.questions[0]).toMatchObject({
+    })) as { content?: unknown })) as { notes: Array<{ state: string; replies: Array<{ author: string; text: string }> }> };
+    expect(payload.notes[0]).toMatchObject({
       state: "open",
       replies: [{ author: "agent", text: "This belongs in the model because both callers need it." }],
     });
-    expect(storage.listQuestions("acme/atlas", 7)[0]?.state).toBe("open");
+    expect(storage.listNotes("acme/atlas", 7)[0]?.state).toBe("open");
     await client.close();
   });
 
-  it("reports an unknown question when an agent tries to reply", async () => {
+  it("reports an unknown note when an agent tries to reply", async () => {
     const client = await connect();
-    const result = await client.callTool({ name: "reply_to_question", arguments: { id: 999, text: "Anyone there?" } });
+    const result = await client.callTool({ name: "reply_to_note", arguments: { id: 999, text: "Anyone there?" } });
     expect(result.isError).toBe(true);
     expect(textOf(result as { content?: unknown })).toContain("does not exist");
     await client.close();
   });
 
-  it("hides addressed questions unless they are asked for", async () => {
+  it("hides addressed notes unless they are asked for", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    const done = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null });
-    storage.addQuestion("acme/atlas", 7, { path: "b.rb", line: null, text: "still open", headSha: null });
-    storage.markQuestionAddressed(done.id, { commitRef: "abc", note: null });
+    const done = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null });
+    storage.addNote("acme/atlas", 7, { path: "b.rb", line: null, text: "still open", headSha: null });
+    storage.markNoteAddressed(done.id, { commitRef: "abc", summary: null });
 
     const client = await connect();
     const openOnly = JSON.parse(textOf((await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
     })) as { content?: unknown })) as {
-      questionCounts: { open: number; addressed: number; resolved: number };
-      questions: unknown[];
+      noteCounts: { open: number; addressed: number; resolved: number };
+      notes: unknown[];
     };
-    expect(openOnly.questions).toHaveLength(1);
-    expect(openOnly.questionCounts).toEqual({ open: 1, addressed: 1, resolved: 0 });
+    expect(openOnly.notes).toHaveLength(1);
+    expect(openOnly.noteCounts).toEqual({ open: 1, addressed: 1, resolved: 0 });
 
     const both = JSON.parse(textOf((await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/thing", includeAddressed: true },
-    })) as { content?: unknown })) as { questions: unknown[] };
-    expect(both.questions).toHaveLength(2);
+    })) as { content?: unknown })) as { notes: unknown[] };
+    expect(both.notes).toHaveLength(2);
     await client.close();
   });
 
-  it("explains when resolved questions are hidden and returns them when asked", async () => {
+  it("explains when resolved notes are hidden and returns them when asked", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    const resolved = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null });
-    storage.markQuestionAddressed(resolved.id, { commitRef: "abc1234", note: "Dropped the retry" });
+    const resolved = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null });
+    storage.markNoteAddressed(resolved.id, { commitRef: "abc1234", summary: "Dropped the retry" });
     storage.putFileState("acme/atlas", 7, {
       checked: true, path: "a.rb", baseHash: "base", headHash: "head",
       baseContent: "before", headContent: "after", machine: "studio",
@@ -144,46 +144,46 @@ describe("MCP endpoint", () => {
 
     const client = await connect();
     const openOnly = JSON.parse(textOf((await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
     })) as { content?: unknown })) as {
-      questionCounts: { open: number; addressed: number; resolved: number };
+      noteCounts: { open: number; addressed: number; resolved: number };
       message: string;
-      questions: unknown[];
+      notes: unknown[];
     };
-    expect(openOnly.questions).toEqual([]);
-    expect(openOnly.questionCounts).toEqual({ open: 0, addressed: 0, resolved: 1 });
-    expect(openOnly.message).toBe("No open questions returned. 1 resolved question is hidden; pass includeResolved: true to retrieve it.");
+    expect(openOnly.notes).toEqual([]);
+    expect(openOnly.noteCounts).toEqual({ open: 0, addressed: 0, resolved: 1 });
+    expect(openOnly.message).toBe("No open notes returned. 1 resolved note is hidden; pass includeResolved: true to retrieve it.");
 
     const withResolved = JSON.parse(textOf((await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/thing", includeResolved: true },
-    })) as { content?: unknown })) as { questions: Array<Record<string, unknown>> };
-    expect(withResolved.questions).toEqual([{
+    })) as { content?: unknown })) as { notes: Array<Record<string, unknown>> };
+    expect(withResolved.notes).toEqual([{
       id: resolved.id, file: "a.rb", line: null, text: "handled", state: "resolved",
-      replies: [], commitRef: "abc1234", note: "Dropped the retry", capturedAtSha: null, lineMayHaveMoved: false,
+      replies: [], commitRef: "abc1234", summary: "Dropped the retry", capturedAtSha: null, lineMayHaveMoved: false,
     }]);
     await client.close();
   });
 
-  it("marks a question addressed, and the state is really in storage", async () => {
+  it("marks a note addressed, and the state is really in storage", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+    const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
 
     const client = await connect();
     await client.callTool({
-      name: "mark_question_addressed",
-      arguments: { id: q.id, commitRef: "abc1234", note: "Dropped the retry" },
+      name: "mark_note_addressed",
+      arguments: { id: q.id, commitRef: "abc1234", summary: "Dropped the retry" },
     });
-    expect(storage.listQuestions("acme/atlas", 7)[0]).toMatchObject({
-      state: "addressed", commitRef: "abc1234", note: "Dropped the retry",
+    expect(storage.listNotes("acme/atlas", 7)[0]).toMatchObject({
+      state: "addressed", commitRef: "abc1234", summary: "Dropped the retry",
     });
     await client.close();
   });
 
-  it("refuses to mark a question that is not open", async () => {
+  it("refuses to mark a note that is not open", async () => {
     const client = await connect();
-    const result = await client.callTool({ name: "mark_question_addressed", arguments: { id: 999 } });
+    const result = await client.callTool({ name: "mark_note_addressed", arguments: { id: 999 } });
     expect(result.isError).toBe(true);
     expect(textOf(result as { content?: unknown })).toContain("not open");
     await client.close();
@@ -192,7 +192,7 @@ describe("MCP endpoint", () => {
   it("says so plainly when the branch was never reviewed in Gander", async () => {
     const client = await connect();
     const result = await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "never-opened" },
     });
     expect(result.isError).toBe(true);
@@ -211,15 +211,15 @@ describe("MCP endpoint", () => {
     });
     const client = await connect();
     const payload = JSON.parse(textOf((await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", prNumber: 7 },
     })) as { content?: unknown })) as { stack: { position: number; size: number; members: unknown[] } };
     expect(payload.stack).toMatchObject({ position: 1, size: 2 });
     await client.close();
   });
 
-  it("names the sibling holding the questions when the agent's own branch has none", async () => {
-    // The reviewer read the backend branch and left a question there; the agent is
+  it("names the sibling holding the notes when the agent's own branch has none", async () => {
+    // The reviewer read the backend branch and left a note there; the agent is
     // standing on the frontend branch of the same stack.
     storage.setPrContext("acme/atlas", 7, {
       headRef: "feat/backend", title: "Backend", headSha: "sha-1", stackId: 99, stackSize: 2, stackPosition: 1,
@@ -227,11 +227,11 @@ describe("MCP endpoint", () => {
     storage.setPrContext("acme/atlas", 8, {
       headRef: "feat/frontend", title: "Frontend", headSha: "sha-2", stackId: 99, stackSize: 2, stackPosition: 2,
     });
-    storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
+    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
 
     const client = await connect();
     const text = textOf((await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/frontend" },
     })) as { content?: unknown });
 
@@ -242,19 +242,19 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
-  it("stays quiet about siblings when the branch has its own questions", async () => {
+  it("stays quiet about siblings when the branch has its own notes", async () => {
     storage.setPrContext("acme/atlas", 7, {
       headRef: "feat/backend", title: "Backend", headSha: "sha-1", stackId: 99, stackSize: 2, stackPosition: 1,
     });
     storage.setPrContext("acme/atlas", 8, {
       headRef: "feat/frontend", title: "Frontend", headSha: "sha-2", stackId: 99, stackSize: 2, stackPosition: 2,
     });
-    storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 1, text: "on backend", headSha: null });
-    storage.addQuestion("acme/atlas", 8, { path: "b.ts", line: 1, text: "on frontend", headSha: null });
+    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 1, text: "on backend", headSha: null });
+    storage.addNote("acme/atlas", 8, { path: "b.ts", line: 1, text: "on frontend", headSha: null });
 
     const client = await connect();
     const text = textOf((await client.callTool({
-      name: "get_review_questions",
+      name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/frontend" },
     })) as { content?: unknown });
     expect(text).toContain("on frontend");
@@ -262,27 +262,27 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
-  it("flags a question whose line predates the commits now on the branch", async () => {
+  it("flags a note whose line predates the commits now on the branch", async () => {
     storage.setPrContext("acme/atlas", 7, {
       headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null,
     });
-    storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "captured at sha-1", headSha: "sha-1" });
+    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "captured at sha-1", headSha: "sha-1" });
 
     const client = await connect();
     const stillCurrent = JSON.parse(textOf((await client.callTool({
-      name: "get_review_questions", arguments: { repo: "acme/atlas", prNumber: 7 },
-    })) as { content?: unknown })) as { questions: Array<{ lineMayHaveMoved: boolean }> };
-    expect(stillCurrent.questions[0]!.lineMayHaveMoved).toBe(false);
+      name: "get_review_notes", arguments: { repo: "acme/atlas", prNumber: 7 },
+    })) as { content?: unknown })) as { notes: Array<{ lineMayHaveMoved: boolean }> };
+    expect(stillCurrent.notes[0]!.lineMayHaveMoved).toBe(false);
 
     // The branch moves: the reviewer's line number is now only where it used to be.
     storage.setPrContext("acme/atlas", 7, {
       headRef: "feat/thing", title: "Feature", headSha: "sha-2", stackId: null, stackSize: null, stackPosition: null,
     });
     const moved = JSON.parse(textOf((await client.callTool({
-      name: "get_review_questions", arguments: { repo: "acme/atlas", prNumber: 7 },
-    })) as { content?: unknown })) as { headSha: string; questions: Array<{ capturedAtSha: string; lineMayHaveMoved: boolean }> };
+      name: "get_review_notes", arguments: { repo: "acme/atlas", prNumber: 7 },
+    })) as { content?: unknown })) as { headSha: string; notes: Array<{ capturedAtSha: string; lineMayHaveMoved: boolean }> };
     expect(moved.headSha).toBe("sha-2");
-    expect(moved.questions[0]).toMatchObject({ capturedAtSha: "sha-1", lineMayHaveMoved: true });
+    expect(moved.notes[0]).toMatchObject({ capturedAtSha: "sha-1", lineMayHaveMoved: true });
     await client.close();
   });
 });

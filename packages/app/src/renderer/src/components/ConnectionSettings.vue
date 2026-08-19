@@ -62,7 +62,7 @@ async function run(action: "test" | "save"): Promise<void> {
     <header class="heading">
       <div>
         <h2 id="connection-settings-title">Connection</h2>
-        <p>The review service holding checkoffs and questions. One service, one token.</p>
+        <p>The review service holding checkoffs and notes. One service, one token.</p>
       </div>
     </header>
 

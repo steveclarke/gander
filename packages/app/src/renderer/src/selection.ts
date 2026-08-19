@@ -1,6 +1,6 @@
 import { ref } from "vue";
 
-export interface QuestionTarget {
+export interface NoteTarget {
   path: string | null;
   line: number | null;
 }
@@ -9,8 +9,8 @@ export interface QuestionTarget {
  * Where the reader's cursor is in the diff, and where they want to go next.
  *
  * DiffPane owns the Monaco instance and is rebuilt whenever the file or tab changes, so
- * the line cannot live in a component that outlives it. Question capture (in App) and the
- * questions drawer both need it, and neither is a parent or child of DiffPane — this small
+ * the line cannot live in a component that outlives it. Note capture (in App) and the
+ * notes drawer both need it, and neither is a parent or child of DiffPane — this small
  * module is the shared ground between them.
  */
 

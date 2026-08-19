@@ -113,14 +113,14 @@ describe("review pipeline", () => {
 
   it("adds a reviewer reply through the real service and keeps it on reopen", async () => {
     await reviewer.openPr("acme/atlas", 1);
-    const withQuestion = await reviewer.addQuestion("acme/atlas", 1, { path: "a.rb", line: 2, text: "Why?" });
-    const id = withQuestion.questions[0]!.id;
+    const withNote = await reviewer.addNote("acme/atlas", 1, { path: "a.rb", line: 2, text: "Why?" });
+    const id = withNote.notes[0]!.id;
 
     const replied = await reviewer.addReviewerReply("acme/atlas", 1, id, "Because the caller retries.");
-    expect(replied.questions[0]).toMatchObject({
+    expect(replied.notes[0]).toMatchObject({
       state: "open", replies: [{ author: "reviewer", text: "Because the caller retries." }],
     });
-    expect((await reviewer.openPr("acme/atlas", 1)).questions[0]?.replies).toHaveLength(1);
+    expect((await reviewer.openPr("acme/atlas", 1)).notes[0]?.replies).toHaveLength(1);
   });
 
   it("setCheckedMany checks a batch from the cached view and persists it", async () => {
@@ -270,10 +270,10 @@ describe("review pipeline", () => {
     const offline = await reviewer.refreshPr("acme/atlas", 1);
     expect(offline).toBe(loaded);
     expect(offline.files.map((file) => file.path)).toEqual(["a.rb", "b.rb"]);
-    await expect(reviewer.addQuestion("acme/atlas", 1, { path: "a.rb", line: 1, text: "Queued?" })).rejects.toThrow(
+    await expect(reviewer.addNote("acme/atlas", 1, { path: "a.rb", line: 1, text: "Queued?" })).rejects.toThrow(
       /not saved and will not be retried/i,
     );
-    expect(offline.questions).toEqual([]);
+    expect(offline.notes).toEqual([]);
 
     storage.putFileState("acme/atlas", 1, {
       checked: true,

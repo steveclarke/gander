@@ -13,27 +13,27 @@ export type Dock = "right" | "bottom";
 const KEY = "gander.layout";
 
 export interface Layout {
-  questionsDock: Dock;
+  notesDock: Dock;
   treeWidth: number;
-  questionsWidth: number;
-  questionsHeight: number;
+  notesWidth: number;
+  notesHeight: number;
 }
 
 const DEFAULTS: Layout = {
-  questionsDock: "right",
+  notesDock: "right",
   treeWidth: 264,
-  questionsWidth: 320,
-  questionsHeight: 260,
+  notesWidth: 320,
+  notesHeight: 260,
 };
 
 export function parseLayout(value: unknown): Layout | null {
   if (
     typeof value !== "object" || value === null
     || Object.keys(value).length !== 4
-    || !("questionsDock" in value) || (value.questionsDock !== "right" && value.questionsDock !== "bottom")
+    || !("notesDock" in value) || (value.notesDock !== "right" && value.notesDock !== "bottom")
     || !("treeWidth" in value) || typeof value.treeWidth !== "number" || !Number.isFinite(value.treeWidth)
-    || !("questionsWidth" in value) || typeof value.questionsWidth !== "number" || !Number.isFinite(value.questionsWidth)
-    || !("questionsHeight" in value) || typeof value.questionsHeight !== "number" || !Number.isFinite(value.questionsHeight)
+    || !("notesWidth" in value) || typeof value.notesWidth !== "number" || !Number.isFinite(value.notesWidth)
+    || !("notesHeight" in value) || typeof value.notesHeight !== "number" || !Number.isFinite(value.notesHeight)
   ) return null;
   return value as Layout;
 }
@@ -50,17 +50,17 @@ function load(): Layout {
 
 const state = load();
 
-export const questionsDock = ref<Dock>(state.questionsDock);
+export const notesDock = ref<Dock>(state.notesDock);
 export const treeWidth = ref(state.treeWidth);
-export const questionsWidth = ref(state.questionsWidth);
-export const questionsHeight = ref(state.questionsHeight);
+export const notesWidth = ref(state.notesWidth);
+export const notesHeight = ref(state.notesHeight);
 
-watch([questionsDock, treeWidth, questionsWidth, questionsHeight], () => {
+watch([notesDock, treeWidth, notesWidth, notesHeight], () => {
   const next: Layout = {
-    questionsDock: questionsDock.value,
+    notesDock: notesDock.value,
     treeWidth: treeWidth.value,
-    questionsWidth: questionsWidth.value,
-    questionsHeight: questionsHeight.value,
+    notesWidth: notesWidth.value,
+    notesHeight: notesHeight.value,
   };
   localStorage.setItem(KEY, JSON.stringify(next));
 });
