@@ -129,7 +129,7 @@ onBeforeUnmount(() => {
 .separator { color: var(--faint-foreground); }
 .worktree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chevron { flex: none; margin-left: 2px; }
-.target-status { -webkit-app-region: no-drag; align-self: center; margin-left: 10px; color: var(--faint-foreground); font-size: 11px; }
+.target-status { -webkit-app-region: no-drag; align-self: center; margin-left: 10px; color: var(--faint-foreground); font: 10px var(--mono); }
 .drag-fill { min-width: 40px; flex: 1; }
 .target-trigger:focus-visible, .picker-row:focus-visible, .open-folder:focus-visible, .repository-action:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .target-picker { -webkit-app-region: no-drag; position: absolute; inset-block-start: 37px; inset-inline-start: var(--target-picker-offset, 0); width: min(420px, calc(100vw - 24px)); max-height: min(620px, calc(100vh - 72px)); overflow: auto; padding: 8px 0; border: 1px solid var(--workbench-border); border-radius: 0 0 var(--radius-lg) var(--radius-lg); background: var(--elevated-background); box-shadow: 0 14px 34px rgba(0, 0, 0, .36); }
