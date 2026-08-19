@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { ChevronDown, FolderGit2, FolderOpen, FolderPlus, GitBranch, Trash2 } from "@lucide/vue";
+import { ChevronDown, FolderGit2, FolderOpen, FolderPlus, GitBranch, GitPullRequest, Trash2 } from "@lucide/vue";
 import type { Store } from "../store.js";
 
 const props = defineProps<{ store: Store; integratedTitleBar: boolean }>();
 const emit = defineEmits<{
   selectRepo: [repoId: string];
   selectWorktree: [path: string];
+  selectPr: [prNumber: number];
   openFolder: [];
   locateRepo: [repoId: string];
   removeRepo: [repoId: string];
@@ -17,6 +18,20 @@ const root = ref<HTMLElement | null>(null);
 const selectedRepo = computed(() => props.store.repos.find((repo) => repo.repoId === props.store.targetRepoId) ?? null);
 const selectedWorktree = computed(() => props.store.worktrees.find((worktree) => worktree.path === props.store.targetWorktreePath) ?? null);
 const repoName = computed(() => selectedRepo.value?.repoId.split("/").at(-1) ?? "Open repository");
+
+/**
+ * The pull request open on each worktree's branch.
+ *
+ * A worktree and a pull request are the same piece of work seen from two sides, and the
+ * picker is where the reviewer already is when they go looking for one. Without this the
+ * branch and its pull request appear unrelated: selecting the branch a pull request is on
+ * changes nothing about the pull request list, which reads as the list being wrong.
+ */
+const prByBranch = computed(() => new Map(props.store.prs.map((pr) => [pr.headRef, pr])));
+/** The pull request being reviewed, when it belongs to the repository the bar names. */
+const openPr = computed(() => props.store.currentRepoId === props.store.targetRepoId
+  ? props.store.view?.pr ?? null
+  : null);
 const worktreeName = computed(() => selectedWorktree.value?.branch
   ?? selectedWorktree.value?.path.split("/").at(-1)
   ?? null);
@@ -24,6 +39,7 @@ const worktreeName = computed(() => selectedWorktree.value?.branch
 function close(): void { open.value = false; }
 function chooseRepo(repoId: string): void { emit("selectRepo", repoId); close(); }
 function chooseWorktree(path: string): void { emit("selectWorktree", path); close(); }
+function choosePr(prNumber: number): void { emit("selectPr", prNumber); close(); }
 function openFolder(): void { emit("openFolder"); close(); }
 function locateRepo(repoId: string): void { emit("locateRepo", repoId); close(); }
 function removeRepo(repoId: string): void { emit("removeRepo", repoId); close(); }
@@ -55,7 +71,12 @@ onBeforeUnmount(() => {
     >
       <FolderGit2 :size="15" />
       <strong>{{ repoName }}</strong>
-      <template v-if="worktreeName">
+      <template v-if="openPr">
+        <span class="separator">/</span>
+        <GitPullRequest :size="14" />
+        <span class="worktree-name">#{{ openPr.number }} {{ openPr.title }}</span>
+      </template>
+      <template v-else-if="worktreeName">
         <span class="separator">/</span>
         <GitBranch :size="14" />
         <span class="worktree-name">{{ worktreeName }}</span>
@@ -85,19 +106,29 @@ onBeforeUnmount(() => {
 
       <section v-if="store.targetRepoId" aria-labelledby="worktrees-heading">
         <h2 id="worktrees-heading">Worktrees</h2>
-        <button
-          v-for="worktree in store.worktrees"
-          :key="worktree.path"
-          class="picker-row worktree-row"
-          :class="{ selected: worktree.path === store.targetWorktreePath }"
-          type="button"
-          :aria-current="worktree.path === store.targetWorktreePath ? 'true' : undefined"
-          @click="chooseWorktree(worktree.path)"
-        >
-          <GitBranch :size="15" />
-          <span>{{ worktree.branch ?? worktree.headSha.slice(0, 8) }}</span>
-          <small>{{ worktree.path }}</small>
-        </button>
+        <div v-for="worktree in store.worktrees" :key="worktree.path" class="row-pair">
+          <button
+            class="picker-row worktree-row"
+            :class="{ selected: worktree.path === store.targetWorktreePath }"
+            type="button"
+            :aria-current="worktree.path === store.targetWorktreePath ? 'true' : undefined"
+            @click="chooseWorktree(worktree.path)"
+          >
+            <GitBranch :size="15" />
+            <span>{{ worktree.branch ?? worktree.headSha.slice(0, 8) }}</span>
+            <small>{{ worktree.path }}</small>
+          </button>
+          <button
+            v-if="worktree.branch && prByBranch.get(worktree.branch)"
+            class="pr-badge"
+            type="button"
+            :title="`Review #${prByBranch.get(worktree.branch)!.number} ${prByBranch.get(worktree.branch)!.title}`"
+            :aria-label="`Review pull request #${prByBranch.get(worktree.branch)!.number} on ${worktree.branch}`"
+            @click="choosePr(prByBranch.get(worktree.branch)!.number)"
+          >
+            <GitPullRequest :size="13" />#{{ prByBranch.get(worktree.branch)!.number }}
+          </button>
+        </div>
         <p v-if="store.worktrees.length === 0" class="picker-empty">No local worktrees are known for this repository.</p>
       </section>
 
@@ -138,6 +169,11 @@ onBeforeUnmount(() => {
 .target-picker h2 { margin: 0; padding: 5px 12px 4px; color: var(--faint-foreground); font-size: 10px; font-weight: 700; letter-spacing: .55px; text-transform: uppercase; }
 .picker-row, .open-folder, .repository-action { width: 100%; display: grid; grid-template-columns: 17px minmax(90px, auto) minmax(0, 1fr); align-items: center; gap: 8px; min-height: 30px; padding: 5px 12px; border: 0; background: none; color: var(--muted-foreground); text-align: left; font: inherit; cursor: pointer; }
 .picker-row.selected { background: var(--selection-background); color: var(--workbench-foreground); }
+.row-pair { display: flex; align-items: stretch; }
+.row-pair .picker-row { flex: 1; min-width: 0; }
+.pr-badge { flex: none; display: flex; align-items: center; gap: 4px; margin-right: 8px; padding: 0 7px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--elevated-background); color: var(--muted-foreground); font: 11px var(--mono); cursor: pointer; }
+.pr-badge:hover { border-color: var(--accent); color: var(--accent); }
+.pr-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .picker-row:hover, .open-folder:hover, .repository-action:hover { background: var(--hover-background); color: var(--workbench-foreground); }
 .picker-row small { overflow: hidden; color: var(--faint-foreground); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .picker-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

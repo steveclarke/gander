@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { RefreshCw } from "lucide-vue-next";
+import { RefreshCw } from "@lucide/vue";
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import type { EffectiveTreeTypography } from "../../../settings.js";
 import type { Store } from "../store.js";

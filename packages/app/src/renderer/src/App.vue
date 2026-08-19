@@ -432,6 +432,7 @@ onBeforeUnmount(() => {
         :integrated-title-bar="integratedTitleBar"
         @select-repo="selectTargetRepo"
         @select-worktree="selectTargetWorktree"
+        @select-pr="openPr"
         @open-folder="chooseRepo()"
         @locate-repo="chooseRepo($event)"
         @remove-repo="repoPendingRemoval = $event"
