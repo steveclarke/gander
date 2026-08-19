@@ -194,8 +194,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 .cb.on { border-color: var(--success); color: var(--success); }
 .cb.part { border-color: var(--success); color: var(--success); }
 .tnode.checked .fname { color: var(--faint-foreground); }
-/* The cursor is where the keyboard is, which is not always the file on screen. */
-.tnode.cur { box-shadow: inset 2px 0 0 var(--accent); }
+
 .note-mark { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); flex: none; }
 .note-count { font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }
 .delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; }
