@@ -2,6 +2,9 @@ import type { NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gan
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
 import type { ConnectionCheck } from "./main/connection.js";
+import type { ImagePreview } from "./image-preview.js";
+
+export type { ImagePreview, ImageSide } from "./image-preview.js";
 
 export type WindowStyle = "native-titlebar" | "integrated-titlebar";
 export const WINDOW_STYLE_ARGUMENT = "--gander-window-style=";
@@ -51,6 +54,7 @@ export interface GanderApi {
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
+  imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
   addQuestion(repoId: string, prNumber: number, input: Omit<NewQuestion, "headSha">): Promise<PrView>;
   addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<PrView>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;

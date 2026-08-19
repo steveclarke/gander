@@ -73,6 +73,7 @@ export function createGanderApi(
     setCheckedMany: (repoId, prNumber, paths, checked) => call("setCheckedMany", repoId, prNumber, paths, checked),
     refreshPr: (repoId, prNumber) => call("refreshPr", repoId, prNumber),
     reviewedSnapshot: (repoId, prNumber, path) => call("reviewedSnapshot", repoId, prNumber, path),
+    imagePreview: (repoId, prNumber, path) => call("imagePreview", repoId, prNumber, path),
     addQuestion: (repoId, prNumber, input) => call("addQuestion", repoId, prNumber, input),
     addReviewerReply: (repoId, prNumber, id, text) => call("addReviewerReply", repoId, prNumber, id, text),
     deleteQuestion: (repoId, prNumber, id) => call("deleteQuestion", repoId, prNumber, id),

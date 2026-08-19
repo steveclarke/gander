@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import * as monaco from "monaco-editor";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { languageForPath } from "../languages.js";
 import { setupMonacoWorkers } from "../monaco.js";
 import { codeEditorOptions, diffEditorOptions, editorFontOptions } from "../editor-options.js";
@@ -9,6 +9,8 @@ import type { EditorSettings } from "../../../settings.js";
 import { currentLine, pendingReveal } from "../selection.js";
 import type { QuestionTarget } from "../selection.js";
 import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
+import ImageDiff from "./ImageDiff.vue";
+import type { ImagePreview } from "../../../api.js";
 
 const props = defineProps<{ store: Store; editorSettings: EditorSettings }>();
 const emit = defineEmits<{ addQuestion: [target: QuestionTarget] }>();
@@ -19,6 +21,10 @@ const view = ref<"diff" | "full" | "since">("diff");
 // round trip to the service and only the delta tab needs it.
 const snapshot = ref<string | null>(null);
 const snapshotFor = ref<string | null>(null);
+const imagePreview = shallowRef<ImagePreview | null>(null);
+const imageLoading = shallowRef(false);
+const imageError = shallowRef<string | null>(null);
+let imageRequest = 0;
 
 // Only offered once the file has actually moved since it was reviewed. Before that
 // the tab would render an empty diff and mean nothing.
@@ -48,6 +54,10 @@ const baseRef = computed(() => props.store.view?.pr.baseRef ?? "the base branch"
 const baseBinary = computed(() => current.value !== null && current.value.baseContent === null && current.value.baseHash !== null);
 const headBinary = computed(() => current.value !== null && current.value.headContent === null && current.value.headHash !== null);
 const isBinary = computed(() => baseBinary.value || headBinary.value);
+const imageKey = computed(() => {
+  const file = current.value;
+  return file && isBinary.value ? `${file.path}#${file.baseHash ?? ""}#${file.headHash ?? ""}` : null;
+});
 
 /** The editor holding the head revision: the diff editor's right-hand side, or the full file. */
 function headEditor(): monaco.editor.ICodeEditor | null {
@@ -186,6 +196,11 @@ const renderKey = computed(() => {
 watch([() => current.value?.path, view], async ([path]) => {
   if (view.value !== "since" || !path) return;
   if (snapshotFor.value === path) return;
+  if (isBinary.value) {
+    snapshot.value = null;
+    snapshotFor.value = path;
+    return;
+  }
   snapshot.value = await props.store.reviewedSnapshot(path);
   snapshotFor.value = path;
 }, { immediate: true });
@@ -193,6 +208,22 @@ watch([() => current.value?.path, view], async ([path]) => {
 // A file that has not moved since review has nothing to show here; fall back rather
 // than leave the reader on an empty tab after switching files.
 watch(canShowDelta, (can) => { if (!can && view.value === "since") view.value = "diff"; });
+
+watch(imageKey, async (key) => {
+  const request = ++imageRequest;
+  imagePreview.value = null;
+  imageError.value = null;
+  imageLoading.value = key !== null;
+  if (key === null || current.value === null) return;
+  try {
+    const preview = await props.store.imagePreview(current.value.path);
+    if (request === imageRequest) imagePreview.value = preview;
+  } catch (err) {
+    if (request === imageRequest) imageError.value = (err as Error).message;
+  } finally {
+    if (request === imageRequest) imageLoading.value = false;
+  }
+}, { immediate: true });
 
 onMounted(() => {
   setupMonacoWorkers();
@@ -273,7 +304,17 @@ onBeforeUnmount(dispose);
       <TriangleAlert :size="14" />
       <span>Changed since your review — un-checked automatically. Re-review and mark again.</span>
     </div>
-    <div v-if="isBinary" class="binary-note">Binary file — diff cannot be displayed.</div>
+    <div v-if="isBinary && imageLoading" class="binary-note">Loading image preview…</div>
+    <div v-else-if="isBinary && imageError" class="binary-note" role="alert">Image preview failed: {{ imageError }}</div>
+    <ImageDiff
+      v-else-if="isBinary && imagePreview"
+      :preview="imagePreview"
+      :filename="baseName"
+      :base-label="baseRef"
+      head-label="Head"
+      :mode="view"
+    />
+    <div v-else-if="isBinary" class="binary-note">Binary file — diff cannot be displayed.</div>
     <div v-else ref="host" class="editor" />
   </section>
 </template>

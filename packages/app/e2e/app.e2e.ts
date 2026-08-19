@@ -3,7 +3,7 @@ import { connect } from "node:net";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { $, browser, expect } from "@wdio/globals";
+import { $, $$, browser, expect } from "@wdio/globals";
 import "@wdio/electron-service";
 
 const run = promisify(execFile);
@@ -394,6 +394,29 @@ describe("Gander end to end", () => {
     )).toBe(true);
     await $("button[aria-label='Questions']").click();
     await expect($(".reply .message-text")).toHaveText("Because both callers share this path.");
+  });
+
+  it("renders both sides of a changed image from bounded blob URLs", async () => {
+    await registerAndSelect(requiredEnv("GANDER_E2E_IMAGES_URL"), "images");
+    await openPullRequest("Preview changed images");
+    await treeRow("logo.png").click();
+
+    await $(".image-diff").waitForDisplayed();
+    await browser.waitUntil(async () => browser.execute(() => {
+      const images = [...document.querySelectorAll<HTMLImageElement>(".image-diff img")];
+      return images.length === 2 && images.every((image) => image.complete && image.naturalWidth > 0);
+    }), { timeoutMsg: "both base and head image blobs did not decode" });
+
+    expect(await $$(".image-diff img")).toHaveLength(2);
+    expect(await browser.execute(() => [...document.querySelectorAll<HTMLImageElement>(".image-diff img")]
+      .map((image) => ({ src: image.src, width: image.naturalWidth, height: image.naturalHeight }))
+    )).toEqual([
+      expect.objectContaining({ src: expect.stringMatching(/^blob:/), width: expect.any(Number), height: expect.any(Number) }),
+      expect.objectContaining({ src: expect.stringMatching(/^blob:/), width: expect.any(Number), height: expect.any(Number) }),
+    ]);
+    await expect($("button=Actual size")).toHaveAttribute("aria-pressed", "false");
+    await $("button=Actual size").click();
+    await expect($("button=Actual size")).toHaveAttribute("aria-pressed", "true");
   });
 
   it("shows the overflowing file-tree scrollbar only while the tree is hovered", async () => {

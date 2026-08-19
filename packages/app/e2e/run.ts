@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -23,8 +23,13 @@ interface RepoFixture {
   headSha: string;
 }
 
-async function repoFixture(repoId: string, title: string, featureFiles: Record<string, string> = {}): Promise<RepoFixture> {
-  const fixture = await makeFixtureRepo(featureFiles);
+async function repoFixture(
+  repoId: string,
+  title: string,
+  featureFiles: Record<string, string | Uint8Array> = {},
+  baseFiles: Record<string, string | Uint8Array> = {},
+): Promise<RepoFixture> {
+  const fixture = await makeFixtureRepo(featureFiles, baseFiles);
   return {
     repoId,
     url: `https://github.com/${repoId}`,
@@ -41,7 +46,9 @@ async function main(): Promise<void> {
   const databasePath = join(root, "gander.db");
   const userDataPath = join(root, "user-data");
   const raceMarkerPath = join(root, "concurrent-race-requests");
-  const [persistence, race, launcher, icons, scrollbar] = await Promise.all([
+  const baseImage = readFileSync(join(import.meta.dirname, "../resources/icon.png"));
+  const headImage = readFileSync(join(import.meta.dirname, "../resources/icon-dev.png"));
+  const [persistence, race, launcher, icons, scrollbar, images] = await Promise.all([
     repoFixture("acme/persistence", "Persist reviewed files"),
     repoFixture("acme/race", "Open without corrupting the clone"),
     repoFixture("acme/launcher", "Open from the command line"),
@@ -63,8 +70,14 @@ async function main(): Promise<void> {
         `export const value${index + 1} = ${index + 1};\n`,
       ])),
     ),
+    repoFixture(
+      "acme/images",
+      "Preview changed images",
+      { "assets/logo.png": headImage },
+      { "assets/logo.png": baseImage },
+    ),
   ]);
-  const fixtures = [persistence, race, launcher, icons, scrollbar];
+  const fixtures = [persistence, race, launcher, icons, scrollbar, images];
   const storage = openStorage(databasePath);
   const service = buildServer({ storage, token: SERVICE_TOKEN, version: "e2e" });
   const github = Fastify({ logger: false });
@@ -153,6 +166,7 @@ async function main(): Promise<void> {
       GANDER_E2E_LAUNCHER_REPO: launcher.repoId,
       GANDER_E2E_ICONS_URL: icons.url,
       GANDER_E2E_SCROLLBAR_URL: scrollbar.url,
+      GANDER_E2E_IMAGES_URL: images.url,
       // Where the app listens with no allocated socket in the environment: beside the
       // suite's own user data, so this run cannot reach a development app.
       GANDER_E2E_APP_SOCKET: join(userDataPath, "app.sock"),

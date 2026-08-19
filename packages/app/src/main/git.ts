@@ -1,9 +1,10 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { FileStatus } from "@gander/shared";
+import { imageMediaType, MAX_IMAGE_BYTES, type ImageSide } from "../image-preview.js";
 
 const FILE_STATUSES: readonly FileStatus[] = ["A", "M", "D", "R"];
 
@@ -46,7 +47,41 @@ export interface GitEngine {
   mergeBase(cloneDir: string, a: string, b: string): Promise<string>;
   diffFiles(cloneDir: string, base: string, head: string): Promise<Array<{ path: string; status: FileStatus }>>;
   showFile(cloneDir: string, rev: string, path: string): Promise<ShowFileResult>;
+  showImage(cloneDir: string, rev: string, path: string): Promise<ImageSide>;
   resolveRef(cloneDir: string, ref: string): Promise<string>;
+}
+
+async function gitPrefix(cloneDir: string, rev: string, path: string, length: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const args = ["cat-file", "blob", `${rev}:${path}`];
+    const child = spawn("git", ["-C", cloneDir, ...args], { env: GIT_ENV, stdio: ["ignore", "pipe", "pipe"] });
+    const chunks: Buffer[] = [];
+    const errors: Buffer[] = [];
+    let byteCount = 0;
+    let enough = false;
+    const timer = setTimeout(() => child.kill(), DEFAULT_TIMEOUT_MS);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (enough) return;
+      const remaining = length - byteCount;
+      chunks.push(chunk.subarray(0, remaining));
+      byteCount += Math.min(chunk.length, remaining);
+      if (byteCount >= length) {
+        enough = true;
+        child.kill();
+      }
+    });
+    child.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      if (enough || code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`git ${args.join(" ")} failed: ${Buffer.concat(errors).toString().trim() || `exited ${code ?? signal}`}`));
+    });
+  });
 }
 
 function describeGitError(args: string[], err: unknown, timeoutMs: number): Error {
@@ -165,9 +200,31 @@ export function createGitEngine(clonesRoot: string): GitEngine {
       // NUL byte in the content is the standard cheap binary heuristic (same one git itself
       // uses internally). Decoding a binary blob as UTF-8 would mangle it into U+FFFD replacement
       // characters that then get hashed and stored as the "reviewed snapshot" — nonsense.
-      const binary = buf.includes(0);
+      // Some valid image encodings can avoid a NUL in small files. Treat a recognized
+      // image signature as binary too, so its bytes are never decoded or snapshotted as text.
+      const binary = buf.includes(0) || imageMediaType(buf) !== null;
       if (binary) return { content: null, hash, binary: true };
       return { content: buf.toString("utf8"), hash, binary: false };
+    },
+
+    async showImage(cloneDir, rev, path) {
+      const sizeText = await git(cloneDir, ["cat-file", "-s", `${rev}:${path}`]);
+      const size = Number.parseInt(sizeText.trim(), 10);
+      if (!Number.isSafeInteger(size) || size < 0) throw new Error(`git returned an invalid blob size for ${path}`);
+
+      if (size > MAX_IMAGE_BYTES) {
+        // Read only enough bytes to identify the format. Large ordinary binaries retain
+        // the generic fallback and large images are rejected without crossing IPC.
+        const mediaType = imageMediaType(await gitPrefix(cloneDir, rev, path, 32));
+        return mediaType === null
+          ? { kind: "unsupported", size }
+          : { kind: "too-large", size, limit: MAX_IMAGE_BYTES };
+      }
+
+      const bytes = await gitBuffer(cloneDir, ["show", `${rev}:${path}`]);
+      const mediaType = imageMediaType(bytes);
+      if (mediaType === null) return { kind: "unsupported", size };
+      return { kind: "image", mediaType, size, bytes };
     },
 
     async resolveRef(cloneDir, ref) {

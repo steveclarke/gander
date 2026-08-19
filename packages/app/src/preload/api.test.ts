@@ -55,6 +55,14 @@ describe("preload API", () => {
     expect(invoke).toHaveBeenLastCalledWith("gander:addReviewerReply", "acme/atlas", 7, 12, "A reviewer reply");
   });
 
+  it("requests an image preview only through its explicit IPC channel", async () => {
+    const invoke = vi.fn(async () => ({}));
+    const api = createGanderApi(invoke, vi.fn());
+
+    await api.imagePreview("acme/atlas", 7, "assets/logo.png");
+    expect(invoke).toHaveBeenLastCalledWith("gander:imagePreview", "acme/atlas", 7, "assets/logo.png");
+  });
+
   it("routes launch targets and subscribes to later open-target events", async () => {
     const invoke = vi.fn(async () => ({ repoId: "acme/atlas", prNumber: 4 }));
     const cleanup = vi.fn();
