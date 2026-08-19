@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Launcher } from "@wdio/cli";
+import { SERVICE_VERSION } from "@gander/shared";
 import Fastify from "fastify";
 import { buildServer } from "../../service/src/server.js";
 import { openStorage } from "../../service/src/storage.js";
@@ -79,7 +80,7 @@ async function main(): Promise<void> {
   ]);
   const fixtures = [persistence, race, launcher, icons, scrollbar, images];
   const storage = openStorage(databasePath);
-  const service = buildServer({ storage, token: SERVICE_TOKEN, version: "e2e" });
+  const service = buildServer({ storage, token: SERVICE_TOKEN, version: SERVICE_VERSION });
   const github = Fastify({ logger: false });
 
   let releaseRaceRequests: (() => void) | undefined;
