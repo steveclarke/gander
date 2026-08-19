@@ -558,7 +558,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+.app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
 .top-stack { min-width: 0; }
 .error-banner { display: flex; align-items: center; gap: 10px; background: var(--danger-background); color: var(--danger); padding: 8px 14px; font-size: 12px; border-bottom: 1px solid var(--workbench-border); }
 .error-banner span { flex: 1; }
