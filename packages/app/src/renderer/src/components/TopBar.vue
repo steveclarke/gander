@@ -224,7 +224,12 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
     <ReviewingList v-else :prs="store.prs" @select="pickPr" />
     <div class="sw-h local-heading">LOCAL WORKTREES</div>
     <div v-if="store.worktrees.length === 0" class="sw-empty">Add a local checkout to browse its worktrees</div>
-    <LocalWorktreeList v-else :worktrees="store.worktrees" @select="pickWorktree" />
+    <LocalWorktreeList
+      v-else
+      :worktrees="store.worktrees"
+      :selected-path="store.localView?.worktree.path ?? null"
+      @select="pickWorktree"
+    />
   </SwitcherDropdown>
 
   <RepositoryPicker :open="repositoryPickerOpen" :store="store" @close="repositoryPickerOpen = false" />
