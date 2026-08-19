@@ -10,8 +10,7 @@ export type Command =
   | "previous-file"
   | "first-file"
   | "last-file"
-  | "collapse"
-  | "expand"
+  | "toggle-directory"
   | "dismiss"
   | "toggle-checked"
   | "mark-and-advance"
@@ -41,8 +40,7 @@ export const BINDINGS: Binding[] = [
   { command: "previous-file", keys: ["k", "ArrowUp"], label: "k / ↑", description: "Previous row", group: "Move" },
   { command: "first-file", keys: ["Home"], label: "Home", description: "First row", group: "Move" },
   { command: "last-file", keys: ["End"], label: "End", description: "Last row", group: "Move" },
-  { command: "collapse", keys: ["h", "ArrowLeft"], label: "h / ←", description: "Close the directory, or step out to it", group: "Move" },
-  { command: "expand", keys: ["l", "ArrowRight", "o"], label: "l / → / o", description: "Open the directory", group: "Move" },
+  { command: "toggle-directory", keys: ["o"], label: "o", description: "Open or close the directory", group: "Move" },
   { command: "dismiss", keys: ["Escape"], label: "Esc", description: "Close what is open on top", group: "Move" },
 
   { command: "toggle-checked", keys: ["m", " "], label: "m / Space", description: "Mark or unmark this file, or the whole directory", group: "Review" },

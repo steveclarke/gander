@@ -11,7 +11,7 @@ import { currentLine } from "./selection.js";
 import type { NoteTarget } from "./selection.js";
 import type { PrFile } from "@gander/shared";
 import { bindingFor, type Command } from "./keymap.js";
-import { collapsedDirs, cursor, edge, filesAt, nextUnmarked, parentOf, rowAt, step } from "./tree-nav.js";
+import { cursor, edge, filesAt, nextUnmarked, rowAt, step, toggleCollapsed } from "./tree-nav.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -265,17 +265,8 @@ function runCommand(command: Command): boolean {
     case "first-file":
     case "last-file":
       return moveTo(edge(files, command === "first-file" ? "first" : "last"));
-    case "collapse": {
-      // On an open directory this closes it; anywhere else it steps out to the directory
-      // that contains the row, which is how an explorer's left arrow behaves.
-      if (at !== null && rowAt(files, at)?.type === "dir" && !collapsedDirs.has(at)) {
-        collapsedDirs.add(at);
-        return true;
-      }
-      return moveTo(at === null ? null : parentOf(files, at));
-    }
-    case "expand": {
-      if (at !== null && rowAt(files, at)?.type === "dir") collapsedDirs.delete(at);
+    case "toggle-directory": {
+      if (at !== null && rowAt(files, at)?.type === "dir") toggleCollapsed(at);
       return true;
     }
     case "dismiss": {
