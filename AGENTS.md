@@ -28,6 +28,11 @@ contract** — a route added or removed, a field the app comes to rely on. Leavi
 alone lets a stale service answer "the version you wanted", and the mismatch surfaces
 later as a 404 in the middle of a review.
 
+`packages/service/contract.json` records that contract — routes, payload schemas, MCP
+tools — and a test compares it against a running server, so a change fails until the
+version moves. After changing the contract deliberately: bump `SERVICE_VERSION`, then
+run `bin/contract-snapshot`. It refuses while the version is unchanged.
+
 **The repo is public.** No client names, private repo names, or real PR numbers
 in code, comments, commits, or issues.
 
@@ -46,6 +51,7 @@ in code, comments, commits, or issues.
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Repair a config the settings schema has outgrown | `bin/fix-config` |
 | Update the service on its host | `bin/deploy` |
+| Re-record the contract after changing it | `bin/contract-snapshot` |
 | Build an unsigned app | `pnpm --filter @gander/app run dist:unsigned` |
 | Isolated working copy | `bin/worktree add <name>` |
 | Check this worktree's MCP bridge | `bin/mcp check` |
