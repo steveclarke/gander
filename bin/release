@@ -46,9 +46,11 @@ git diff --cached --quiet || git commit -m "Release v${VERSION}"
 git tag "$TAG"
 git push origin master --tags
 
-# Created before the build so the Linux workflow, which triggers on the release,
-# has somewhere to upload to.
-gh release create "$TAG" --title "Gander v${VERSION}" --notes "Gander v${VERSION}"
+# A draft, and published only once the assets are on it: a published release with no
+# latest-mac.yml is what every installed app's updater checks, and it answers 404 for
+# as long as the build and notarization take. The Linux workflow triggers on the
+# release being published, which a draft becoming public also counts as.
+gh release create "$TAG" --draft --title "Gander v${VERSION}" --notes "Gander v${VERSION}"
 
 echo "==> Building, signing, and notarizing"
 # Emptied first: the upload below globs dist/, and artifacts left by an earlier version
@@ -72,6 +74,9 @@ bin/render-homebrew-cask \
 # renamed default here would fail the release after it had already been tagged.
 cd packages/app
 gh release upload "$TAG" dist/*.dmg dist/*.zip dist/*.blockmap dist/latest-mac.yml dist/gander.rb
+cd ..
+
+gh release edit "$TAG" --draft=false
 
 echo "==> Published https://github.com/steveclarke/gander/releases/tag/${TAG}"
 echo "    The Linux AppImage follows from CI."
