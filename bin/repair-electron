@@ -7,8 +7,8 @@ set -euo pipefail
 # `Error: Electron uninstall` from bin/dev or a failed Playwright launch from E2E.
 #
 # This runs from the root postinstall hook, so every pnpm install repairs itself
-# rather than only the ones that go through bin/setup. It is one --version call
-# when the binaries are healthy.
+# rather than only the ones that go through bin/setup. It checks the files
+# Electron's installer records when the binaries are healthy.
 #
 # Delete this script, the postinstall hook, and the AGENTS.md note when Electron
 # is upgraded past the broken extract-zip. See issue #81.
@@ -24,7 +24,11 @@ electron_dir="packages/app/node_modules/electron"
 [[ -d "$electron_dir" ]] || exit 0
 
 electron_works() {
-  packages/app/node_modules/.bin/electron --version >/dev/null 2>&1
+  local executable_path
+
+  [[ -s "$electron_dir/path.txt" && -s "$electron_dir/dist/version" ]] || return 1
+  IFS= read -r executable_path < "$electron_dir/path.txt"
+  [[ -n "$executable_path" && -x "$electron_dir/dist/$executable_path" ]]
 }
 
 electron_works && exit 0
