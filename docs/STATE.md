@@ -67,8 +67,11 @@ development.
 ## Still open
 
 - Local branch/worktree viewer (stateless, no review state)
-- Packaging: signing, notarization, and the Homebrew cask. Gander runs only from
-  a development checkout.
+
+Packaged macOS and Linux releases are published on GitHub. Packaged builds check
+those release manifests for updates and ask before restarting to install. The
+repository also generates a checksummed Homebrew cask handoff; publishing and
+verifying the separate personal tap remains a manual release task.
 
 Interface work and the agent reply channel are tracked as GitHub issues.
 
