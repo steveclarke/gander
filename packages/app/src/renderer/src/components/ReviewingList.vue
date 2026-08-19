@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { PrSummary } from "@gander/shared";
+import type { PrListItem } from "@gander/shared";
 import { Layers3 } from "lucide-vue-next";
 import StackPosition from "./StackPosition.vue";
+import ReviewProgress from "./ReviewProgress.vue";
 
-const props = defineProps<{ prs: PrSummary[]; selectedPrNumber?: number | null }>();
+const props = defineProps<{ prs: PrListItem[]; selectedPrNumber?: number | null }>();
 const emit = defineEmits<{ select: [prNumber: number] }>();
 
 type ReviewGroup =
-  | { kind: "standalone"; pr: PrSummary }
-  | { kind: "stack"; id: number; size: number; prs: PrSummary[] };
+  | { kind: "standalone"; pr: PrListItem }
+  | { kind: "stack"; id: number; size: number; prs: PrListItem[] };
 
 const groups = computed<ReviewGroup[]>(() => {
   const seenStacks = new Set<number>();
@@ -74,6 +75,7 @@ function select(prNumber: number): void {
           <span class="dot" :class="pr.draft ? 'draft' : 'open'" />
           <span class="num">#{{ pr.number }}</span>
           <span class="nm">{{ pr.title }}</span>
+          <ReviewProgress v-if="pr.reviewProgress" :progress="pr.reviewProgress" />
         </div>
       </div>
       <div
@@ -88,6 +90,7 @@ function select(prNumber: number): void {
         <span class="dot" :class="group.pr.draft ? 'draft' : 'open'" />
         <span class="num">#{{ group.pr.number }}</span>
         <span class="nm">{{ group.pr.title }}</span>
+        <ReviewProgress v-if="group.pr.reviewProgress" :progress="group.pr.reviewProgress" />
       </div>
     </template>
   </div>

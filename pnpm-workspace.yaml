@@ -1,5 +1,10 @@
 packages:
   - "packages/*"
+# electron-vite and electron-updater resolve Electron from their installed package
+# locations. Make the app's Electron dependency available at the workspace root
+# instead of relying on an incidental transitive hoist.
+publicHoistPattern:
+  - electron
 allowBuilds:
   '@modelcontextprotocol/inspector': true
   better-sqlite3: true

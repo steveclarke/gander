@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "electron";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { repoIdFromUrl, type LocalView, type OpenTarget, type RepoEntry } from "@gander/shared";
 import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
 import { checkConnection } from "./connection.js";
@@ -16,6 +17,7 @@ import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.j
 import { linkedWorktreeLabel } from "./development-context.js";
 import { createZoomController, type ZoomController } from "./zoom-controller.js";
 import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
+import { loadUpdateController, supportsInPlaceUpdates, type UpdateController } from "./updates.js";
 
 let zoomController: ZoomController;
 const localWatchers = new Map<number, LocalViewWatcher>();
@@ -141,8 +143,8 @@ async function bootstrap(): Promise<GanderConfig> {
     localOpenGenerations.set(event.sender.id, (localOpenGenerations.get(event.sender.id) ?? 0) + 1);
     closeLocalView(event.sender.id);
   });
-  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, await githubToken()));
-  ipcMain.handle("gander:serviceHealthy", async () => service.healthy());
+  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => reviewer.listPrsWithProgress(repoId));
+  ipcMain.handle("gander:serviceStatus", async () => service.status());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
@@ -214,7 +216,7 @@ async function bootstrap(): Promise<GanderConfig> {
   return cfg;
 }
 
-function installMenu(): void {
+function installMenu(updates: UpdateController | null): void {
   const openSettings = (): void => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     win?.webContents.send("gander:openSettings");
@@ -223,8 +225,46 @@ function installMenu(): void {
     openSettings,
     setZoom: zoomController.set,
     currentZoom: zoomController.current,
+    checkForUpdates: updates?.checkManually,
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+async function initializeUpdates(): Promise<UpdateController | null> {
+  const updateConfigExists = existsSync(join(process.resourcesPath, "app-update.yml"));
+  if (!supportsInPlaceUpdates(app.isPackaged, process.platform, process.env.APPIMAGE, updateConfigExists)) return null;
+
+  try {
+    return await loadUpdateController({
+      currentVersion: () => app.getVersion(),
+      showUpToDate: async (version) => {
+        await dialog.showMessageBox({
+          type: "info",
+          title: "Gander is up to date",
+          message: `Gander ${version} is the latest version.`,
+        });
+      },
+      confirmRestart: async (version) => {
+        const result = await dialog.showMessageBox({
+          type: "info",
+          title: "Gander update ready",
+          message: `Gander ${version} has been downloaded.`,
+          detail: "Restart Gander now to install it, or choose Later to keep reviewing.",
+          buttons: ["Restart and Install", "Later"],
+          defaultId: 0,
+          cancelId: 1,
+          noLink: true,
+        });
+        return result.response === 0;
+      },
+      showError: (message) => dialog.showErrorBox("Gander update failed", message),
+    });
+  } catch (error) {
+    // Updating is release infrastructure, not a condition for reviewing. Keep the
+    // packaged app usable while making a broken updater visible.
+    dialog.showErrorBox("Gander update failed", (error as Error).message);
+    return null;
+  }
 }
 
 async function createWindow(cfg: GanderConfig): Promise<void> {
@@ -316,8 +356,10 @@ app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  installMenu();
   await createWindow(cfg);
+  const updates = await initializeUpdates();
+  installMenu(updates);
+  updates?.checkAtStartup();
 
   try {
     const stop = await startOpenServer({ socketPath: socketPath(), onTarget: deliver });

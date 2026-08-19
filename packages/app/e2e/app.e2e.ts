@@ -388,6 +388,10 @@ describe("Gander end to end", () => {
     await checkbox.click();
     await expect(checkbox).toHaveAttribute("aria-checked", "true");
     await expect($(".progress")).toHaveText("1/2 reviewed");
+    await $(".seg-review").click();
+    const currentReviewRow = await $(`//div[@role='option'][contains(normalize-space(.), 'Persist reviewed files')]`);
+    await expect(currentReviewRow.$(".review-progress")).toHaveText("1/2 reviewed");
+    await browser.keys("Escape");
 
     await browser.reloadSession();
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LocalView, PrView } from "@gander/shared";
+import type { LocalView, PrListItem, PrView } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 import { createStore } from "./store.js";
 import { DEFAULT_APP_SETTINGS } from "../../settings.js";
@@ -35,19 +35,19 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     addRepo: async (url) => ({ repoId: "acme/new", url }),
     chooseLocalRepo: async () => null,
     listWorktrees: async () => [],
-    listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" }],
+    listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b", reviewProgress: null }],
     openPr: async () => prView(),
-    setChecked: async (_r, _n, path) => prView([path]),
+    setChecked: async (_r, _n, path, checked) => prView(checked ? [path] : []),
     setCheckedMany: async (_r, _n, paths) => prView(paths),
     refreshPr: async () => prView(),
     lastReview: async () => null,
     initialTarget: async () => null,
     getConnection: async () => ({ url: "http://service", token: "t", githubToken: "", fromEnvironment: false }),
     setGithubToken: async () => ({ ok: true as const, login: "octocat" }),
-    testConnection: async () => ({ ok: true, version: "test" }),
-    setConnection: async () => ({ ok: true, version: "test" }),
+    testConnection: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
+    setConnection: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
     onOpenTarget: () => () => {},
-    serviceHealthy: async () => true,
+    serviceStatus: async () => ({ state: "connected", serviceVersion: "0.1.0", supportedVersion: "0.1.0" }),
     reviewedSnapshot: async () => null,
     imagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
     openLocal: async () => { throw new Error("no local fixture"); },
@@ -117,6 +117,9 @@ describe("store", () => {
     expect(store.progress()).toEqual({ done: 0, total: 2 });
     await store.setChecked("a.rb", true);
     expect(store.progress()).toEqual({ done: 1, total: 2 });
+    expect(store.prs[0]?.reviewProgress).toEqual({ done: 1, total: 2 });
+    await store.setChecked("a.rb", false);
+    expect(store.prs[0]?.reviewProgress).toEqual({ done: 0, total: 2 });
   });
 
   it("loads GitHub repositories separately from registered repositories", async () => {
@@ -198,15 +201,15 @@ describe("store", () => {
   });
 
   it("does not let a slow repository load replace the newer navigator selection", async () => {
-    let resolveFirst!: (prs: PrView["pr"][]) => void;
-    const first = new Promise<PrView["pr"][]>((resolve) => { resolveFirst = resolve; });
+    let resolveFirst!: (prs: PrListItem[]) => void;
+    const first = new Promise<PrListItem[]>((resolve) => { resolveFirst = resolve; });
     const store = createStore(fakeApi({
-      listPrs: async (repoId) => repoId === "acme/first" ? first : [{ ...prView().pr, number: 2, title: "Second" }],
+      listPrs: async (repoId) => repoId === "acme/first" ? first : [{ ...prView().pr, number: 2, title: "Second", reviewProgress: null }],
     }));
 
     const slow = store.selectRepo("acme/first");
     await store.selectRepo("acme/second");
-    resolveFirst([{ ...prView().pr, title: "First" }]);
+    resolveFirst([{ ...prView().pr, title: "First", reviewProgress: null }]);
     await slow;
 
     expect(store.navigatorRepoId).toBe("acme/second");
@@ -427,10 +430,28 @@ describe("store", () => {
       expect(store.lastFetchAt).not.toBeNull();
     });
 
-    it("reports the service as unreachable when the health check fails", async () => {
-      const store = createStore(fakeApi({ serviceHealthy: async () => false }));
+    it("records the service handshake state", async () => {
+      const store = createStore(fakeApi({ serviceStatus: async () => ({ state: "unreachable", reason: "network down" }) }));
       await store.checkService();
-      expect(store.serviceReachable).toBe(false);
+      expect(store.serviceStatus).toEqual({ state: "unreachable", reason: "network down" });
+    });
+
+    it("shows cached mode immediately when refresh falls back while the service is down", async () => {
+      let status: "connected" | "unreachable" = "connected";
+      const store = createStore(fakeApi({
+        refreshPr: async () => prView(),
+        serviceStatus: async () => status === "connected"
+          ? { state: "connected", serviceVersion: "0.1.0", supportedVersion: "0.1.0" }
+          : { state: "unreachable", reason: "network down" },
+      }));
+      await store.loadRepos();
+      await store.selectRepo("acme/atlas");
+      await store.openPr(1);
+
+      status = "unreachable";
+      await store.refresh();
+      expect(store.view?.files).toHaveLength(2);
+      expect(store.serviceStatus).toEqual({ state: "unreachable", reason: "network down" });
     });
   });
 });

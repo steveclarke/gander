@@ -1,7 +1,7 @@
-import type { LocalFile, LocalFileEntry, LocalView, LocalWorktree, NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { LocalFile, LocalFileEntry, LocalView, LocalWorktree, NewQuestion, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
-import type { ConnectionCheck } from "./main/connection.js";
+import type { ConnectionCheck, ServiceStatus } from "./main/connection.js";
 import type { ImagePreview } from "./image-preview.js";
 import type { LocalViewUpdate } from "./main/local-viewer.js";
 
@@ -27,7 +27,7 @@ export interface InitialWindowState {
   worktreeLabel: string | null;
 }
 
-export type { ConnectionCheck };
+export type { ConnectionCheck, ServiceStatus };
 
 export interface GanderApi {
   /** Fixed by the main process when the window is created; renderer code cannot change it. */
@@ -39,7 +39,7 @@ export interface GanderApi {
   /** Prompts for a local checkout, validates its origin, and registers its repository. */
   chooseLocalRepo(): Promise<RepoEntry | null>;
   listWorktrees(repoId: string): Promise<LocalWorktree[]>;
-  listPrs(repoId: string): Promise<PrSummary[]>;
+  listPrs(repoId: string): Promise<PrListItem[]>;
   lastReview(): Promise<{ repoId: string; prNumber: number } | null>;
   /** What this launch was asked to open, from the command line. Null for an ordinary launch. */
   initialTarget(): Promise<OpenTarget | null>;
@@ -52,7 +52,7 @@ export interface GanderApi {
   testConnection(url: string, token: string): Promise<ConnectionCheck>;
   /** Checks first, and saves only a connection that answered. */
   setConnection(url: string, token: string): Promise<ConnectionCheck>;
-  serviceHealthy(): Promise<boolean>;
+  serviceStatus(): Promise<ServiceStatus>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;

@@ -21,6 +21,20 @@ const developmentLabel = computed(() => props.worktreeLabel
   ? `Development build · ${props.worktreeLabel}`
   : "Development build");
 
+const serviceLabel = computed(() => {
+  const status = props.store.serviceStatus;
+  if (status.state === "connected") return `Service connected · ${status.serviceVersion}`;
+  if (status.state === "newer") return `Service ${status.serviceVersion} is newer · app supports ${status.supportedVersion}`;
+  if (status.state === "incompatible") return `Service ${status.serviceVersion} is too old · update to ${status.supportedVersion}`;
+  return props.store.view ? "Service unreachable · showing cached review" : "Service unreachable";
+});
+const serviceTitle = computed(() => {
+  const status = props.store.serviceStatus;
+  return status.state === "unreachable" || status.state === "incompatible"
+    ? status.reason
+    : serviceLabel.value;
+});
+
 // Re-read on a timer so "3 minutes ago" does not sit frozen at "just now".
 const now = ref(Date.now());
 const tick = setInterval(() => { now.value = Date.now(); }, 15_000);
@@ -54,9 +68,15 @@ const lastFetch = computed(() => {
     <span v-if="store.localView" class="service local-live">
       <span class="dot" />Local view · Live
     </span>
-    <span v-else class="service" :class="{ down: !store.serviceReachable }">
+    <span
+      v-else
+      class="service"
+      :class="{ down: store.serviceStatus.state === 'unreachable' || store.serviceStatus.state === 'incompatible', warning: store.serviceStatus.state === 'newer' }"
+      :title="serviceTitle"
+      role="status"
+    >
       <span class="dot" />
-      {{ store.serviceReachable ? "Service connected" : "Service unreachable" }}
+      <span class="service-label">{{ serviceLabel }}</span>
     </span>
 
     <span v-if="store.view || store.localView" class="sep">·</span>
@@ -85,12 +105,15 @@ const lastFetch = computed(() => {
 .status { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; background: var(--panel-background); border-top: 1px solid var(--workbench-border); font-size: 11px; color: var(--faint-foreground); flex: none; }
 .toggle { display: flex; align-items: center; background: none; border: none; color: var(--faint-foreground); cursor: pointer; padding: 0 2px; }
 .toggle:hover, .toggle[aria-pressed="true"] { color: var(--workbench-foreground); }
-.service { display: flex; align-items: center; gap: 5px; }
+.service { display: flex; align-items: center; gap: 5px; min-width: 0; max-width: min(50vw, 62ch); }
+.service-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex: none; }
 .service.down { color: var(--danger); }
 .service.down .dot { background: var(--danger); }
 .local-live { color: var(--info); }
 .local-live .dot { background: var(--info); }
+.service.warning { color: var(--warning); }
+.service.warning .dot { background: var(--warning); }
 .spacer { flex: 1; }
 .working { color: var(--muted-foreground); }
 .development { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 32ch; color: var(--warning); }

@@ -1,14 +1,15 @@
 import { reactive } from "vue";
-import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi, GithubRepository } from "./api.js";
 import type { ImagePreview } from "../../api.js";
+import type { ServiceStatus } from "../../api.js";
 
 export interface Store {
   repos: RepoEntry[];
   githubRepos: GithubRepository[];
   githubReposBusy: boolean;
   githubReposError: string | null;
-  prs: PrSummary[];
+  prs: PrListItem[];
   worktrees: LocalWorktree[];
   currentRepoId: string | null;
   /** Repository expanded in the persistent navigator; independent of the active tab. */
@@ -22,8 +23,8 @@ export interface Store {
   activeTabKey: string | null;
   localSurface: "explorer" | "changes";
   error: string | null;
-  /** Whether the review service answered its last health check. */
-  serviceReachable: boolean;
+  /** Reachability and compatibility from the service's version handshake. */
+  serviceStatus: ServiceStatus;
   /** When the pull request was last fetched from origin, as an ISO string. */
   lastFetchAt: string | null;
   /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
@@ -68,6 +69,18 @@ export function createStore(api: GanderApi): Store {
   let localFileRequest = 0;
   let localContextGeneration = 0;
   let navigatorContextRequest = 0;
+
+  function syncCurrentProgress(): void {
+    if (!store.view) return;
+    const item = store.prs.find((pr) => pr.number === store.view?.pr.number);
+    if (!item) return;
+    const done = store.view.files.filter((file) => file.checked).length;
+    // Once progress exists, an explicit un-check remains progress: the retained
+    // snapshot means this review has begun even when its current count returns to zero.
+    if (item.reviewProgress !== null || done > 0 || store.view.files.some((file) => file.changedSince)) {
+      item.reviewProgress = { done, total: store.view.files.length };
+    }
+  }
   const store: Store = reactive({
     repos: [],
     githubRepos: [],
@@ -86,7 +99,7 @@ export function createStore(api: GanderApi): Store {
     activeTabKey: null,
     localSurface: "explorer",
     error: null,
-    serviceReachable: true,
+    serviceStatus: { state: "unreachable", reason: "Checking the Gander service…" },
     lastFetchAt: null,
     busy: false,
 
@@ -107,7 +120,7 @@ export function createStore(api: GanderApi): Store {
       }
     },
     async checkService() {
-      store.serviceReachable = await api.serviceHealthy();
+      store.serviceStatus = await api.serviceStatus();
     },
     dismissError() {
       store.error = null;
@@ -166,6 +179,8 @@ export function createStore(api: GanderApi): Store {
         store.view = view;
         store.currentRepoId = target.repoId;
         store.localView = null;
+        syncCurrentProgress();
+        await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
         const key = `pr:${target.repoId}:${target.prNumber}`;
         upsertTab({ key, type: "pr", repoId: target.repoId, prNumber: target.prNumber, label: store.view.pr.title, selectedPath: store.selectedPath });
@@ -190,6 +205,8 @@ export function createStore(api: GanderApi): Store {
         store.view = view;
         store.currentRepoId = repoId;
         store.localView = null;
+        syncCurrentProgress();
+        await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
         const key = `pr:${repoId}:${prNumber}`;
         const summary = store.prs.find((pr) => pr.number === prNumber);
@@ -278,6 +295,8 @@ export function createStore(api: GanderApi): Store {
           await refreshExplorer();
         } else if (store.currentRepoId && store.view) {
           store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+          syncCurrentProgress();
+          await store.checkService();
         } else return;
         store.lastFetchAt = new Date().toISOString();
       }));
@@ -289,12 +308,14 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         if (!store.currentRepoId || !store.view) throw new Error("no PR open");
         store.view = await api.setChecked(store.currentRepoId, store.view.pr.number, path, checked);
+        syncCurrentProgress();
       });
     },
     async setCheckedMany(paths: string[], checked: boolean) {
       await guard(async () => {
         if (!store.currentRepoId || !store.view) throw new Error("no PR open");
         store.view = await api.setCheckedMany(store.currentRepoId, store.view.pr.number, paths, checked);
+        syncCurrentProgress();
       });
     },
     async reviewedSnapshot(path: string) {
@@ -424,6 +445,9 @@ export function createStore(api: GanderApi): Store {
       await fn();
     } catch (err) {
       store.error = (err as Error).message;
+      // Failed service writes already surface above; update the persistent status too.
+      // This is only a health read, never a retry of the authored-state mutation.
+      await store.checkService();
     }
   }
 

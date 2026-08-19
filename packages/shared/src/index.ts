@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** The service API version this workspace implements and the desktop app understands. */
+export const SERVICE_VERSION = "0.1.0";
+
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
 
@@ -111,6 +114,14 @@ export interface PrSummary {
   stack: { id: number; size: number; position: number } | null;
   baseSha: string;
   headSha: string;
+}
+
+export interface ReviewProgress { done: number; total: number; }
+
+/** GitHub's pull request summary joined with content-derived review progress. */
+export interface PrListItem extends PrSummary {
+  /** null until at least one file has a retained review snapshot. */
+  reviewProgress: ReviewProgress | null;
 }
 
 export interface RepoEntry {
