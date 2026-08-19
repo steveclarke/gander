@@ -333,8 +333,30 @@ describe("Gander end to end", () => {
     await anchoredQuestion.setValue("Keep this on the first line.");
     await browser.keys("Enter");
     await $("button[aria-label='Questions']").click();
-    await expect($(".message.original .text")).toHaveText("Keep this on the first line.");
-    await expect($(".row .file")).toHaveText(`a.rb:${anchoredLine}`);
+    const firstThread = await $(".drawer [data-question-id]:first-child");
+    await expect(firstThread.$(".question-message .message-text")).toHaveText("Keep this on the first line.");
+    await expect(firstThread.$("button[data-question-location]")).toHaveText(`a.rb:${anchoredLine}`);
+    const copyThread = await firstThread.$("button[aria-label^='Copy question']");
+    await copyThread.click();
+    await expect(copyThread).toHaveText("Copied");
+    const firstDisclosure = await firstThread.$("button[aria-expanded='true']");
+    await firstDisclosure.click();
+    await expect(firstDisclosure).toHaveAttribute("aria-expanded", "false");
+    await expect(firstThread.$("[data-question-body]")).not.toBeDisplayed();
+    await expect(firstThread.$(".preview")).toHaveText("Keep this on the first line.");
+    await firstDisclosure.click();
+    await expect(firstThread.$("[data-question-body]")).toBeDisplayed();
+
+    await $("button[aria-label='Dock questions below the diff']").click();
+    await expect($(".workspace.bottom .drawer")).toBeDisplayed();
+    expect(await browser.execute(() => {
+      const workspace = document.querySelector<HTMLElement>(".workspace.bottom");
+      const drawer = workspace?.querySelector<HTMLElement>(".drawer");
+      if (!workspace || !drawer) return null;
+      return Math.abs(workspace.getBoundingClientRect().width - drawer.getBoundingClientRect().width);
+    })).toBeLessThan(2);
+    await $("button[aria-label='Dock questions beside the diff']").click();
+    await expect($(".workspace.right .drawer")).toBeDisplayed();
     await expect($(".drawer button[aria-label='Add question (N)']")).toBeDisplayed();
     await $("button[aria-label='Close questions']").click();
 
@@ -347,13 +369,13 @@ describe("Gander end to end", () => {
     await question.setValue("Why does this need to happen here?");
     await browser.keys("Enter");
     await $("button[aria-label='Questions']").click();
-    await expect($(".drawer li:last-child .message.original .text")).toHaveText("Why does this need to happen here?");
+    await expect($(".drawer [data-question-id]:last-child .question-message .message-text")).toHaveText("Why does this need to happen here?");
 
-    const reply = await $(".drawer li:last-child .reply-form input");
+    const reply = await $(".drawer [data-question-id]:last-child .reply-form input");
     await reply.setValue("Because both callers share this path.");
     await browser.keys("Enter");
-    await expect($(".message.reply .author")).toHaveText("REVIEWER");
-    await expect($(".message.reply .text")).toHaveText("Because both callers share this path.");
+    await expect($(".reply .author")).toHaveText("REVIEWER");
+    await expect($(".reply .message-text")).toHaveText("Because both callers share this path.");
 
     const checkbox = await fileCheckbox("a.rb");
     await checkbox.click();
@@ -371,7 +393,7 @@ describe("Gander end to end", () => {
       style.fontFamily.includes("Courier New") && style.fontSize === "18.5px" && style.rowHeight === 22,
     )).toBe(true);
     await $("button[aria-label='Questions']").click();
-    await expect($(".message.reply .text")).toHaveText("Because both callers share this path.");
+    await expect($(".reply .message-text")).toHaveText("Because both callers share this path.");
   });
 
   it("shows the overflowing file-tree scrollbar only while the tree is hovered", async () => {

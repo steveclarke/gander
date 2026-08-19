@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive } from "vue";
-import { MessageSquare, PanelBottom, PanelRight, Plus, Trash2, X } from "lucide-vue-next";
+import { computed, reactive, shallowRef } from "vue";
+import type { Question } from "@gander/shared";
+import { Copy, MessageSquare, PanelBottom, PanelRight, Plus, X } from "lucide-vue-next";
 import type { Store } from "../store.js";
 import { revealLine } from "../selection.js";
+import QuestionThread from "./QuestionThread.vue";
 
 const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
 const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addQuestion: [] }>();
@@ -10,11 +12,8 @@ const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addQuestion: [
 const questions = computed(() => props.store.view?.questions ?? []);
 const drafts = reactive<Record<number, string>>({});
 const submitting = reactive(new Set<number>());
-
-function fileName(path: string | null): string {
-  if (path === null) return "This pull request";
-  return path.split("/").pop() ?? path;
-}
+const copiedQuestionId = shallowRef<number | null>(null);
+const copiedAll = shallowRef(false);
 
 function goTo(q: { path: string | null; line: number | null }): void {
   if (q.path === null) return;
@@ -35,14 +34,62 @@ async function reply(questionId: number): Promise<void> {
     submitting.delete(questionId);
   }
 }
+
+function questionMarkdown(question: Question): string {
+  const location = question.path === null
+    ? "Pull request"
+    : `${question.path}${question.line === null ? "" : `:${question.line}`}`;
+  const parts = [
+    `### ${location} — ${question.state}`,
+    "",
+    `Reviewer: ${question.text}`,
+  ];
+  if (question.note || question.commitRef) {
+    const commit = question.commitRef ? ` (${question.commitRef})` : "";
+    parts.push("", `Agent update${commit}: ${question.note ?? "Addressed"}`);
+  }
+  for (const threadReply of question.replies) {
+    parts.push("", `${threadReply.author === "reviewer" ? "Reviewer" : "Agent"}: ${threadReply.text}`);
+  }
+  return parts.join("\n");
+}
+
+async function copyText(text: string, questionId: number | null): Promise<void> {
+  try {
+    if (!navigator.clipboard) throw new Error("Clipboard access is unavailable");
+    await navigator.clipboard.writeText(text);
+    copiedQuestionId.value = questionId;
+    copiedAll.value = questionId === null;
+  } catch (error) {
+    props.store.error = (error as Error).message;
+  }
+}
+
+async function copyQuestion(question: Question): Promise<void> {
+  await copyText(questionMarkdown(question), question.id);
+}
+
+async function copyAll(): Promise<void> {
+  await copyText(questions.value.map(questionMarkdown).join("\n\n"), null);
+}
 </script>
 
 <template>
-  <aside class="drawer">
+  <aside class="drawer" aria-label="Questions">
     <header>
       <MessageSquare :size="15" />
-      <span class="title">Questions</span>
+      <h2 class="title">Questions</h2>
       <span class="count">{{ questions.length }}</span>
+      <button
+        v-if="questions.length > 0"
+        class="copy-all"
+        aria-label="Copy all question threads"
+        title="Copy all question threads"
+        @click="copyAll"
+      >
+        <Copy :size="13" aria-hidden="true" />
+        <span>{{ copiedAll ? "Copied" : "Copy all" }}</span>
+      </button>
       <button
         class="add"
         aria-label="Add question (N)"
@@ -73,54 +120,37 @@ async function reply(questionId: number): Promise<void> {
       </button>
     </div>
 
-    <ul v-else>
-      <li v-for="q in questions" :key="q.id" :class="{ current: q.path === store.selectedPath }">
-        <div class="row">
-          <button class="file" :disabled="q.path === null" @click="goTo(q)">
-            {{ fileName(q.path) }}<span v-if="q.line !== null" class="line">:{{ q.line }}</span>
-          </button>
-          <span class="state" :class="q.state">{{ q.state }}</span>
-          <button class="del" aria-label="Delete question" title="Delete question" @click="store.deleteQuestion(q.id)">
-            <Trash2 :size="13" />
-          </button>
-        </div>
-        <div class="message original">
-          <span class="author">Reviewer</span>
-          <p class="text">{{ q.text }}</p>
-        </div>
-        <div v-for="reply in q.replies" :key="reply.id" class="message reply">
-          <span class="author" :class="reply.author">{{ reply.author === "reviewer" ? "Reviewer" : "Agent" }}</span>
-          <p class="text">{{ reply.text }}</p>
-        </div>
-        <p v-if="q.note || q.commitRef" class="answer">
-          <span v-if="q.note">{{ q.note }}</span>
-          <code v-if="q.commitRef">{{ q.commitRef }}</code>
-        </p>
-        <form class="reply-form" @submit.prevent="reply(q.id)">
-          <input
-            v-model="drafts[q.id]"
-            data-app-typing="true"
-            :aria-label="`Reply to question ${q.id}`"
-            placeholder="Reply…"
-            :disabled="submitting.has(q.id)"
-          />
-        </form>
-      </li>
+    <ul v-else aria-label="Review questions">
+      <QuestionThread
+        v-for="question in questions"
+        :key="question.id"
+        v-model="drafts[question.id]"
+        :question="question"
+        :current="question.path === store.selectedPath"
+        :submitting="submitting.has(question.id)"
+        :copied="copiedQuestionId === question.id"
+        @navigate="goTo"
+        @reply="reply"
+        @copy="copyQuestion"
+        @delete="store.deleteQuestion"
+      />
     </ul>
   </aside>
 </template>
 
 <style scoped>
-.drawer { display: flex; flex-direction: column; background: var(--panel-background); border-left: 1px solid var(--workbench-border); overflow: hidden auto; }
+.drawer { container: questions / inline-size; display: flex; flex-direction: column; background: var(--panel-background); border-left: 1px solid var(--workbench-border); overflow: hidden auto; }
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--workbench-border); color: var(--muted-foreground); flex: none; }
-.title { font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+.title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
 .count { font: 11px var(--mono); background: var(--badge-background); border-radius: 9px; padding: 1px 7px; }
-.add {
-  margin-left: auto; display: flex; align-items: center; gap: 4px;
+.add, .copy-all {
+  display: flex; align-items: center; gap: 4px;
   background: none; border: 1px solid var(--workbench-border); border-radius: 5px;
   color: var(--workbench-foreground); padding: 3px 7px; font: inherit; font-size: 11px; cursor: pointer;
 }
-.add:hover { border-color: var(--accent); color: var(--accent); }
+.copy-all { margin-left: auto; }
+.add:first-of-type { margin-left: auto; }
+.add:hover, .copy-all:hover { border-color: var(--accent); color: var(--accent); }
 .dockbtn { margin-left: 0; }
 .dockbtn + .close { margin-left: 0; }
 .close { margin-left: auto; background: none; border: none; color: var(--faint-foreground); cursor: pointer; display: flex; }
@@ -134,32 +164,13 @@ header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; borde
   color: var(--accent-foreground); padding: 5px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .empty button kbd { color: var(--workbench-foreground); }
-.add:focus-visible, .empty button:focus-visible, .close:focus-visible, .del:focus-visible, .file:focus-visible {
+.add:focus-visible, .copy-all:focus-visible, .empty button:focus-visible, .close:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 kbd { font: 11px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: 4px; padding: 1px 5px; }
 
 ul { list-style: none; margin: 0; padding: 0; }
-li { padding: 10px 12px; border-bottom: 1px solid var(--workbench-border); }
-li.current { background: var(--selection-background); }
-.row { display: flex; align-items: center; gap: 8px; }
-.file { background: none; border: none; padding: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file:disabled { color: var(--faint-foreground); cursor: default; }
-.state { font: 10px var(--mono); color: var(--faint-foreground); text-transform: uppercase; letter-spacing: .4px; }
-.state.addressed { color: var(--warning); }
-.state.resolved { color: var(--success); }
-.del { margin-left: auto; background: none; border: none; color: var(--faint-foreground); cursor: pointer; display: flex; flex: none; }
-.del:hover { color: var(--danger); }
-.line { color: var(--faint-foreground); }
-.message { margin-top: 8px; padding-left: 9px; border-left: 2px solid var(--workbench-border); }
-.message.reply { margin-left: 8px; }
-.author { display: block; color: var(--muted-foreground); font: 600 9.5px var(--mono); letter-spacing: .4px; text-transform: uppercase; }
-.author.agent { color: var(--accent); }
-.answer { margin: 8px 0 0 10px; display: flex; align-items: baseline; gap: 7px; font-size: 11.5px; color: var(--faint-foreground); }
-.answer code { font: 10.5px var(--mono); background: var(--badge-background); border-radius: 4px; padding: 1px 5px; flex: none; }
-.text { margin: 3px 0 0; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.reply-form { margin-top: 9px; }
-.reply-form input { width: 100%; background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: 6px; color: var(--workbench-foreground); font: inherit; font-size: 12px; padding: 6px 8px; }
-.reply-form input:focus { outline: none; border-color: var(--accent); }
-.reply-form input:disabled { color: var(--faint-foreground); }
+@container questions (max-width: 330px) {
+  .copy-all span, .add span { display: none; }
+}
 </style>
