@@ -19,22 +19,30 @@ while preserving the checkout's process and config isolation.
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Check the live MCP endpoint | `bin/mcp check` |
 | Debug the live MCP endpoint | `bin/mcp tui` or `bin/mcp inspect` |
-| End-to-end tests | `pnpm test:e2e` |
+| End-to-end tests (build + run) | `pnpm test:e2e` |
+| Re-run end-to-end tests without rebuilding | `pnpm test:e2e:run [file]` |
 
-`pnpm test:e2e` builds the Electron app, starts an isolated service and local
-GitHub fake, creates real temporary Git repositories, and runs the three window
-tests. It does not use the dev stack, GitHub credentials, or an existing Gander
-service. The ordinary `pnpm test` command continues to run only the fast Vitest
-suite.
+`pnpm test:e2e` builds the Electron app once, then Playwright runs six independent
+window scenarios: settings persistence, checkoff persistence, changed-image
+decoding, live local changes, the real `bin/gander` command, and the concurrent
+clone regression. Each spec starts with a fresh Electron process, config,
+user-data directory, real service and SQLite database, local GitHub fake, and real
+temporary Git repositories. A spec restarts only its own app when restart is the
+behavior under test.
+
+The suite uses one worker and no retries. It does not use the dev stack, GitHub
+credentials, an existing Gander service, or another worktree's state. On failure
+it keeps a screenshot, Playwright trace, and Electron stdout/stderr under
+`packages/app/e2e/test-results/`. The ordinary `pnpm test` command continues to
+run only the fast Vitest suite.
 
 ### When the suite cannot start Electron
 
-`electron` and `electron-chromedriver` download archives in package lifecycle
-scripts. Electron 33's `extract-zip` step can silently stop after the first
+`electron` downloads an archive in its package lifecycle script. Electron 33's
+`extract-zip` step can silently stop after the first
 archive entry when it runs under Node 24. `electron/dist` then ends up a few
 hundred kilobytes rather than roughly 250 MB while the install script still
-reports success and exits 0. The suite then fails with
-`spawn ... chromedriver ENOENT`, or Electron starts and dies with
+reports success and exits 0. The suite then fails to launch Electron, often with
 `DevToolsActivePort file doesn't exist`.
 
 Check for it, from the repository root:
@@ -44,11 +52,10 @@ Check for it, from the repository root:
 ```
 
 A working install prints the version. A truncated one raises
-`Electron failed to install correctly`. `bin/setup` checks both Electron and
-chromedriver after `pnpm install`. If either is incomplete, it keeps pnpm and
-native module builds on Node 24 but reruns only the official Electron download
-scripts under Node 22 through mise. Rerun `bin/setup` to repair an existing
-checkout.
+`Electron failed to install correctly`. `bin/setup` checks Electron after
+`pnpm install`. If it is incomplete, it keeps pnpm and native module builds on
+Node 24 but reruns only the official Electron download script under Node 22
+through mise. Rerun `bin/setup` to repair an existing checkout.
 
 ## Processes
 

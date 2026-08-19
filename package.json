@@ -5,6 +5,8 @@
   "scripts": {
     "postinstall": "bin/repair-electron",
     "test": "vitest run",
+    "test:e2e": "pnpm --filter @gander/app run test:e2e",
+    "test:e2e:run": "pnpm --filter @gander/app run test:e2e:run",
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
