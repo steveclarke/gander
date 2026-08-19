@@ -42,4 +42,17 @@ describe("TargetBar", () => {
     await wrapper.get(".open-folder").trigger("click");
     expect(wrapper.emitted("openFolder")).toHaveLength(1);
   });
+
+  it("offers explicit relocation and removal for the selected repository", async () => {
+    const wrapper = mount(TargetBar, { props: { store, integratedTitleBar: false } });
+    await wrapper.get("button[aria-controls='target-picker']").trigger("click");
+
+    const actions = wrapper.findAll(".repository-action");
+    expect(actions.map((action) => action.text())).toEqual([
+      "Locate this repository…",
+      "Remove this repository",
+    ]);
+    await actions[0]!.trigger("click");
+    expect(wrapper.emitted("locateRepo")).toEqual([["acme/atlas"]]);
+  });
 });

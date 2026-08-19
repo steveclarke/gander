@@ -11,6 +11,7 @@ import { currentLine } from "./selection.js";
 import type { QuestionTarget } from "./selection.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
+import ConfirmDialog from "./components/ConfirmDialog.vue";
 import DiffPane from "./components/DiffPane.vue";
 import FullFilePane from "./components/FullFilePane.vue";
 import LocalSidebar from "./components/LocalSidebar.vue";
@@ -38,6 +39,7 @@ const treeVisible = ref(true);
 const treeScrolling = shallowRef(false);
 const zoomLevel = shallowRef(DEFAULT_ZOOM_LEVEL);
 const settingsCategory = shallowRef<"workbench" | "editor" | "connection">("workbench");
+const repoPendingRemoval = ref<string | null>(null);
 let unsubscribeOpenTarget: (() => void) | null = null;
 let unsubscribeOpenSettings: (() => void) | null = null;
 let unsubscribeZoomChanged: (() => void) | null = null;
@@ -69,16 +71,16 @@ onMounted(async () => {
     return;
   }
 
-  const localRepo = store.repos.find((repo) => repo.localPath);
-  if (localRepo) await selectTargetRepo(localRepo.repoId);
-  else {
-    await store.restoreLastReview();
-    if (store.view) activeMode.value = "pulls";
-  }
+  const firstRepo = store.repos[0];
+  if (firstRepo) await selectTargetRepo(firstRepo.repoId);
 });
 
 async function openExternalTarget(target: OpenTarget): Promise<void> {
   await store.openTarget(target);
+  if (store.targetRepoId !== target.repoId || store.targetWorktreePath === null) {
+    activeMode.value = "explorer";
+    return;
+  }
   if (target.prNumber !== null) {
     activeMode.value = "pulls";
     return;
@@ -118,17 +120,37 @@ async function openFolder(): Promise<void> {
   if (!await store.chooseLocalRepo()) return;
   const contextError = store.error;
   if (!store.targetWorktreePath) {
-    activeMode.value = "pulls";
+    activeMode.value = "explorer";
     return;
   }
   await openLocalTarget(store.targetWorktreePath, "explorer", contextError);
+}
+
+async function locateRepo(repoId: string): Promise<void> {
+  if (!await store.chooseLocalRepo(repoId)) return;
+  const contextError = store.error;
+  if (!store.targetWorktreePath) {
+    activeMode.value = "explorer";
+    return;
+  }
+  await openLocalTarget(store.targetWorktreePath, "explorer", contextError);
+}
+
+async function removeRepo(): Promise<void> {
+  const repoId = repoPendingRemoval.value;
+  repoPendingRemoval.value = null;
+  if (repoId === null) return;
+  await store.removeRepo(repoId);
+  activeMode.value = "explorer";
+  const next = store.repos[0];
+  if (next) await selectTargetRepo(next.repoId);
 }
 
 async function selectTargetRepo(repoId: string): Promise<void> {
   await store.selectRepo(repoId);
   const contextError = store.error;
   if (!store.targetWorktreePath) {
-    activeMode.value = "pulls";
+    activeMode.value = "explorer";
     return;
   }
   await openLocalTarget(store.targetWorktreePath, "explorer", contextError);
@@ -256,6 +278,8 @@ onBeforeUnmount(() => {
         @select-repo="selectTargetRepo"
         @select-worktree="selectTargetWorktree"
         @open-folder="openFolder"
+        @locate-repo="locateRepo"
+        @remove-repo="repoPendingRemoval = $event"
       />
       <div v-if="store.error" class="error-banner">
         <span>{{ store.error }}</span>
@@ -265,8 +289,7 @@ onBeforeUnmount(() => {
     <main class="body">
       <ActivityRail
         :active="activeMode"
-        :has-local-target="store.targetWorktreePath !== null"
-        :has-repo-target="store.targetRepoId !== null"
+        :has-target="store.targetWorktreePath !== null"
         @select="selectMode"
       />
 
@@ -322,9 +345,9 @@ onBeforeUnmount(() => {
               <button v-if="unconfigured" class="text-action" type="button" @click="openSettings('connection')">Connect a review service for pull requests</button>
             </div>
             <div v-else-if="!store.targetWorktreePath" class="empty-state">
-              <h1>No local worktree</h1>
-              <p>Open this repository from disk to browse files and current changes.</p>
-              <button type="button" @click="openFolder">Open repository folder…</button>
+              <h1>Checkout unavailable</h1>
+              <p>Gander cannot read the registered checkout for this repository.</p>
+              <button type="button" @click="store.targetRepoId && locateRepo(store.targetRepoId)">Locate checkout…</button>
             </div>
             <div v-else-if="!store.localView" class="empty">Select the target again to load this worktree.</div>
             <FullFilePane v-else-if="activeMode === 'explorer'" :file="store.localFile" :editor-settings="editorSettings.settings.editor" class="diff" />
@@ -384,6 +407,14 @@ onBeforeUnmount(() => {
       @open-zoom-settings="openSettings('workbench')"
     />
     <QuestionCapture :store="store" :target="questionTarget" @close="questionTarget = null" />
+    <ConfirmDialog
+      :open="repoPendingRemoval !== null"
+      title="Remove repository?"
+      detail="This removes the repository from Gander. It does not delete any checkout or worktree from disk."
+      confirm-label="Remove repository"
+      @confirm="removeRepo"
+      @cancel="repoPendingRemoval = null"
+    />
   </div>
 </template>
 

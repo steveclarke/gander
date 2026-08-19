@@ -140,7 +140,7 @@ export interface RepoEntry {
   repoId: string;
   url: string;
   /** A machine-local checkout used to discover worktrees. Never sent to the review service. */
-  localPath?: string;
+  localPath: string;
 }
 
 export interface ChangedFile {

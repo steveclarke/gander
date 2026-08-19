@@ -2,12 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "e
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { repoIdFromUrl, type LocalView, type OpenTarget, type RepoEntry } from "@gander/shared";
+import { type LocalView, type OpenTarget, type RepoEntry } from "@gander/shared";
 import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine } from "./git.js";
-import { checkGithubToken, listGithubRepositories, listOpenPrs, resolveGithubToken } from "./github.js";
+import { checkGithubToken, listOpenPrs, resolveGithubToken } from "./github.js";
 import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
@@ -18,6 +18,7 @@ import { linkedWorktreeLabel } from "./development-context.js";
 import { createZoomController, type ZoomController } from "./zoom-controller.js";
 import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
 import { loadUpdateController, supportsInPlaceUpdates, type UpdateController } from "./updates.js";
+import { assertRepositoryRegistered, repositoryFromLocalPath } from "./repository-registration.js";
 
 let zoomController: ZoomController;
 const localWatchers = new Map<number, LocalViewWatcher>();
@@ -53,16 +54,10 @@ async function bootstrap(): Promise<GanderConfig> {
   });
 
   ipcMain.handle("gander:listRepos", async () => cfg.repos);
-  ipcMain.handle("gander:listGithubRepos", async () => listGithubRepositories(await githubToken()));
-  ipcMain.handle("gander:addRepo", async (_e, url: string): Promise<RepoEntry> => {
-    const entry = { repoId: repoIdFromUrl(url), url };
-    if (!cfg.repos.some((r) => r.repoId === entry.repoId)) { cfg.repos.push(entry); saveConfig(cfg); }
-    return entry;
-  });
-  ipcMain.handle("gander:chooseLocalRepo", async (event): Promise<RepoEntry | null> => {
+  ipcMain.handle("gander:chooseLocalRepo", async (event, expectedRepoId?: string): Promise<RepoEntry | null> => {
     const owner = BrowserWindow.fromWebContents(event.sender);
     const options: Electron.OpenDialogOptions = {
-      title: "Add a local Git repository",
+      title: expectedRepoId === undefined ? "Open a Git repository" : `Locate a checkout for ${expectedRepoId}`,
       properties: ["openDirectory"],
     };
     const result = owner
@@ -70,26 +65,31 @@ async function bootstrap(): Promise<GanderConfig> {
       : await dialog.showOpenDialog(options);
     const selected = result.filePaths[0];
     if (result.canceled || !selected) return null;
-    const localPath = await git.worktreeRoot(selected);
-    const url = await git.originUrl(localPath);
-    const repoId = repoIdFromUrl(url);
-    const existing = cfg.repos.find((repo) => repo.repoId === repoId);
-    if (existing) existing.localPath = localPath;
-    else cfg.repos.push({ repoId, url, localPath });
+    const entry = await repositoryFromLocalPath(git, selected, expectedRepoId);
+    const existing = cfg.repos.find((repo) => repo.repoId === entry.repoId);
+    if (existing) Object.assign(existing, entry);
+    else cfg.repos.push(entry);
     saveConfig(cfg);
-    return { repoId, url, localPath };
+    return entry;
+  });
+  ipcMain.handle("gander:removeRepo", async (_event, repoId: string): Promise<void> => {
+    const index = cfg.repos.findIndex((repo) => repo.repoId === repoId);
+    if (index === -1) throw new Error(`Repo ${repoId} is not registered`);
+    cfg.repos.splice(index, 1);
+    if (cfg.lastReview?.repoId === repoId) delete cfg.lastReview;
+    saveConfig(cfg);
   });
   ipcMain.handle("gander:listWorktrees", async (_event, repoId: string) => {
     const repo = cfg.repos.find((entry) => entry.repoId === repoId);
     if (!repo) throw new Error(`Repo ${repoId} is not registered`);
-    return repo.localPath ? git.listWorktrees(repo.localPath) : [];
+    return git.listWorktrees(repo.localPath);
   });
   ipcMain.handle("gander:openLocal", async (event, repoId: string, path: string) => {
     const senderId = event.sender.id;
     const generation = (localOpenGenerations.get(senderId) ?? 0) + 1;
     localOpenGenerations.set(senderId, generation);
     const repo = cfg.repos.find((entry) => entry.repoId === repoId);
-    if (!repo?.localPath) throw new Error(`Repo ${repoId} has no registered local checkout`);
+    if (!repo) throw new Error(`Repo ${repoId} is not registered`);
     const worktrees = await git.listWorktrees(repo.localPath);
     const selected = worktrees.find((worktree) => worktree.path === path);
     if (!selected) throw new Error(`${path} is not a worktree of ${repoId}`);
@@ -351,6 +351,7 @@ app.whenReady().then(async () => {
   let cfg: GanderConfig;
   try {
     cfg = await bootstrap();
+    if (launchTarget !== null) assertRepositoryRegistered(cfg.repos, launchTarget.repoId);
   } catch (err) {
     dialog.showErrorBox("Gander failed to start", (err as Error).message);
     app.exit(1);
@@ -362,7 +363,13 @@ app.whenReady().then(async () => {
   updates?.checkAtStartup();
 
   try {
-    const stop = await startOpenServer({ socketPath: socketPath(), onTarget: deliver });
+    const stop = await startOpenServer({
+      socketPath: socketPath(),
+      onTarget: (target) => {
+        assertRepositoryRegistered(cfg.repos, target.repoId);
+        deliver(target);
+      },
+    });
     app.on("will-quit", stop);
   } catch (err) {
     // Losing the socket costs `bin/gander`, not the app. Reviewing by hand still works.

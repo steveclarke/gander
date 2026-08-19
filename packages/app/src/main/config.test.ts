@@ -72,9 +72,17 @@ describe("config", () => {
     writeFileSync(cfgPath, JSON.stringify({
       serviceUrl: "http://h:8390", serviceToken: "t",
       settings: DEFAULT_APP_SETTINGS,
-      repos: [{ repoId: "../../etc/passwd", url: "https://github.com/acme/atlas" }],
+      repos: [{ repoId: "../../etc/passwd", url: "https://github.com/acme/atlas", localPath: "/tmp/atlas" }],
     }));
     expect(() => loadConfig(cfgPath)).toThrow(/repoId|owner\/repo/i);
+  });
+
+  it("rejects a URL-only repository registration", () => {
+    writeFileSync(cfgPath, JSON.stringify({
+      serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS,
+      repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas" }],
+    }));
+    expect(() => loadConfig(cfgPath)).toThrow(/localPath/);
   });
 
   it("rejects a relative local checkout path", () => {

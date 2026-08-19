@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { ChevronDown, FolderGit2, FolderPlus, GitBranch } from "lucide-vue-next";
+import { ChevronDown, FolderGit2, FolderOpen, FolderPlus, GitBranch, Trash2 } from "lucide-vue-next";
 import type { Store } from "../store.js";
 
 const props = defineProps<{ store: Store; integratedTitleBar: boolean }>();
@@ -8,6 +8,8 @@ const emit = defineEmits<{
   selectRepo: [repoId: string];
   selectWorktree: [path: string];
   openFolder: [];
+  locateRepo: [repoId: string];
+  removeRepo: [repoId: string];
 }>();
 
 const open = ref(false);
@@ -23,6 +25,8 @@ function close(): void { open.value = false; }
 function chooseRepo(repoId: string): void { emit("selectRepo", repoId); close(); }
 function chooseWorktree(path: string): void { emit("selectWorktree", path); close(); }
 function openFolder(): void { emit("openFolder"); close(); }
+function locateRepo(repoId: string): void { emit("locateRepo", repoId); close(); }
+function removeRepo(repoId: string): void { emit("removeRepo", repoId); close(); }
 function onPointerDown(event: PointerEvent): void {
   if (open.value && event.target instanceof Node && !root.value?.contains(event.target)) close();
 }
@@ -101,6 +105,16 @@ onBeforeUnmount(() => {
         <FolderPlus :size="16" />
         Open repository folder…
       </button>
+      <template v-if="selectedRepo">
+        <button class="repository-action" type="button" @click="locateRepo(selectedRepo.repoId)">
+          <FolderOpen :size="16" />
+          Locate this repository…
+        </button>
+        <button class="repository-action danger" type="button" @click="removeRepo(selectedRepo.repoId)">
+          <Trash2 :size="16" />
+          Remove this repository
+        </button>
+      </template>
     </div>
   </header>
 </template>
@@ -111,21 +125,24 @@ onBeforeUnmount(() => {
 .traffic-space { width: 78px; flex: none; }
 .target-trigger { -webkit-app-region: no-drag; min-width: 180px; max-width: 520px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border: 0; border-right: 1px solid var(--workbench-border); background: var(--input-background); color: var(--muted-foreground); font: inherit; cursor: pointer; }
 .target-trigger:hover, .target-trigger[aria-expanded="true"] { background: var(--hover-background); color: var(--workbench-foreground); }
-.target-trigger strong { color: var(--workbench-foreground); font-weight: 650; }
+.target-trigger strong { min-width: 0; overflow: hidden; color: var(--workbench-foreground); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .separator { color: var(--faint-foreground); }
 .worktree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chevron { flex: none; margin-left: 2px; }
 .target-status { -webkit-app-region: no-drag; align-self: center; margin-left: 10px; color: var(--faint-foreground); font-size: 11px; }
 .drag-fill { min-width: 40px; flex: 1; }
-.target-trigger:focus-visible, .picker-row:focus-visible, .open-folder:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.target-trigger:focus-visible, .picker-row:focus-visible, .open-folder:focus-visible, .repository-action:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .target-picker { -webkit-app-region: no-drag; position: absolute; inset-block-start: 37px; inset-inline-start: var(--target-picker-offset, 0); width: min(420px, calc(100vw - 24px)); max-height: min(620px, calc(100vh - 72px)); overflow: auto; padding: 8px 0; border: 1px solid var(--workbench-border); border-radius: 0 0 8px 8px; background: var(--elevated-background); box-shadow: 0 14px 34px rgba(0, 0, 0, .36); }
 .draggable .target-picker { --target-picker-offset: 78px; }
 .target-picker section + section { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--workbench-border); }
 .target-picker h2 { margin: 0; padding: 5px 12px 4px; color: var(--faint-foreground); font-size: 9px; font-weight: 700; letter-spacing: .55px; text-transform: uppercase; }
-.picker-row, .open-folder { width: 100%; display: grid; grid-template-columns: 17px minmax(90px, auto) minmax(0, 1fr); align-items: center; gap: 8px; min-height: 30px; padding: 5px 12px; border: 0; background: none; color: var(--muted-foreground); text-align: left; font: inherit; cursor: pointer; }
-.picker-row:hover, .picker-row.selected, .open-folder:hover { background: var(--selection-background); color: var(--workbench-foreground); }
+.picker-row, .open-folder, .repository-action { width: 100%; display: grid; grid-template-columns: 17px minmax(90px, auto) minmax(0, 1fr); align-items: center; gap: 8px; min-height: 30px; padding: 5px 12px; border: 0; background: none; color: var(--muted-foreground); text-align: left; font: inherit; cursor: pointer; }
+.picker-row:hover, .picker-row.selected, .open-folder:hover, .repository-action:hover { background: var(--selection-background); color: var(--workbench-foreground); }
 .picker-row small { overflow: hidden; color: var(--faint-foreground); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.picker-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-row.selected span { color: var(--workbench-foreground); font-weight: 650; }
 .picker-empty { margin: 4px 12px 8px 37px; color: var(--faint-foreground); font-size: 11px; }
 .open-folder { grid-template-columns: 17px 1fr; margin-top: 7px; padding-block: 7px; border-top: 1px solid var(--workbench-border); color: var(--accent); }
+.repository-action { grid-template-columns: 17px 1fr; }
+.repository-action.danger { color: var(--danger); }
 </style>

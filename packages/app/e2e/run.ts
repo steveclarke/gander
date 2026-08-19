@@ -95,27 +95,6 @@ async function main(): Promise<void> {
   const raceRequestsReady = new Promise<void>((resolve) => { releaseRaceRequests = resolve; });
   let raceRequestCount = 0;
 
-  github.get<{ Querystring: { page?: string } }>("/user/repos", async (request, reply) => {
-    if (request.headers.authorization !== `Bearer ${GITHUB_TOKEN}`) {
-      return reply.code(401).send({ message: "wrong test token" });
-    }
-    if (request.query.page && request.query.page !== "1") return [];
-    return [
-      ...fixtures.map((fixture, index) => ({
-        full_name: fixture.repoId,
-        html_url: fixture.url,
-        private: index === 0,
-        archived: false,
-      })),
-      {
-        full_name: "acme/archived-example",
-        html_url: "https://github.com/acme/archived-example",
-        private: false,
-        archived: true,
-      },
-    ];
-  });
-
   github.get<{ Params: { owner: string; repo: string }; Querystring: { page?: string } }>(
     "/repos/:owner/:repo/pulls",
     async (request, reply) => {
@@ -177,7 +156,11 @@ async function main(): Promise<void> {
       serviceUrl,
       serviceToken: SERVICE_TOKEN,
       settings: DEFAULT_APP_SETTINGS,
-      repos: [{ repoId: localViewer.repoId, url: localViewer.url, localPath: localWorktreePath }],
+      repos: [localViewer, ...fixtures.filter((fixture) => fixture !== localViewer)].map((fixture) => ({
+        repoId: fixture.repoId,
+        url: fixture.url,
+        localPath: fixture === localViewer ? localWorktreePath : fixture.fixture.dir,
+      })),
     }, null, 2));
 
     Object.assign(process.env, {
@@ -187,13 +170,8 @@ async function main(): Promise<void> {
       GANDER_GITHUB_API_URL: githubUrl,
       GANDER_GITHUB_TOKEN: GITHUB_TOKEN,
       GANDER_E2E_USER_DATA: userDataPath,
-      GANDER_E2E_PERSISTENCE_URL: persistence.url,
-      GANDER_E2E_RACE_URL: race.url,
       GANDER_E2E_RACE_MARKER: raceMarkerPath,
       GANDER_E2E_LAUNCHER_REPO: launcher.repoId,
-      GANDER_E2E_ICONS_URL: icons.url,
-      GANDER_E2E_SCROLLBAR_URL: scrollbar.url,
-      GANDER_E2E_IMAGES_URL: images.url,
       GANDER_E2E_LOCAL_WORKTREE: localWorktreePath,
       // Where the app listens with no allocated socket in the environment: beside the
       // suite's own user data, so this run cannot reach a development app.

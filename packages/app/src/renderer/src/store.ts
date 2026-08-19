@@ -1,14 +1,11 @@
 import { reactive } from "vue";
 import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
-import type { GanderApi, GithubRepository } from "./api.js";
+import type { GanderApi } from "./api.js";
 import type { ImagePreview } from "../../api.js";
 import type { ServiceStatus } from "../../api.js";
 
 export interface Store {
   repos: RepoEntry[];
-  githubRepos: GithubRepository[];
-  githubReposBusy: boolean;
-  githubReposError: string | null;
   prs: PrListItem[];
   worktrees: LocalWorktree[];
   currentRepoId: string | null;
@@ -31,16 +28,15 @@ export interface Store {
   serviceStatus: ServiceStatus;
   /** When the pull request was last fetched from origin, as an ISO string. */
   lastFetchAt: string | null;
-  /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
+  /** True while a long-running main-process action is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
   busy: boolean;
   loadRepos(): Promise<void>;
-  loadGithubRepos(): Promise<void>;
   checkService(): Promise<void>;
   dismissError(): void;
   /** Reopen the pull request that was open when the app last closed. */
   restoreLastReview(): Promise<void>;
-  addRepo(url: string): Promise<void>;
-  chooseLocalRepo(): Promise<boolean>;
+  chooseLocalRepo(expectedRepoId?: string): Promise<boolean>;
+  removeRepo(repoId: string): Promise<void>;
   /** Open what the command line asked for: a repository, and its pull request when one was named. */
   openTarget(target: OpenTarget): Promise<void>;
   selectRepo(repoId: string): Promise<void>;
@@ -96,9 +92,6 @@ export function createStore(api: GanderApi): Store {
   }
   const store: Store = reactive({
     repos: [],
-    githubRepos: [],
-    githubReposBusy: false,
-    githubReposError: null,
     prs: [],
     worktrees: [],
     currentRepoId: null,
@@ -122,17 +115,6 @@ export function createStore(api: GanderApi): Store {
         store.repos = await api.listRepos();
       });
     },
-    async loadGithubRepos() {
-      store.githubReposBusy = true;
-      store.githubReposError = null;
-      try {
-        store.githubRepos = await api.listGithubRepos();
-      } catch (err) {
-        store.githubReposError = (err as Error).message;
-      } finally {
-        store.githubReposBusy = false;
-      }
-    },
     async checkService() {
       store.serviceStatus = await api.serviceStatus();
     },
@@ -151,23 +133,10 @@ export function createStore(api: GanderApi): Store {
       await store.openPr(last.prNumber);
       if (store.error) store.error = null;
     },
-    async addRepo(url: string) {
-      await userAction(() => withBusy(() => guard(async () => {
-        const entry = await api.addRepo(url);
-        store.repos = await api.listRepos();
-        await prepareTargetRepo(entry.repoId);
-        try {
-          await loadContexts(entry.repoId);
-        } finally {
-          if (store.targetRepoId === entry.repoId) store.targetWorktreePath = preferredWorktreePath(entry.repoId);
-        }
-        store.selectedPrNumber = null;
-      })));
-    },
-    async chooseLocalRepo() {
+    async chooseLocalRepo(expectedRepoId) {
       let chosen = false;
       await userAction(() => withBusy(() => guard(async () => {
-        const entry = await api.chooseLocalRepo();
+        const entry = await api.chooseLocalRepo(expectedRepoId);
         if (!entry) return;
         chosen = true;
         store.repos = await api.listRepos();
@@ -181,15 +150,25 @@ export function createStore(api: GanderApi): Store {
       })));
       return chosen;
     },
+    async removeRepo(repoId) {
+      await userAction(() => withBusy(() => guard(async () => {
+        await api.removeRepo(repoId);
+        if (store.targetRepoId === repoId) {
+          await clearLoadedView();
+          store.targetRepoId = null;
+          store.targetWorktreePath = null;
+          store.selectedPrNumber = null;
+          store.prs = [];
+          store.worktrees = [];
+        }
+        store.repos = await api.listRepos();
+      })));
+    },
     async openTarget(target: OpenTarget) {
       await userAction(() => withBusy(() => guard(async () => {
         const generation = target.prNumber === null ? null : ++localContextGeneration;
-        // Registering on the spot rather than refusing: whoever ran the command already
-        // knows which repository they mean, and an error here would cost the reviewer a
-        // detour to add it by hand.
         if (!store.repos.some((r) => r.repoId === target.repoId)) {
-          await api.addRepo(`https://github.com/${target.repoId}`);
-          store.repos = await api.listRepos();
+          throw new Error(`${target.repoId} is not registered. Open one of its checkout folders first.`);
         }
         // The bodies of selectRepo and openPr, inlined: nesting their busy wrappers would
         // clear the busy flag halfway through this one.

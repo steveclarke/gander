@@ -62,9 +62,8 @@ export function createGanderApi(
   return {
     initialWindowState,
     listRepos: () => call("listRepos"),
-    listGithubRepos: () => call("listGithubRepos"),
-    addRepo: (url) => call("addRepo", url),
-    chooseLocalRepo: () => call("chooseLocalRepo"),
+    chooseLocalRepo: (expectedRepoId) => call("chooseLocalRepo", expectedRepoId),
+    removeRepo: (repoId) => call("removeRepo", repoId),
     listWorktrees: (repoId) => call("listWorktrees", repoId),
     listPrs: (repoId) => call("listPrs", repoId),
     lastReview: () => call("lastReview"),

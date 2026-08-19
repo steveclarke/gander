@@ -23,9 +23,7 @@ export const ConfigSchema = z
     repos: z.array(z.object({
       repoId: RepoIdSchema,
       url: z.string(),
-      // Optional while the config shape is in flux so existing URL-only registrations
-      // remain valid. This is navigation data, not local review state.
-      localPath: z.string().min(1).refine(isAbsolute, "must be an absolute path").optional(),
+      localPath: z.string().min(1).refine(isAbsolute, "must be an absolute path"),
     }).strict()),
   })
   .strict();

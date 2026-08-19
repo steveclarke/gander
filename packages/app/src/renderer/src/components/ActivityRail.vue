@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { FileDiff, Files, GitPullRequest, Settings } from "lucide-vue-next";
 
-defineProps<{ active: "explorer" | "changes" | "pulls" | "settings"; hasLocalTarget: boolean; hasRepoTarget: boolean }>();
+defineProps<{ active: "explorer" | "changes" | "pulls" | "settings"; hasTarget: boolean }>();
 const emit = defineEmits<{ select: [value: "explorer" | "changes" | "pulls" | "settings"] }>();
 const actions = [
   { id: "explorer" as const, label: "Explorer", icon: Files },
@@ -12,7 +12,7 @@ const actions = [
 
 <template>
   <nav class="rail" aria-label="Workspace views">
-    <button v-for="action in actions" :key="action.id" :class="{ active: active === action.id }" :disabled="action.id === 'pulls' ? !hasRepoTarget : !hasLocalTarget" :aria-label="action.label" :title="action.label" @click="emit('select', action.id)">
+    <button v-for="action in actions" :key="action.id" :class="{ active: active === action.id }" :disabled="!hasTarget" :aria-label="action.label" :title="action.label" @click="emit('select', action.id)">
       <component :is="action.icon" :size="22" />
     </button>
     <span class="spacer" />

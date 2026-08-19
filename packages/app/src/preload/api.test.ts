@@ -69,6 +69,10 @@ describe("preload API", () => {
     const subscribe = vi.fn(() => cleanup);
     const api = createGanderApi(invoke, subscribe);
 
+    await api.chooseLocalRepo("acme/atlas");
+    expect(invoke).toHaveBeenLastCalledWith("gander:chooseLocalRepo", "acme/atlas");
+    await api.removeRepo("acme/atlas");
+    expect(invoke).toHaveBeenLastCalledWith("gander:removeRepo", "acme/atlas");
     await api.listWorktrees("acme/atlas");
     expect(invoke).toHaveBeenLastCalledWith("gander:listWorktrees", "acme/atlas");
     await api.openLocal("acme/atlas", "/tmp/local");

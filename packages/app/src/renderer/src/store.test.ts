@@ -30,10 +30,9 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
       isDevelopment: false,
       worktreeLabel: null,
     },
-    listRepos: async () => [{ repoId: "acme/atlas", url: "u" }],
-    listGithubRepos: async () => [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", private: true }],
-    addRepo: async (url) => ({ repoId: "acme/new", url }),
+    listRepos: async () => [{ repoId: "acme/atlas", url: "u", localPath: "/tmp/atlas" }],
     chooseLocalRepo: async () => null,
+    removeRepo: async () => {},
     listWorktrees: async () => [],
     listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b", reviewProgress: null }],
     openPr: async () => prView(),
@@ -94,17 +93,12 @@ describe("store", () => {
     expect(store.view).toBeNull();
   });
 
-  it("registers a repository the target names but the app has never seen", async () => {
-    const added: string[] = [];
-    const store = createStore(fakeApi({
-      addRepo: async (url) => { added.push(url); return { repoId: "acme/new", url }; },
-      listRepos: async () => (added.length === 0 ? [] : [{ repoId: "acme/new", url: added[0] as string }]),
-    }));
+  it("refuses a command-line target that has not been opened from disk", async () => {
+    const store = createStore(fakeApi({ listRepos: async () => [] }));
     await store.loadRepos();
     await store.openTarget({ repoId: "acme/new", prNumber: null });
-    expect(added).toEqual(["https://github.com/acme/new"]);
-    expect(store.targetRepoId).toBe("acme/new");
-    expect(store.error).toBeNull();
+    expect(store.targetRepoId).toBeNull();
+    expect(store.error).toBe("acme/new is not registered. Open one of its checkout folders first.");
   });
 
   it("loads repos, selects one, opens a PR, tracks progress", async () => {
@@ -122,22 +116,38 @@ describe("store", () => {
     expect(store.prs[0]?.reviewProgress).toEqual({ done: 0, total: 2 });
   });
 
-  it("loads GitHub repositories separately from registered repositories", async () => {
-    const store = createStore(fakeApi());
-    await store.loadGithubRepos();
-    expect(store.githubRepos).toEqual([{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", private: true }]);
-    expect(store.githubReposError).toBeNull();
-  });
-
-  it("registers and selects a repository in one action", async () => {
+  it("registers and selects a repository from a chosen checkout", async () => {
     const store = createStore(fakeApi({
-      addRepo: async (url) => ({ repoId: "acme/new", url }),
-      listRepos: async () => [{ repoId: "acme/new", url: "https://github.com/acme/new" }],
+      chooseLocalRepo: async () => ({ repoId: "acme/new", url: "https://github.com/acme/new", localPath: "/tmp/new" }),
+      listRepos: async () => [{ repoId: "acme/new", url: "https://github.com/acme/new", localPath: "/tmp/new" }],
     }));
-    await store.addRepo("https://github.com/acme/new");
+    await store.chooseLocalRepo();
     expect(store.targetRepoId).toBe("acme/new");
     expect(store.currentRepoId).toBeNull();
     expect(store.prs).toHaveLength(1);
+  });
+
+  it("removes a repository without leaving its local view active", async () => {
+    const opened = localView();
+    let removed: string | null = null;
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+      removeRepo: async (repoId) => { removed = repoId; },
+      listRepos: async () => removed === null
+        ? [{ repoId: "acme/atlas", url: "u", localPath: "/tmp/atlas" }]
+        : [],
+    }));
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+
+    await store.removeRepo("acme/atlas");
+
+    expect(removed).toBe("acme/atlas");
+    expect(store.repos).toEqual([]);
+    expect(store.targetRepoId).toBeNull();
+    expect(store.localView).toBeNull();
   });
 
   it("opens a stateless local worktree without creating pull request review state", async () => {

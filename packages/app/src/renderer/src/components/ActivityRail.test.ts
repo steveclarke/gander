@@ -6,7 +6,7 @@ import ActivityRail from "./ActivityRail.vue";
 describe("ActivityRail", () => {
   it("keeps every repository lens available while a local target is selected", async () => {
     const wrapper = mount(ActivityRail, {
-      props: { active: "pulls", hasLocalTarget: true, hasRepoTarget: true },
+      props: { active: "pulls", hasTarget: true },
     });
 
     expect(wrapper.get("button[aria-label='Explorer']").attributes("disabled")).toBeUndefined();
@@ -17,9 +17,9 @@ describe("ActivityRail", () => {
     expect(wrapper.emitted("select")).toEqual([["explorer"]]);
   });
 
-  it("disables only lenses whose target does not exist", () => {
+  it("disables every repository lens when no valid local target exists", () => {
     const wrapper = mount(ActivityRail, {
-      props: { active: "settings", hasLocalTarget: false, hasRepoTarget: false },
+      props: { active: "settings", hasTarget: false },
     });
 
     expect(wrapper.get("button[aria-label='Explorer']").attributes("disabled")).toBeDefined();

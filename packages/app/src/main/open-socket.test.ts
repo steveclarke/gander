@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { OpenTarget } from "@gander/shared";
 import { startOpenServer } from "./open-socket.js";
+import { assertRepositoryRegistered } from "./repository-registration.js";
 
 let dir: string;
 let socketPath: string;
@@ -15,7 +16,13 @@ beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "gander-sock-"));
   socketPath = join(dir, "app.sock");
   delivered = [];
-  stop = await startOpenServer({ socketPath, onTarget: (t) => delivered.push(t) });
+  stop = await startOpenServer({
+    socketPath,
+    onTarget: (target) => {
+      assertRepositoryRegistered([{ repoId: "acme/atlas", url: "u", localPath: "/tmp/atlas" }], target.repoId);
+      delivered.push(target);
+    },
+  });
 });
 afterEach(() => { stop(); rmSync(dir, { recursive: true, force: true }); });
 
@@ -50,6 +57,13 @@ describe("open server", () => {
 
   it("answers with the reason when the arguments are malformed", async () => {
     expect(await send(["--repo", "atlas"])).toMatchObject({ error: expect.stringContaining("owner/name") });
+    expect(delivered).toEqual([]);
+  });
+
+  it("refuses a repository that has not been opened from disk", async () => {
+    expect(await send(["--repo", "acme/unknown"])).toEqual({
+      error: "acme/unknown is not registered. Open one of its checkout folders first.",
+    });
     expect(delivered).toEqual([]);
   });
 

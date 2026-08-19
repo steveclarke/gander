@@ -72,6 +72,11 @@ picker. The target switcher remembers it and discovers its linked worktrees with
 workspace; the activity bar switches among Explorer, Current Diff, and Pull Requests
 without changing what those modes mean.
 
+Every registered repository has a local checkout. Gander derives its repository ID and
+remote URL from Git; URL-only registration and command-line auto-registration are not
+supported. If the checkout moves, the target switcher can locate a replacement checkout
+for the same origin or remove the registration without touching files on disk.
+
 A selected worktree has two peer views. Explorer shows the complete filesystem tree,
 including ignored files but not Git administrative metadata, and loads each directory only
 when it is expanded before reading selected files lazily. Current Diff shows the live change
@@ -96,5 +101,6 @@ Interface work and the agent reply channel are tracked as GitHub issues.
 
 `pnpm test` runs the unit suites against real git repositories and real service
 instances. `pnpm test:e2e` drives the built Electron window through WebDriverIO —
-register a repository, open a pull request, tick a file, restart, and confirm the
-tick survived, plus the clone race that reached a person before it reached a test.
+select a locally registered repository, open a pull request, tick a file, restart,
+and confirm the tick survived, plus the clone race that reached a person before it
+reached a test.

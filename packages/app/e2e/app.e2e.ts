@@ -14,14 +14,7 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-async function registerAndSelect(url: string, repoName: string): Promise<void> {
-  const error = await browser.executeAsync((repoUrl, done) => {
-    void (window as unknown as { gander: { addRepo(url: string): Promise<unknown> } }).gander.addRepo(repoUrl)
-      .then(() => done(null))
-      .catch((reason: unknown) => done(String(reason)));
-  }, url);
-  expect(error).toBeNull();
-  await browser.refresh();
+async function selectRepository(repoName: string): Promise<void> {
   await $("button[aria-controls='target-picker']").click();
   const repo = await $(`//button[contains(@class, 'picker-row')][contains(normalize-space(.), '${repoName}')]`);
   await repo.waitForDisplayed();
@@ -79,7 +72,8 @@ async function selectIconTheme(value: "catppuccin-mocha"): Promise<void> {
 describe("Gander end to end", () => {
   it("opens the built application with the Gander title", async () => {
     await expect(browser).toHaveTitle("Gander");
-    await expect($(".welcome h1")).toHaveText("Open a repository from disk");
+    await expect($("button[aria-controls='target-picker']")).toHaveText(expect.stringContaining("local-viewer"));
+    await expect($("button[aria-label='Explorer']")).toBeEnabled();
 
     const nativeWindow = await browser.electron.execute((electron) => {
       const window = electron.BrowserWindow.getAllWindows()[0];
@@ -244,7 +238,7 @@ describe("Gander end to end", () => {
   });
 
   it("registers a repository and keeps a reviewed file checked after restart", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_PERSISTENCE_URL"), "persistence");
+    await selectRepository("persistence");
     await expect($(".stack-group")).toBeDisplayed();
     expect(await browser.execute(() => [...document.querySelectorAll(".stack-group .stack-member")]
       .map((member) => ({
@@ -409,7 +403,7 @@ describe("Gander end to end", () => {
   });
 
   it("renders both sides of a changed image from bounded blob URLs", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_IMAGES_URL"), "images");
+    await selectRepository("images");
     await openPullRequest("Preview changed images");
     await treeRow("logo.png").click();
 
@@ -464,7 +458,7 @@ describe("Gander end to end", () => {
   });
 
   it("shows the overflowing file-tree scrollbar only while the tree is hovered", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_SCROLLBAR_URL"), "scrollbar");
+    await selectRepository("scrollbar");
     await openPullRequest("Scroll a long file tree");
 
     const tree = await $(".view-sidebar .tree.root");
@@ -496,7 +490,7 @@ describe("Gander end to end", () => {
   });
 
   it("opens a pull request twice quickly with one valid clone", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_RACE_URL"), "race");
+    await selectRepository("race");
     await openPullRequest("Open without corrupting the clone", true);
     await expect($(".progress")).toHaveText("0/2 reviewed");
     await expect($(".error-banner")).not.toBeDisplayed();
@@ -520,7 +514,7 @@ describe("Gander end to end", () => {
   });
 
   it("renders Catppuccin icons without disturbing file-tree interaction or status alignment", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_ICONS_URL"), "icons");
+    await selectRepository("icons");
     await openPullRequest("Render file icons");
 
     const expectedIcons: Record<string, string> = {

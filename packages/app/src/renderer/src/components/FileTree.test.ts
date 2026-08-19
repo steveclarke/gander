@@ -26,9 +26,6 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
   const calls: Calls = { setChecked: [], setCheckedMany: [] };
   const store: Store = reactive({
     repos: [],
-    githubRepos: [],
-    githubReposBusy: false,
-    githubReposError: null,
     prs: [],
     worktrees: [],
     currentRepoId: "acme/atlas",
@@ -47,12 +44,11 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     lastFetchAt: null,
     busy: false,
     async loadRepos() {},
-    async loadGithubRepos() {},
     async restoreLastReview() {},
     async checkService() {},
     dismissError() {},
-    async addRepo() {},
     async chooseLocalRepo() { return false; },
+    async removeRepo() {},
     async openTarget() {},
     async selectRepo() {},
     async openPr() {},
