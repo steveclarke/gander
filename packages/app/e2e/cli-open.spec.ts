@@ -7,4 +7,5 @@ test("opens a named repository and pull request through bin/gander", async ({ wo
   await expect(world.runCli(repository)).resolves.toBe(`Opened ${repository.repoId}#${repository.number}`);
   await expect(app.page.locator(".context-toolbar").filter({ hasText: repository.title })).toBeVisible();
   await expect(app.page.locator(".context-toolbar")).toContainText(`#${repository.number}`);
+  expect(await app.isVisible()).toBe(false);
 });

@@ -165,6 +165,10 @@ export class GanderWorld {
       GIT_CONFIG_SYSTEM: join(this.root, "empty-gitconfig"),
       GIT_CONFIG_COUNT: String(this.repositories.length),
     });
+    // Hidden is the routine mode: the renderer still paints for Playwright, but the suite
+    // cannot cover the reviewer's desktop. Opt into a visible window only while debugging.
+    if (environment.GANDER_E2E_HEADFUL === "1") delete environment.GANDER_E2E;
+    else environment.GANDER_E2E = "1";
     this.repositories.forEach((repository, index) => {
       environment[`GIT_CONFIG_KEY_${index}`] = `url.${pathToFileURL(repository.checkout.dir).href}.insteadOf`;
       environment[`GIT_CONFIG_VALUE_${index}`] = repository.url;

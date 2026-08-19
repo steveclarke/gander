@@ -34,7 +34,17 @@ export class GanderApplication {
     await this.electronApp.context().tracing.start({ screenshots: true, snapshots: true });
     this.currentPage = await this.electronApp.firstWindow();
     await this.currentPage.getByRole("button", { name: "Editor settings" }).waitFor();
+    if (this.environment.GANDER_E2E === "1" && await this.isVisible()) {
+      throw new Error("The E2E BrowserWindow became visible");
+    }
     return this;
+  }
+
+  async isVisible(): Promise<boolean> {
+    if (!this.electronApp) throw new Error("Gander has not been launched");
+    return this.electronApp.evaluate(({ BrowserWindow }) => (
+      BrowserWindow.getAllWindows()[0]?.isVisible() ?? false
+    ));
   }
 
   async restart(): Promise<void> {

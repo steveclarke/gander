@@ -36,6 +36,10 @@ it keeps a screenshot, Playwright trace, and Electron stdout/stderr under
 `packages/app/e2e/test-results/`. The ordinary `pnpm test` command continues to
 run only the fast Vitest suite.
 
+The Electron window stays hidden by default, while its renderer continues to
+paint for Playwright assertions, screenshots, and traces. To watch one scenario
+while debugging, run `GANDER_E2E_HEADFUL=1 pnpm test:e2e:run <file>`.
+
 ### When the suite cannot start Electron
 
 `electron` downloads an archive in its package lifecycle script. Electron 33's
