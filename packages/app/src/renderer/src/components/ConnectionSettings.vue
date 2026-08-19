@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, shallowRef } from "vue";
 import { api, type ConnectionCheck, type GithubTokenCheck } from "../api.js";
 import { Loader2 } from "lucide-vue-next";
 
@@ -15,15 +15,15 @@ const emit = defineEmits<{ connected: [] }>();
  * editable as JSON inside the app, and a token does not belong on screen in a text editor.
  */
 
-const url = ref("");
-const token = ref("");
-const fromEnvironment = ref(false);
-const busy = ref(false);
-const result = ref<ConnectionCheck | null>(null);
+const url = shallowRef("");
+const token = shallowRef("");
+const fromEnvironment = shallowRef(false);
+const busy = shallowRef(false);
+const result = shallowRef<ConnectionCheck | null>(null);
 
-const githubToken = ref("");
-const githubBusy = ref(false);
-const githubResult = ref<GithubTokenCheck | null>(null);
+const githubToken = shallowRef("");
+const githubBusy = shallowRef(false);
+const githubResult = shallowRef<GithubTokenCheck | null>(null);
 
 onMounted(async () => {
   const current = await api.getConnection();
@@ -105,8 +105,18 @@ async function run(action: "test" | "save"): Promise<void> {
       <span v-if="busy" class="working"><Loader2 :size="13" class="spin" />Reaching the service…</span>
       <!-- Saving tests first and keeps nothing that failed, so the only outcomes worth
            reporting are "connected" and the reason it is not. -->
-      <span v-if="result" class="result" :class="{ bad: !result.ok }" role="status" aria-live="polite">
-        {{ result.ok ? `Connected to Gander ${result.version}` : result.reason }}
+      <span
+        v-if="result"
+        class="result"
+        :class="{ bad: !result.ok, warning: result.ok && result.compatibility === 'newer' }"
+        role="status"
+        aria-live="polite"
+      >
+        {{ result.ok
+          ? (result.compatibility === "newer"
+            ? `Connected with warning: service ${result.version} is newer than this app`
+            : `Connected to Gander ${result.version}`)
+          : result.reason }}
       </span>
     </div>
 
@@ -169,5 +179,6 @@ button:disabled { opacity: .55; cursor: default; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .result.bad { color: var(--red, #e06c75); }
+.result.warning { color: var(--warning); }
 code { font-family: var(--mono, monospace); font-size: 11px; }
 </style>

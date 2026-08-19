@@ -2,6 +2,7 @@ import { reactive } from "vue";
 import type { OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi, GithubRepository } from "./api.js";
 import type { ImagePreview } from "../../api.js";
+import type { ServiceStatus } from "../../api.js";
 
 export interface Store {
   repos: RepoEntry[];
@@ -13,8 +14,8 @@ export interface Store {
   view: PrView | null;
   selectedPath: string | null;
   error: string | null;
-  /** Whether the review service answered its last health check. */
-  serviceReachable: boolean;
+  /** Reachability and compatibility from the service's version handshake. */
+  serviceStatus: ServiceStatus;
   /** When the pull request was last fetched from origin, as an ISO string. */
   lastFetchAt: string | null;
   /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
@@ -55,7 +56,7 @@ export function createStore(api: GanderApi): Store {
     view: null,
     selectedPath: null,
     error: null,
-    serviceReachable: true,
+    serviceStatus: { state: "unreachable", reason: "Checking the Gander service…" },
     lastFetchAt: null,
     busy: false,
 
@@ -76,7 +77,7 @@ export function createStore(api: GanderApi): Store {
       }
     },
     async checkService() {
-      store.serviceReachable = await api.serviceHealthy();
+      store.serviceStatus = await api.serviceStatus();
     },
     dismissError() {
       store.error = null;
@@ -120,6 +121,7 @@ export function createStore(api: GanderApi): Store {
         store.selectedPath = null;
         if (target.prNumber === null) return;
         store.view = await api.openPr(target.repoId, target.prNumber);
+        await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
         store.lastFetchAt = new Date().toISOString();
       })));
@@ -136,6 +138,7 @@ export function createStore(api: GanderApi): Store {
       await userAction(() => withBusy(() => guard(async () => {
         if (!store.currentRepoId) throw new Error("no repo selected");
         store.view = await api.openPr(store.currentRepoId, prNumber);
+        await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
         store.lastFetchAt = new Date().toISOString();
       })));
@@ -144,6 +147,7 @@ export function createStore(api: GanderApi): Store {
       await withBusy(() => guard(async () => {
         if (!store.currentRepoId || !store.view) return;
         store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+        await store.checkService();
         store.lastFetchAt = new Date().toISOString();
       }));
     },
@@ -205,6 +209,9 @@ export function createStore(api: GanderApi): Store {
       await fn();
     } catch (err) {
       store.error = (err as Error).message;
+      // Failed service writes already surface above; update the persistent status too.
+      // This is only a health read, never a retry of the authored-state mutation.
+      await store.checkService();
     }
   }
 

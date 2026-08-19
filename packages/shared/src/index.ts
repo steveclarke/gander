@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** The service API version this workspace implements and the desktop app understands. */
+export const SERVICE_VERSION = "0.1.0";
+
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
 

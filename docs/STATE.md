@@ -25,6 +25,13 @@ Review state is content-based: files key on sha256 of blob text, so checkoffs
 survive rebases and force-pushes. A bare un-check retains the snapshot, which
 is the base for the M2 delta view.
 
+An already-open review remains readable from the desktop app's in-memory cache
+when the review service is unreachable. Authored-state writes fail visibly and
+are never queued; after reconnection the service replaces cached review state.
+The app also compares the service API version from `/healthz`: an older service
+is blocked with an update instruction, while a newer service remains usable with
+a visible warning.
+
 ## Running it locally
 
 ```

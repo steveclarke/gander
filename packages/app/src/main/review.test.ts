@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import type { PrSummary } from "@gander/shared";
+import { SERVICE_VERSION, type PrSummary } from "@gander/shared";
 import { buildServer } from "../../../service/src/server.js";
 import { openStorage, type Storage } from "../../../service/src/storage.js";
 import { makeFixtureRepo, type FixtureRepo } from "./fixtures.js";
@@ -26,7 +26,7 @@ beforeEach(async () => {
   clonesRoot = mkdtempSync(join(tmpdir(), "gander-clones-"));
   dbDir = mkdtempSync(join(tmpdir(), "gander-db-"));
   storage = openStorage(join(dbDir, "t.db"));
-  server = buildServer({ storage, token: "t", version: "test" });
+  server = buildServer({ storage, token: "t", version: SERVICE_VERSION });
   await server.listen({ port: 0, host: "127.0.0.1" });
   port = (server.addresses()[0] as { port: number }).port;
 
@@ -212,6 +212,50 @@ describe("review pipeline", () => {
     expect(moved.files.find((f) => f.path === "a.rb")!.changedSince).toBe(true);
   });
 
+  it("keeps the loaded review readable while offline, fails writes without queuing, and accepts service state on recovery", async () => {
+    const loaded = await reviewer.openPr("acme/atlas", 1);
+    expect(loaded.files.find((file) => file.path === "a.rb")!.checked).toBe(false);
+
+    await server.close();
+
+    await expect(reviewer.setChecked("acme/atlas", 1, "a.rb", true)).rejects.toThrow(
+      /not saved and will not be retried/i,
+    );
+    expect(loaded.files.find((file) => file.path === "a.rb")!.checked).toBe(false);
+
+    const offline = await reviewer.refreshPr("acme/atlas", 1);
+    expect(offline).toBe(loaded);
+    expect(offline.files.map((file) => file.path)).toEqual(["a.rb", "b.rb"]);
+    await expect(reviewer.addQuestion("acme/atlas", 1, { path: "a.rb", line: 1, text: "Queued?" })).rejects.toThrow(
+      /not saved and will not be retried/i,
+    );
+    expect(offline.questions).toEqual([]);
+
+    storage.putFileState("acme/atlas", 1, {
+      checked: true,
+      path: "a.rb",
+      baseHash: loaded.files[0]!.baseHash,
+      headHash: loaded.files[0]!.headHash,
+      baseContent: loaded.files[0]!.baseContent,
+      headContent: loaded.files[0]!.headContent,
+      machine: "other-machine",
+    });
+    server = buildServer({ storage, token: "t", version: SERVICE_VERSION });
+    await server.listen({ port, host: "127.0.0.1" });
+
+    await expect(reviewer.setChecked("acme/atlas", 1, "a.rb", false)).rejects.toThrow(
+      /refresh it after the service reconnects/i,
+    );
+    expect(storage.getReview("acme/atlas", 1).files.find((file) => file.path === "a.rb")).toMatchObject({
+      checked: true,
+      machine: "other-machine",
+    });
+
+    const recovered = await reviewer.refreshPr("acme/atlas", 1);
+    expect(recovered.files.find((file) => file.path === "a.rb")!.checked).toBe(true);
+    expect(storage.getReview("acme/atlas", 1).files.find((file) => file.path === "a.rb")!.machine).toBe("other-machine");
+  });
+
   it("previews modified, added, and deleted images without persisting binary snapshots", async () => {
     await server.close(); storage.close();
     rmSync(fixture.dir, { recursive: true, force: true });
@@ -228,7 +272,7 @@ describe("review pipeline", () => {
     await fixture.git(["checkout", "main"]);
 
     storage = openStorage(join(dbDir, "images.db"));
-    server = buildServer({ storage, token: "t", version: "test" });
+    server = buildServer({ storage, token: "t", version: SERVICE_VERSION });
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.addresses()[0] as { port: number }).port;
     reviewer = createReviewer({
