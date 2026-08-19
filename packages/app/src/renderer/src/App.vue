@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import type { OpenTarget } from "@gander/shared";
 import { MessageSquare, Plus, RefreshCw, X } from "lucide-vue-next";
 import { api } from "./api.js";
@@ -9,6 +9,9 @@ import { notesDock, notesHeight, notesWidth, treeWidth } from "./layout.js";
 import { effectiveTreeTypography } from "../../settings.js";
 import { currentLine } from "./selection.js";
 import type { NoteTarget } from "./selection.js";
+import type { PrFile } from "@gander/shared";
+import { bindingFor, isPrefix, type Command, type Prefix } from "./keymap.js";
+import { collapsedDirs, cursor, edge, filesAt, nextUnmarked, parentOf, rowAt, step } from "./tree-nav.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -18,6 +21,7 @@ import LocalSidebar from "./components/LocalSidebar.vue";
 import PullRequestSidebar from "./components/PullRequestSidebar.vue";
 import NoteCapture from "./components/NoteCapture.vue";
 import NotesDrawer from "./components/NotesDrawer.vue";
+import KeymapHelp from "./components/KeymapHelp.vue";
 import SettingsPane from "./components/SettingsPane.vue";
 import Splitter from "./components/Splitter.vue";
 import StackPosition from "./components/StackPosition.vue";
@@ -35,6 +39,8 @@ const unconfigured = ref(false);
 const noteTarget = shallowRef<NoteTarget | null>(null);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
+const helpOpen = ref(false);
+const diffPane = ref<InstanceType<typeof DiffPane> | null>(null);
 const treeScrolling = shallowRef(false);
 const zoomLevel = shallowRef(DEFAULT_ZOOM_LEVEL);
 const settingsCategory = shallowRef<"workbench" | "editor" | "connection">("workbench");
@@ -245,21 +251,135 @@ function isTyping(target: HTMLElement | null): boolean {
   return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 }
 
+// Selection is the app's cursor, so the keys that move it work wherever the reviewer is
+// looking. Nothing here is editable, so single letters are safe; isTyping guards the note
+// input and the settings fields, which are the only places a letter means itself.
+function runCommand(command: Command): boolean {
+  const files = store.files();
+  const at = cursor.value ?? store.selectedPath;
+
+  switch (command) {
+    case "next-file":
+    case "previous-file":
+      return moveTo(step(files, at, command === "next-file" ? 1 : -1));
+    case "first-file":
+    case "last-file":
+      return moveTo(edge(files, command === "first-file" ? "first" : "last"));
+    case "toggle-directory": {
+      if (at === null) return true;
+      // Opening a directory is how a reviewer says "let me look in here", so the cursor
+      // goes in with it. On anything else the same key closes the directory the cursor is
+      // inside and steps out to it, which is the way back.
+      if (rowAt(files, at)?.type === "dir" && collapsedDirs.has(at)) {
+        collapsedDirs.delete(at);
+        return moveTo(step(files, at, 1));
+      }
+      const dir = rowAt(files, at)?.type === "dir" ? at : parentOf(files, at);
+      if (dir === null) return true;
+      collapsedDirs.add(dir);
+      return moveTo(dir);
+    }
+    case "dismiss": {
+      if (!helpOpen.value) return false;
+      helpOpen.value = false;
+      return true;
+    }
+    case "toggle-checked": {
+      mark(at, null);
+      return true;
+    }
+    case "mark-and-advance":
+    case "mark-and-retreat": {
+      // Read before marking: once this row is marked it is no longer a candidate, and the
+      // search would step over where the reviewer actually is.
+      const next = nextUnmarked(files, at, command === "mark-and-advance" ? 1 : -1);
+      mark(at, true);
+      if (next !== null && next !== at) moveTo(next);
+      return true;
+    }
+    case "next-change":
+      diffPane.value?.goToChange("next");
+      return true;
+    case "previous-change":
+      diffPane.value?.goToChange("previous");
+      return true;
+    case "delta-view":
+      diffPane.value?.showDelta();
+      return true;
+    case "capture-note":
+      openNote();
+      return true;
+    case "toggle-notes":
+      drawerOpen.value = !drawerOpen.value;
+      return true;
+    case "toggle-tree":
+      treeVisible.value = !treeVisible.value;
+      return true;
+    case "help":
+      helpOpen.value = !helpOpen.value;
+      return true;
+  }
+}
+
+/**
+ * Moves the cursor, and opens the row when it is a file. A directory has nothing to show,
+ * so passing over one leaves the reader looking at the file they were already reading.
+ */
+function moveTo(path: string | null): boolean {
+  if (path === null) return true;
+  cursor.value = path;
+  if (rowAt(store.files(), path)?.type === "file") store.select(path);
+  return true;
+}
+
+/** Marks a row: one file, or every file under a directory. `checked` null means toggle. */
+function mark(path: string | null, checked: boolean | null): void {
+  const under = filesAt(store.files(), path).filter((file): file is PrFile => "checked" in file);
+  if (under.length === 0) return;
+  const next = checked ?? under.some((file) => !file.checked);
+  const changing = under.filter((file) => file.checked !== next).map((file) => file.path);
+  if (changing.length === 0) return;
+  if (changing.length === 1) void store.setChecked(changing[0]!, next);
+  else void store.setCheckedMany(changing, next);
+}
+
+
+// Keyboard movement can leave the cursor outside the scrolled area, where the reviewer
+// cannot see what they are on. Follow it; a mouse click is already in view.
+watch(cursor, async () => {
+  await nextTick();
+  document.querySelector(".view-sidebar .tnode.cur")?.scrollIntoView({ block: "nearest" });
+});
+
+// A file opened by any other route — a click, a note, opening the pull request — becomes
+// where the keyboard continues from.
+watch(() => store.selectedPath, (path) => {
+  if (path !== null && rowAt(store.files(), cursor.value)?.type !== "dir") cursor.value = path;
+});
+
+// The half-typed prefix of a two-key binding. Cleared by whatever comes next, so a `g`
+// followed by anything other than the key that completes a chord does nothing at all.
+let pending: Prefix | null = null;
+
 function onKey(event: KeyboardEvent): void {
-  const target = event.target as HTMLElement | null;
-  if (isTyping(target)) return;
-  if (event.key === "b" && (event.metaKey || event.ctrlKey)) {
+  if (isTyping(event.target as HTMLElement | null)) return;
+  const started = isPrefix(event, pending);
+  if (started !== null) {
+    pending = started;
     event.preventDefault();
     event.stopPropagation();
-    treeVisible.value = !treeVisible.value;
     return;
   }
-  if (event.metaKey || event.ctrlKey || event.altKey) return;
-  if (event.key === "n" && store.view && activeMode.value === "pulls") {
-    event.preventDefault();
-    event.stopPropagation();
-    openNote();
-  }
+  const binding = bindingFor(event, pending);
+  pending = null;
+  if (binding === null) return;
+  // Everything but the panel toggles is about a pull request under review; in the local
+  // viewer there is no checkoff, no note, and no delta to reach.
+  const reviewing = store.view !== null && activeMode.value === "pulls";
+  if (!reviewing && binding.group !== "Panels") return;
+  if (!runCommand(binding.command)) return;
+  event.preventDefault();
+  event.stopPropagation();
 }
 window.addEventListener("keydown", onKey, true);
 
@@ -396,7 +516,7 @@ onBeforeUnmount(() => {
               <p>Choose a pull request or stack from the sidebar to begin reviewing.</p>
             </div>
             <div v-else class="workspace" :class="notesDock">
-              <DiffPane :store="store" :editor-settings="editorSettings.settings.editor" class="diff" @add-note="openNote" />
+              <DiffPane ref="diffPane" :store="store" :editor-settings="editorSettings.settings.editor" class="diff" @add-note="openNote" />
               <template v-if="drawerOpen">
                 <Splitter v-model="notesSize" :orientation="notesDock === 'right' ? 'vertical' : 'horizontal'" :min="notesDock === 'right' ? 220 : 120" :max="700" inverted />
                 <NotesDrawer
@@ -425,6 +545,7 @@ onBeforeUnmount(() => {
       @open-zoom-settings="openSettings('workbench')"
     />
     <NoteCapture :store="store" :target="noteTarget" @close="noteTarget = null" />
+    <KeymapHelp v-if="helpOpen" @close="helpOpen = false" />
     <ConfirmDialog
       :open="repoPendingRemoval !== null"
       title="Remove repository?"

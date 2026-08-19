@@ -25,3 +25,26 @@ export function assertRepositoryRegistered(repos: RepoEntry[], repoId: string): 
     throw new Error(`${repoId} is not registered. Open one of its checkout folders first.`);
   }
 }
+
+/**
+ * Registers `repoId` from the checkout a command was run in, when the app has not seen it
+ * before. Identity still comes from that checkout's origin, so this is the same
+ * registration the folder picker performs — only the folder comes from the caller, which
+ * is already standing in one, rather than from a dialog.
+ *
+ * Returns the entry when one was added, so the caller knows to save its config.
+ */
+export async function registerFromCheckout(
+  git: Pick<GitEngine, "worktreeRoot" | "originUrl">,
+  repos: RepoEntry[],
+  repoId: string,
+  checkoutPath: string | null,
+): Promise<RepoEntry | null> {
+  if (repos.some((repo) => repo.repoId === repoId)) return null;
+  if (checkoutPath === null) {
+    throw new Error(`${repoId} is not registered. Open one of its checkout folders first.`);
+  }
+  const entry = await repositoryFromLocalPath(git, checkoutPath, repoId);
+  repos.push(entry);
+  return entry;
+}

@@ -6,7 +6,7 @@ import { type LocalView, type OpenTarget, type RepoEntry } from "@gander/shared"
 import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
-import { createGitEngine } from "./git.js";
+import { createGitEngine, type GitEngine } from "./git.js";
 import { checkGithubToken, listOpenPrs, resolveGithubToken } from "./github.js";
 import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
@@ -18,7 +18,7 @@ import { linkedWorktreeLabel } from "./development-context.js";
 import { createZoomController, type ZoomController } from "./zoom-controller.js";
 import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
 import { loadUpdateController, supportsInPlaceUpdates, type UpdateController } from "./updates.js";
-import { assertRepositoryRegistered, repositoryFromLocalPath } from "./repository-registration.js";
+import { assertRepositoryRegistered, registerFromCheckout, repositoryFromLocalPath } from "./repository-registration.js";
 
 let zoomController: ZoomController;
 const localWatchers = new Map<number, LocalViewWatcher>();
@@ -46,7 +46,7 @@ function requireOpenWorktree(senderId: number, path: string): void {
   }
 }
 
-async function bootstrap(): Promise<GanderConfig> {
+async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
   const cfg = loadConfig();
   const git = createGitEngine(join(app.getPath("userData"), "clones"));
   // Resolved per request rather than captured: the reviewer can enter or change the
@@ -215,7 +215,7 @@ async function bootstrap(): Promise<GanderConfig> {
     zoomController.apply(settings.window.zoomLevel);
   });
 
-  return cfg;
+  return { cfg, git };
 }
 
 function installMenu(updates: UpdateController | null): void {
@@ -351,8 +351,9 @@ try {
 
 app.whenReady().then(async () => {
   let cfg: GanderConfig;
+  let git: GitEngine;
   try {
-    cfg = await bootstrap();
+    ({ cfg, git } = await bootstrap());
     if (launchTarget !== null) assertRepositoryRegistered(cfg.repos, launchTarget.repoId);
   } catch (err) {
     dialog.showErrorBox("Gander failed to start", (err as Error).message);
@@ -367,8 +368,11 @@ app.whenReady().then(async () => {
   try {
     const stop = await startOpenServer({
       socketPath: socketPath(),
-      onTarget: (target) => {
-        assertRepositoryRegistered(cfg.repos, target.repoId);
+      onTarget: async (target, from) => {
+        // An agent that just pushed a branch should not need the reviewer to click through
+        // a folder dialog first. The request carries the checkout it came from, which is
+        // the same evidence the picker collects.
+        if (await registerFromCheckout(git, cfg.repos, target.repoId, from) !== null) saveConfig(cfg);
         deliver(target);
       },
     });

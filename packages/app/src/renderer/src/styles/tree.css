@@ -11,7 +11,11 @@
 
 .tnode:hover { background: var(--hover-background); }
 .tnode:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.tnode.sel { background: var(--selection-background); box-shadow: inset 2px 0 0 var(--accent); }
+/* Two different things: `cur` is where the keyboard is, `sel` is the file in the diff.
+   They part company only while the cursor rests on a directory, so the bar marks the
+   cursor alone and the open file keeps the background — one row, one bar. */
+.tnode.sel { background: var(--selection-background); }
+.tnode.cur { box-shadow: inset 2px 0 0 var(--accent); }
 .tnode .hierarchy-slot { width: 14px; flex: none; }
 .tnode .chev { color: var(--faint-foreground); }
 .tnode .fname { overflow: hidden; text-overflow: ellipsis; }

@@ -82,6 +82,57 @@ describe("store", () => {
     expect(store.selectedPath).toBe("a.rb");
   });
 
+  // Switching repositories clears the loaded view, which bumps the generation counter.
+  // A generation read before that ran looked superseded by this call's own work, so the
+  // repository opened and the pull request silently did not.
+  it("opens the pull request even when another repository was already loaded", async () => {
+    const store = createStore(fakeApi({
+      listRepos: async () => [
+        { repoId: "acme/atlas", url: "u", localPath: "/tmp/atlas" },
+        { repoId: "acme/beacon", url: "u2", localPath: "/tmp/beacon" },
+      ],
+    }));
+    await store.loadRepos();
+    await store.openTarget({ repoId: "acme/beacon", prNumber: 1 });
+    expect(store.currentRepoId).toBe("acme/beacon");
+
+    await store.openTarget({ repoId: "acme/atlas", prNumber: 1 });
+
+    expect(store.currentRepoId).toBe("acme/atlas");
+    expect(store.view).not.toBeNull();
+  });
+
+  // The 30-second poll can be mid-flight when the reviewer opens a pull request, which
+  // closes the worktree in the main process. Its refusal reached the reviewer as an error
+  // naming a worktree they had already left.
+  it("discards a local refresh the reviewer has already moved on from", async () => {
+    let release: () => void = () => {};
+    const worktree = { path: "/tmp/beacon", headSha: "b", branch: "main", locked: false };
+    const localView: LocalView = { worktree, defaultBranch: "main", mergeBaseSha: "a", files: [] };
+    const store = createStore(fakeApi({
+      listRepos: async () => [
+        { repoId: "acme/atlas", url: "u", localPath: "/tmp/atlas" },
+        { repoId: "acme/beacon", url: "u2", localPath: "/tmp/beacon" },
+      ],
+      listWorktrees: async () => [worktree],
+      openLocal: async () => localView,
+      refreshLocal: async () => new Promise<LocalView>((_resolve, reject) => {
+        release = () => reject(new Error("/tmp/beacon is not the open local worktree"));
+      }),
+    }));
+    await store.loadRepos();
+    await store.selectRepo("acme/beacon");
+    await store.openLocal("/tmp/beacon");
+
+    const refreshing = store.refresh();
+    await store.openTarget({ repoId: "acme/atlas", prNumber: 1 });
+    release();
+    await refreshing;
+
+    expect(store.error).toBeNull();
+    expect(store.currentRepoId).toBe("acme/atlas");
+  });
+
   it("opens a target naming only a repository", async () => {
     const store = createStore(fakeApi());
     await store.loadRepos();
@@ -98,6 +149,23 @@ describe("store", () => {
     await store.openTarget({ repoId: "acme/new", prNumber: null });
     expect(store.targetRepoId).toBeNull();
     expect(store.error).toBe("acme/new is not registered. Open one of its checkout folders first.");
+  });
+
+  // bin/gander registers a repository in the main process as it opens one, which happens
+  // after the renderer last read the list. Without the re-read, the first open of a
+  // checkout the app has not seen always failed.
+  it("re-reads the repository list before refusing a target", async () => {
+    let registered = false;
+    const store = createStore(fakeApi({
+      listRepos: async () => (registered ? [{ repoId: "acme/atlas", url: "u", localPath: "/p" }] : []),
+    }));
+    await store.loadRepos();
+    registered = true;
+
+    await store.openTarget({ repoId: "acme/atlas", prNumber: null });
+
+    expect(store.error).toBeNull();
+    expect(store.targetRepoId).toBe("acme/atlas");
   });
 
   it("loads repos, selects one, opens a PR, tracks progress", async () => {

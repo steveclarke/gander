@@ -25,7 +25,9 @@ const socketPath = process.env.GANDER_APP_SOCKET;
 // Everything after the -- separator, which is what keeps node from reading --repo as
 // an option of its own.
 const argv = process.argv.slice(1);
-const socket = connect(socketPath, () => socket.write(JSON.stringify({ argv }) + "\n"));
+// The checkout this ran in travels with the request: a repository is registered from
+// the origin of a checkout, and this command is standing in one.
+const socket = connect(socketPath, () => socket.write(JSON.stringify({ argv, from: process.cwd() }) + "\n"));
 let out = "";
 socket.setEncoding("utf8");
 socket.on("data", (chunk) => { out += chunk; });
