@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { openStorage, type Storage } from "./storage.js";
+import { ReviewerReplyWaiters } from "./reply-waiters.js";
 import { buildServer } from "./server.js";
 
 // A real MCP client over a real HTTP listener: server.inject cannot drive the streaming
@@ -16,6 +17,7 @@ let dir: string;
 let storage: Storage;
 let server: FastifyInstance;
 let baseUrl: string;
+let replyWaiters: ReviewerReplyWaiters;
 
 async function connect(token = "test-token"): Promise<Client> {
   const client = new Client({ name: "test-agent", version: "1.0.0" });
@@ -37,11 +39,30 @@ const textOf = (result: { content?: unknown }): string => {
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "gander-mcp-"));
   storage = openStorage(join(dir, "t.db"));
-  server = buildServer({ storage, token: "test-token", version: "0.1.0" });
+  replyWaiters = new ReviewerReplyWaiters();
+  server = buildServer({ storage, token: "test-token", version: "0.1.0", replyWaiters });
   await server.listen({ port: 0, host: "127.0.0.1" });
   const addr = server.addresses()[0]!;
   baseUrl = `http://127.0.0.1:${addr.port}`;
 });
+
+async function addReviewerReply(prNumber: number, questionId: number, text: string): Promise<void> {
+  const response = await fetch(`${baseUrl}/api/reviews/acme%2Fatlas/${prNumber}/questions/${questionId}/replies`, {
+    method: "POST",
+    headers: { Authorization: "Bearer test-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  expect(response.status).toBe(201);
+}
+
+async function restartWithWaiters(waiters: ReviewerReplyWaiters): Promise<void> {
+  await server.close();
+  replyWaiters = waiters;
+  server = buildServer({ storage, token: "test-token", version: "0.1.0", replyWaiters });
+  await server.listen({ port: 0, host: "127.0.0.1" });
+  const addr = server.addresses()[0]!;
+  baseUrl = `http://127.0.0.1:${addr.port}`;
+}
 afterEach(async () => {
   await server.close();
   storage.close();
@@ -65,8 +86,9 @@ describe("MCP endpoint", () => {
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
     });
-    const payload = JSON.parse(textOf(result as { content?: unknown })) as { prNumber: number; branch: string; title: string; stack: unknown; questions: Array<{ file: string; line: number; text: string }> };
+    const payload = JSON.parse(textOf(result as { content?: unknown })) as { prNumber: number; replyCursor: number; branch: string; title: string; stack: unknown; questions: Array<{ file: string; line: number; text: string }> };
     expect(payload.prNumber).toBe(7);
+    expect(payload.replyCursor).toBe(0);
     // The agent must be able to tell which pull request — and which checkout — this is.
     expect(payload.branch).toBe("feat/thing");
     expect(payload.title).toBe("Feature");
@@ -74,6 +96,180 @@ describe("MCP endpoint", () => {
       id: expect.any(Number), file: "a.rb", line: 12, text: "Why the retry here?", state: "open",
       replies: [], capturedAtSha: null, lineMayHaveMoved: false,
     }]);
+    await client.close();
+  });
+
+  it("returns immediately when a reviewer replied between the cursor call and the wait call", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const question = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
+    const client = await connect();
+    const first = JSON.parse(textOf((await client.callTool({
+      name: "get_review_questions", arguments: { repo: "acme/atlas", prNumber: 7 },
+    })) as { content?: unknown })) as { replyCursor: number };
+
+    await addReviewerReply(7, question.id, "Because the caller can retry safely.");
+    const next = JSON.parse(textOf((await client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: first.replyCursor, waitSeconds: 30 },
+    })) as { content?: unknown })) as {
+      replyCursor: number;
+      wait: { outcome: string };
+      questions: Array<{ state: string; replies: Array<{ author: string; text: string }> }>;
+    };
+
+    expect(next.replyCursor).toBe(1);
+    expect(next.wait.outcome).toBe("reply");
+    expect(next.questions[0]).toMatchObject({
+      state: "open",
+      replies: [{ author: "reviewer", text: "Because the caller can retry safely." }],
+    });
+    await client.close();
+  });
+
+  it("holds a call until a reviewer replies on that pull request", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const question = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+    const client = await connect();
+    const waiting = client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", branch: "feat/thing", afterReplyCursor: 0, waitSeconds: 30 },
+    }, undefined, { timeout: 35_000 });
+    await expect.poll(() => replyWaiters.activeCount).toBe(1);
+
+    await addReviewerReply(7, question.id, "The requirement changed.");
+    const payload = JSON.parse(textOf((await waiting) as { content?: unknown })) as { replyCursor: number; wait: { outcome: string } };
+    expect(payload).toMatchObject({ replyCursor: 1, wait: { outcome: "reply" } });
+    expect(replyWaiters.activeCount).toBe(0);
+    await client.close();
+  });
+
+  it("wakes every waiter on the pull request, but not waiters on another pull request", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/one", title: "One", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    storage.setPrContext("acme/atlas", 8, { headRef: "feat/two", title: "Two", headSha: "sha-2", stackId: null, stackSize: null, stackPosition: null });
+    const firstQuestion = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "One?", headSha: null });
+    const secondQuestion = storage.addQuestion("acme/atlas", 8, { path: "b.rb", line: null, text: "Two?", headSha: null });
+    const clients = await Promise.all([connect(), connect(), connect()]);
+    const waits = clients.map((client, index) => client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: index < 2 ? 7 : 8, afterReplyCursor: 0, waitSeconds: 30 },
+    }, undefined, { timeout: 35_000 }));
+    await expect.poll(() => replyWaiters.activeCount).toBe(3);
+
+    await addReviewerReply(7, firstQuestion.id, "For both agents on this pull request.");
+    const sameReview = await Promise.all(waits.slice(0, 2));
+    expect(sameReview.map((result) => JSON.parse(textOf(result as { content?: unknown })).wait.outcome)).toEqual(["reply", "reply"]);
+    expect(replyWaiters.activeCount).toBe(1);
+
+    await addReviewerReply(8, secondQuestion.id, "Only now should this waiter wake.");
+    const otherReview = JSON.parse(textOf((await waits[2]!) as { content?: unknown })) as { wait: { outcome: string } };
+    expect(otherReview.wait.outcome).toBe("reply");
+    await Promise.all(clients.map((client) => client.close()));
+  });
+
+  it("returns a timeout outcome and the unchanged cursor", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const client = await connect();
+    const result = await client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 1 },
+    }, undefined, { timeout: 5_000 });
+    const payload = JSON.parse(textOf(result as { content?: unknown })) as { replyCursor: number; wait: { outcome: string; timeoutSeconds: number; message: string } };
+    expect(payload).toMatchObject({ replyCursor: 0, wait: { outcome: "timeout", timeoutSeconds: 1 } });
+    expect(payload.wait.message).toContain("afterReplyCursor: 0");
+    expect(replyWaiters.activeCount).toBe(0);
+    await client.close();
+  });
+
+  it("releases a held wait when its MCP connection closes", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const client = await connect();
+    const waiting = client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
+    }, undefined, { timeout: 35_000 });
+    await expect.poll(() => replyWaiters.activeCount).toBe(1);
+
+    await client.close();
+    await expect(waiting).rejects.toThrow();
+    await expect.poll(() => replyWaiters.activeCount).toBe(0);
+  });
+
+  it("releases held waits so the service can shut down", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const client = await connect();
+    const waiting = client.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
+    }, undefined, { timeout: 35_000 });
+    await expect.poll(() => replyWaiters.activeCount).toBe(1);
+
+    await server.close();
+    expect(replyWaiters.activeCount).toBe(0);
+    const cancelled = await waiting;
+    expect(cancelled.isError).toBe(true);
+    expect(textOf(cancelled as { content?: unknown })).toContain("cancelled");
+    await client.close();
+  });
+
+  it("rejects waits beyond the configured connection limits", async () => {
+    await restartWithWaiters(new ReviewerReplyWaiters({ total: 2, perReview: 1 }));
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const clients = await Promise.all([connect(), connect()]);
+    const first = clients[0]!.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
+    }, undefined, { timeout: 35_000 });
+    await expect.poll(() => replyWaiters.activeCount).toBe(1);
+
+    const refused = await clients[1]!.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
+    });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused as { content?: unknown })).toContain("This pull request already has 1 reply waits open");
+
+    await clients[0]!.close();
+    await expect(first).rejects.toThrow();
+    await clients[1]!.close();
+  });
+
+  it("caps the total waits across different pull requests", async () => {
+    await restartWithWaiters(new ReviewerReplyWaiters({ total: 1, perReview: 2 }));
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/one", title: "One", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    storage.setPrContext("acme/atlas", 8, { headRef: "feat/two", title: "Two", headSha: "sha-2", stackId: null, stackSize: null, stackPosition: null });
+    const clients = await Promise.all([connect(), connect()]);
+    const first = clients[0]!.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
+    }, undefined, { timeout: 35_000 });
+    await expect.poll(() => replyWaiters.activeCount).toBe(1);
+
+    const refused = await clients[1]!.callTool({
+      name: "get_review_questions",
+      arguments: { repo: "acme/atlas", prNumber: 8, afterReplyCursor: 0, waitSeconds: 30 },
+    });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused as { content?: unknown })).toContain("service already has 1 reply waits open");
+
+    await clients[0]!.close();
+    await expect(first).rejects.toThrow();
+    await clients[1]!.close();
+  });
+
+  it("rejects invalid wait cursor combinations", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const client = await connect();
+    const withoutCursor = await client.callTool({
+      name: "get_review_questions", arguments: { repo: "acme/atlas", prNumber: 7, waitSeconds: 1 },
+    });
+    expect(withoutCursor.isError).toBe(true);
+    expect(textOf(withoutCursor as { content?: unknown })).toContain("requires afterReplyCursor");
+
+    const futureCursor = await client.callTool({
+      name: "get_review_questions", arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 1 },
+    });
+    expect(futureCursor.isError).toBe(true);
+    expect(textOf(futureCursor as { content?: unknown })).toContain("ahead");
     await client.close();
   });
 
@@ -91,7 +287,8 @@ describe("MCP endpoint", () => {
     const payload = JSON.parse(textOf((await client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
-    })) as { content?: unknown })) as { questions: Array<{ state: string; replies: Array<{ author: string; text: string }> }> };
+    })) as { content?: unknown })) as { replyCursor: number; questions: Array<{ state: string; replies: Array<{ author: string; text: string }> }> };
+    expect(payload.replyCursor).toBe(0);
     expect(payload.questions[0]).toMatchObject({
       state: "open",
       replies: [{ author: "agent", text: "This belongs in the model because both callers need it." }],

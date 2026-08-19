@@ -112,13 +112,16 @@ describe("storage", () => {
 
     it("appends reviewer and agent replies without changing the question state", () => {
       const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 4, text: "Why?", headSha: null });
+      expect(storage.getReviewerReplyCursor("acme/atlas", 7)).toBe(0);
 
       expect(storage.addReviewerReply("acme/atlas", 7, q.id, { text: "Because this runs twice." })).toMatchObject({
         author: "reviewer", text: "Because this runs twice.",
       });
+      expect(storage.getReviewerReplyCursor("acme/atlas", 7)).toBe(1);
       expect(storage.addAgentReply(q.id, { text: "That constraint belongs in the model." })).toMatchObject({
         author: "agent", text: "That constraint belongs in the model.",
       });
+      expect(storage.getReviewerReplyCursor("acme/atlas", 7)).toBe(1);
 
       expect(storage.listQuestions("acme/atlas", 7)[0]).toMatchObject({
         state: "open",
@@ -137,12 +140,14 @@ describe("storage", () => {
         baseContent: "old", headContent: "new", machine: "studio",
       });
       storage.addReviewerReply("acme/atlas", 7, q.id, { text: "Closing note." });
+      expect(storage.getReviewerReplyCursor("acme/atlas", 7)).toBe(2);
       expect(storage.listQuestions("acme/atlas", 7)[0]?.state).toBe("resolved");
     });
 
     it("scopes reviewer replies to the question's review", () => {
       const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
       expect(storage.addReviewerReply("acme/atlas", 8, q.id, { text: "Wrong review" })).toBeNull();
+      expect(storage.getReviewerReplyCursor("acme/atlas", 8)).toBe(0);
       expect(storage.listQuestions("acme/atlas", 7)[0]?.replies).toEqual([]);
     });
 

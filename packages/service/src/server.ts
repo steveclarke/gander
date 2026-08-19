@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { NewQuestionReplySchema, NewQuestionSchema, PrContextSchema, PutFileStateSchema } from "@gander/shared";
 import { handleMcpRequest } from "./mcp.js";
+import { ReviewerReplyWaiters, reviewWaitKey } from "./reply-waiters.js";
 import type { Storage } from "./storage.js";
 
 function parsePrNumber(raw: string, reply: FastifyReply): number | undefined {
@@ -12,8 +13,12 @@ function parsePrNumber(raw: string, reply: FastifyReply): number | undefined {
   return n;
 }
 
-export function buildServer(opts: { storage: Storage; token: string; version: string }): FastifyInstance {
-  const app = Fastify({ logger: false });
+export function buildServer(opts: { storage: Storage; token: string; version: string; replyWaiters?: ReviewerReplyWaiters }): FastifyInstance {
+  // Held reply waits must not make shutdown wait for their timeout. Destroying
+  // active sockets triggers the same cleanup path as a disconnected MCP client.
+  const app = Fastify({ logger: false, forceCloseConnections: true });
+  const replyWaiters = opts.replyWaiters ?? new ReviewerReplyWaiters();
+  app.addHook("preClose", async () => replyWaiters.close());
 
   app.get("/healthz", async () => ({ ok: true, version: opts.version }));
 
@@ -131,6 +136,10 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
       if (added === null) {
         return reply.code(404).send({ error: `no question ${id} on ${req.params.repoId}#${prNumber}` });
       }
+      replyWaiters.publish(
+        reviewWaitKey(req.params.repoId, prNumber),
+        opts.storage.getReviewerReplyCursor(req.params.repoId, prNumber),
+      );
       return reply.code(201).send(added);
     },
   );
@@ -138,7 +147,7 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
   // Agents reach the same questions the app writes, over MCP. Same bearer token as
   // /api — one credential per install, not two.
   app.all("/mcp", async (req, reply) => {
-    await handleMcpRequest(opts.storage, opts.version, req.raw, reply.raw, req.body);
+    await handleMcpRequest(opts.storage, opts.version, req.raw, reply.raw, req.body, replyWaiters);
     // The transport writes and ends the raw response itself; telling Fastify the reply
     // is already sent stops it appending a second one.
     reply.hijack();

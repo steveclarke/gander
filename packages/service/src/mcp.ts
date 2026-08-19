@@ -1,6 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import {
+  DEFAULT_REPLY_WAIT_SECONDS,
+  MAX_REPLY_WAIT_SECONDS,
+  ReplyWaitLimitError,
+  ReviewerReplyWaiters,
+  reviewWaitKey,
+} from "./reply-waiters.js";
 import type { Storage } from "./storage.js";
 
 /**
@@ -10,7 +17,7 @@ import type { Storage } from "./storage.js";
  * the app by re-checking the file. Agents already have git and gh for code; this carries
  * only the conversation.
  */
-export function buildMcpServer(storage: Storage, version: string): McpServer {
+export function buildMcpServer(storage: Storage, version: string, replyWaiters: ReviewerReplyWaiters): McpServer {
   const server = new McpServer({ name: "gander", version });
 
   /** Agents know their own repository and branch; the pull request number they usually don't. */
@@ -32,6 +39,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         "Questions the reviewer has left on a pull request, with the file and line each one is about. " +
         "Derive repo and branch from the working directory. Returns open questions by default — those are the ones still needing work. " +
         "The response always counts open, addressed, and resolved questions so hidden states are visible. " +
+        "To wait without polling, pass a previous response's replyCursor as afterReplyCursor; after a timeout, repeat with the latest returned cursor. " +
         "The response names the branch, title, and stack position of the pull request the questions belong to: check it matches the checkout being worked in, " +
         "because a stacked pull request's sibling is a different branch with different questions.",
       inputSchema: {
@@ -40,11 +48,51 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         prNumber: z.number().int().positive().optional().describe("Pull request number, if known."),
         includeAddressed: z.boolean().optional().describe("Also return questions already marked addressed. Defaults to false."),
         includeResolved: z.boolean().optional().describe("Also return questions the reviewer has resolved. Defaults to false."),
+        afterReplyCursor: z.number().int().nonnegative().optional().describe(
+          `Wait for a reviewer reply newer than this tool's previous replyCursor. The wait is scoped to the resolved pull request and lasts at most ${DEFAULT_REPLY_WAIT_SECONDS} seconds by default.`,
+        ),
+        waitSeconds: z.number().int().min(1).max(MAX_REPLY_WAIT_SECONDS).optional().describe(
+          `How long to wait when afterReplyCursor is present. Defaults to ${DEFAULT_REPLY_WAIT_SECONDS}; maximum ${MAX_REPLY_WAIT_SECONDS}.`,
+        ),
       },
     },
-    async ({ repo, branch, prNumber, includeAddressed, includeResolved }) => {
+    async ({ repo, branch, prNumber, includeAddressed, includeResolved, afterReplyCursor, waitSeconds }, { signal }) => {
       const resolved = resolvePr(repo, prNumber, branch);
       if (typeof resolved === "string") return { content: [{ type: "text", text: resolved }], isError: true };
+
+      if (waitSeconds !== undefined && afterReplyCursor === undefined) {
+        return { content: [{ type: "text", text: "waitSeconds requires afterReplyCursor from an earlier response." }], isError: true };
+      }
+      const cursorBeforeWait = storage.getReviewerReplyCursor(repo, resolved);
+      if (afterReplyCursor !== undefined && afterReplyCursor > cursorBeforeWait) {
+        return {
+          content: [{ type: "text", text: `afterReplyCursor ${afterReplyCursor} is ahead of this pull request's current replyCursor ${cursorBeforeWait}. Start again without afterReplyCursor.` }],
+          isError: true,
+        };
+      }
+
+      const effectiveWaitSeconds = waitSeconds ?? DEFAULT_REPLY_WAIT_SECONDS;
+      let waitOutcome: "reply" | "timeout" | undefined;
+      if (afterReplyCursor !== undefined) {
+        try {
+          const outcome = await replyWaiters.wait(
+            reviewWaitKey(repo, resolved),
+            afterReplyCursor,
+            () => storage.getReviewerReplyCursor(repo, resolved),
+            effectiveWaitSeconds * 1_000,
+            signal,
+          );
+          if (outcome === "cancelled") {
+            return { content: [{ type: "text", text: "Reply wait cancelled." }], isError: true };
+          }
+          waitOutcome = outcome;
+        } catch (error) {
+          if (error instanceof ReplyWaitLimitError) {
+            return { content: [{ type: "text", text: error.message }], isError: true };
+          }
+          throw error;
+        }
+      }
 
       const context = storage.getPrContext(repo, resolved);
       const members = context?.stackId == null ? [] : storage.listStackMembers(repo, context.stackId);
@@ -92,9 +140,23 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         message = `Returned ${questions.length} of ${allQuestions.length} question${allQuestions.length === 1 ? "" : "s"} on this pull request.`;
       }
 
+      const replyCursor = storage.getReviewerReplyCursor(repo, resolved);
       const payload = {
         repo,
         prNumber: resolved,
+        // Per-review and monotonic: pass this exact value as afterReplyCursor on
+        // the next call so a reply between calls returns immediately, not after a timeout.
+        replyCursor,
+        ...(waitOutcome === undefined ? {} : {
+          wait: {
+            outcome: waitOutcome,
+            afterReplyCursor,
+            timeoutSeconds: effectiveWaitSeconds,
+            message: waitOutcome === "timeout"
+              ? `No reviewer reply arrived. To keep waiting, call this tool again with afterReplyCursor: ${replyCursor}.`
+              : "A reviewer reply arrived; the question threads in this response are current.",
+          },
+        }),
         // Everything an agent needs to say — and check — which pull request it is on.
         branch: context?.headRef ?? null,
         title: context?.title ?? null,
@@ -193,10 +255,11 @@ export async function handleMcpRequest(
   req: import("node:http").IncomingMessage,
   res: import("node:http").ServerResponse,
   body: unknown,
+  replyWaiters: ReviewerReplyWaiters,
 ): Promise<void> {
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => void transport.close());
-  const server = buildMcpServer(storage, version);
+  const server = buildMcpServer(storage, version, replyWaiters);
   await server.connect(transport);
   // Fastify has already read and parsed the body; handing it over here stops the
   // transport waiting forever on a stream that will never emit again.

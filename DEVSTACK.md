@@ -214,6 +214,27 @@ Run it in the repository being reviewed, not in this one. Three tools appear:
 Nothing over MCP resolves a question. That stays the reviewer's act, made by
 re-reviewing the file in the app.
 
+### Waiting for a reviewer reply
+
+`get_review_questions` returns a numeric `replyCursor` scoped to the resolved
+pull request. To wait without polling, call it again with that exact value as
+`afterReplyCursor`. The call returns as soon as a reviewer reply advances the
+cursor, or after `waitSeconds` (30 seconds by default and at most 30 seconds)
+with `wait.outcome` set to `reply` or `timeout`. A reply that lands between the
+two calls is not missed: the second call sees the advanced durable cursor and
+returns immediately.
+
+The wait covers every question on that pull request. It does not wake for a
+sibling in a stack or another pull request, and agent replies do not advance the
+cursor. Pass `includeAddressed: true` or `includeResolved: true` when waiting on
+a thread in one of those states. Replies still do not address or resolve a
+question.
+
+The service holds at most 32 reply waits in total and four per pull request.
+Each wait releases its slot on reply, timeout, connection close, or service
+shutdown. After a timeout, call again with the newly returned
+`replyCursor` to keep waiting.
+
 ## Config precedence
 
 For ordinary `bin/dev`, `GANDER_SERVICE_URL` and `GANDER_TOKEN` generated in

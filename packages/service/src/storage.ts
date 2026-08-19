@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   stack_id INTEGER,
   stack_size INTEGER,
   stack_position INTEGER,
+  reviewer_reply_cursor INTEGER NOT NULL DEFAULT 0,
   UNIQUE(repo_id, pr_number)
 );
 CREATE TABLE IF NOT EXISTS file_states (
@@ -60,6 +61,8 @@ export interface Storage {
   /** Every pull request recorded as part of the same stack, with how many open questions each holds. */
   listStackMembers(repoId: string, stackId: number): Array<{ prNumber: number; headRef: string | null; title: string | null; position: number | null; openQuestions: number }>;
   findPrByHeadRef(repoId: string, headRef: string): number | null;
+  /** Monotonic per-review cursor advanced only by replies from the reviewer. */
+  getReviewerReplyCursor(repoId: string, prNumber: number): number;
   markQuestionAddressed(id: number, input: MarkAddressed): Question | null;
   listQuestions(repoId: string, prNumber: number): Question[];
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Question;
@@ -196,6 +199,12 @@ export function openStorage(dbPath: string): Storage {
       return row?.pr_number ?? null;
     },
 
+    getReviewerReplyCursor(repoId, prNumber) {
+      const rid = reviewId(repoId, prNumber);
+      const row = db.prepare("SELECT reviewer_reply_cursor FROM reviews WHERE id = ?").get(rid) as { reviewer_reply_cursor: number };
+      return row.reviewer_reply_cursor;
+    },
+
     markQuestionAddressed(id, input) {
       // Only an open question can be addressed. Re-addressing a resolved one would
       // undo the reviewer's own act, and the spec puts resolution solely in their hands.
@@ -238,11 +247,15 @@ export function openStorage(dbPath: string): Storage {
 
     addReviewerReply(repoId, prNumber, id, input) {
       const rid = reviewId(repoId, prNumber);
-      const result = db.prepare(`
-        INSERT INTO question_replies (question_id, author, text)
-        SELECT q.id, 'reviewer', ? FROM questions q WHERE q.id = ? AND q.review_id = ?
-      `).run(input.text, id, rid);
-      return result.changes === 0 ? null : replyById(result.lastInsertRowid);
+      return db.transaction(() => {
+        const result = db.prepare(`
+          INSERT INTO question_replies (question_id, author, text)
+          SELECT q.id, 'reviewer', ? FROM questions q WHERE q.id = ? AND q.review_id = ?
+        `).run(input.text, id, rid);
+        if (result.changes === 0) return null;
+        db.prepare("UPDATE reviews SET reviewer_reply_cursor = reviewer_reply_cursor + 1 WHERE id = ?").run(rid);
+        return replyById(result.lastInsertRowid);
+      })();
     },
 
     addAgentReply(id, input) {
