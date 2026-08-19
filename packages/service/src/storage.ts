@@ -73,6 +73,13 @@ export interface Storage {
 
 interface QuestionRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; commit_ref: string | null; note: string | null; created_at: string }
 interface QuestionReplyRow { id: number; question_id: number; author: string; text: string; created_at: string }
+interface FileStateRow { path: string; checked: number; base_hash: string | null; head_hash: string | null; checked_at: string | null; machine: string | null }
+
+const rowToCheckoff = (r: FileStateRow): FileCheckoff => ({
+  path: r.path, checked: r.checked === 1,
+  baseHash: r.base_hash, headHash: r.head_hash,
+  checkedAt: r.checked_at, machine: r.machine,
+});
 
 const rowToReply = (r: QuestionReplyRow): QuestionReply => ({
   id: r.id,
@@ -91,6 +98,8 @@ const rowToQuestion = (r: QuestionRow, replies: QuestionReply[] = []): Question 
 });
 
 const QUESTION_COLUMNS = "id, path, line, text, state, head_sha, commit_ref, note, created_at";
+const REPLY_COLUMNS = "id, question_id, author, text, created_at";
+const FILE_STATE_COLUMNS = "path, checked, base_hash, head_hash, checked_at, machine";
 
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
 const unpack = (b: Buffer | null): string | null => (b === null ? null : gunzipSync(b).toString("utf8"));
@@ -107,23 +116,17 @@ export function openStorage(dbPath: string): Storage {
     return row.id;
   };
 
-  const rowToCheckoff = (r: { path: string; checked: number; base_hash: string | null; head_hash: string | null; checked_at: string | null; machine: string | null }): FileCheckoff => ({
-    path: r.path, checked: r.checked === 1,
-    baseHash: r.base_hash, headHash: r.head_hash,
-    checkedAt: r.checked_at, machine: r.machine,
-  });
-
   const repliesForQuestion = (id: number): QuestionReply[] =>
-    (db.prepare("SELECT id, question_id, author, text, created_at FROM question_replies WHERE question_id = ? ORDER BY id").all(id) as QuestionReplyRow[])
+    (db.prepare(`SELECT ${REPLY_COLUMNS} FROM question_replies WHERE question_id = ? ORDER BY id`).all(id) as QuestionReplyRow[])
       .map(rowToReply);
 
   const replyById = (id: number | bigint): QuestionReply =>
-    rowToReply(db.prepare("SELECT id, question_id, author, text, created_at FROM question_replies WHERE id = ?").get(id) as QuestionReplyRow);
+    rowToReply(db.prepare(`SELECT ${REPLY_COLUMNS} FROM question_replies WHERE id = ?`).get(id) as QuestionReplyRow);
 
   return {
     getReview(repoId, prNumber) {
       const rid = reviewId(repoId, prNumber);
-      const rows = db.prepare("SELECT path, checked, base_hash, head_hash, checked_at, machine FROM file_states WHERE review_id = ? ORDER BY path").all(rid) as Parameters<typeof rowToCheckoff>[0][];
+      const rows = db.prepare(`SELECT ${FILE_STATE_COLUMNS} FROM file_states WHERE review_id = ? ORDER BY path`).all(rid) as FileStateRow[];
       return { repoId, prNumber, files: rows.map(rowToCheckoff) };
     },
 
@@ -134,7 +137,7 @@ export function openStorage(dbPath: string): Storage {
         JOIN file_states fs ON fs.review_id = r.id
         WHERE r.repo_id = ?
         ORDER BY r.pr_number, fs.path
-      `).all(repoId) as Array<Parameters<typeof rowToCheckoff>[0] & { pr_number: number }>;
+      `).all(repoId) as Array<FileStateRow & { pr_number: number }>;
       const reviews = new Map<number, FileCheckoff[]>();
       for (const row of rows) {
         const files = reviews.get(row.pr_number) ?? [];
@@ -165,7 +168,7 @@ export function openStorage(dbPath: string): Storage {
           ON CONFLICT(review_id, path) DO UPDATE SET checked = 0
         `).run(rid, input.path);
       }
-      const row = db.prepare("SELECT path, checked, base_hash, head_hash, checked_at, machine FROM file_states WHERE review_id = ? AND path = ?").get(rid, input.path) as Parameters<typeof rowToCheckoff>[0];
+      const row = db.prepare(`SELECT ${FILE_STATE_COLUMNS} FROM file_states WHERE review_id = ? AND path = ?`).get(rid, input.path) as FileStateRow;
       return rowToCheckoff(row);
     },
 
