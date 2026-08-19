@@ -18,6 +18,12 @@ cd "$(dirname "$0")/.."
 electron_dir="packages/app/node_modules/electron"
 chromedriver_dir="packages/app/node_modules/electron-chromedriver"
 
+# An install that leaves out the app package has no Electron to repair — the
+# service image builds `--filter @gander/service...`, and this hook still runs at
+# the workspace root. Exiting here keeps that build from failing on a repair it
+# does not need.
+[[ -d "$electron_dir" ]] || exit 0
+
 electron_works() {
   packages/app/node_modules/.bin/electron --version >/dev/null 2>&1
 }

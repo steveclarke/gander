@@ -17,6 +17,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/service/package.json packages/service/
+# The workspace root's postinstall hook runs even for a service-only install.
+COPY bin/repair-electron bin/
 RUN pnpm install --frozen-lockfile --filter @gander/service...
 
 FROM node:24-slim AS runtime

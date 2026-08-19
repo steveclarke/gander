@@ -12,10 +12,20 @@ remarks to coding agents over MCP.
 
 `docs/deploy.md` covers running the service on a host.
 
-The approved design spec is binding and is kept outside this repository — on the
-maintainer's machines at `~/src/backstage/gander/specs/`. Read it before changing
-behaviour. `docs/STATE.md` says where the project stands. Interface work and the
-agent reply channel are GitHub issues.
+**This repository is public, so everything specific to the maintainer's instance
+lives outside it**, on the maintainer's machines at `~/src/backstage/gander/`.
+Look there first for anything this repository does not answer — a host name, a
+credential reference, a release step, the binding design.
+
+| Path | Holds |
+|---|---|
+| `specs/` | The approved design spec. Binding. Read it before changing behaviour. |
+| `infrastructure.md` | This deployment: host, path, container, volume, URL, proxy and DNS, the 1Password reference for the token, and per-machine setup |
+| `releasing.md` | The release procedure and what the signing machine provides |
+| `plans/`, `briefs/`, `mockups/` | Implementation plans, briefs, and the reference mockup |
+
+`docs/STATE.md` says where the project stands. Interface work and the agent reply
+channel are GitHub issues.
 
 Settings are validated strictly, so a config written by an earlier version stops
 the app from starting. While the shape is still settling there are no migrations:
@@ -49,7 +59,7 @@ in code, comments, commits, or issues.
 | Typecheck (all packages) | `pnpm typecheck` |
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Repair a config the settings schema has outgrown | `bin/fix-config` |
-| Update the service on its host | `bin/deploy` |
+| Update the service on its host | `bin/deploy` (host and path in `~/src/backstage/gander/infrastructure.md`) |
 | Re-record the contract after changing it | `bin/contract-snapshot` |
 | Build an unsigned app | `pnpm --filter @gander/app run dist:unsigned` |
 | Isolated working copy | `bin/worktree add <name>` |
