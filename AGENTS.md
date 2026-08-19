@@ -17,6 +17,11 @@ maintainer's machines at `~/src/backstage/gander/specs/`. Read it before changin
 behaviour. `docs/STATE.md` says where the project stands. Interface work and the
 agent reply channel are GitHub issues.
 
+Settings are validated strictly, so a config written by an earlier version stops
+the app from starting. While the shape is still settling there are no migrations:
+`bin/fix-config` keeps the values the schema still knows, fills in the new ones,
+and drops the rest.
+
 **The repo is public.** No client names, private repo names, or real PR numbers
 in code, comments, commits, or issues.
 
@@ -33,6 +38,7 @@ in code, comments, commits, or issues.
 | Typecheck (all packages) | `pnpm typecheck` |
 | Electron E2E | `pnpm test:e2e` |
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
+| Repair a config the settings schema has outgrown | `bin/fix-config` |
 | Build an unsigned app | `pnpm --filter @gander/app run dist:unsigned` |
 | Isolated working copy | `bin/worktree add <name>` |
 | Check this worktree's MCP bridge | `bin/mcp check` |
