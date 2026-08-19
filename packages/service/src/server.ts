@@ -1,15 +1,22 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
+import type { ZodError } from "zod";
 import { NewQuestionReplySchema, NewQuestionSchema, PrContextSchema, PutFileStateSchema } from "@gander/shared";
 import { handleMcpRequest } from "./mcp.js";
 import type { Storage } from "./storage.js";
 
-function parsePrNumber(raw: string, reply: FastifyReply): number | undefined {
+/** Sends a 400 and returns undefined when the segment is not a positive integer. */
+function positiveInt(name: string, raw: string, reply: FastifyReply): number | undefined {
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) {
-    reply.code(400).send({ error: `prNumber must be a positive integer, got ${JSON.stringify(raw)}` });
+    reply.code(400).send({ error: `${name} must be a positive integer, got ${JSON.stringify(raw)}` });
     return undefined;
   }
   return n;
+}
+
+/** Reports every failing field, so a rejected body says which parts were wrong. */
+function badRequest(reply: FastifyReply, error: ZodError): FastifyReply {
+  return reply.code(400).send({ error: error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
 }
 
 export function buildServer(opts: {
@@ -43,7 +50,7 @@ export function buildServer(opts: {
   app.get<{ Params: { repoId: string; prNumber: string } }>(
     "/api/reviews/:repoId/:prNumber",
     async (req, reply) => {
-      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
       return opts.storage.getReview(req.params.repoId, prNumber);
     },
@@ -57,12 +64,10 @@ export function buildServer(opts: {
   app.put<{ Params: { repoId: string; prNumber: string } }>(
     "/api/reviews/:repoId/:prNumber/files",
     async (req, reply) => {
-      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
       const parsed = PutFileStateSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
-      }
+      if (!parsed.success) return badRequest(reply, parsed.error);
       return opts.storage.putFileState(req.params.repoId, prNumber, parsed.data);
     },
   );
@@ -70,7 +75,7 @@ export function buildServer(opts: {
   app.get<{ Params: { repoId: string; prNumber: string }; Querystring: { path?: string } }>(
     "/api/reviews/:repoId/:prNumber/snapshot",
     async (req, reply) => {
-      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
       const path = req.query.path;
       // A path is a query parameter, not a route segment: file paths contain slashes.
@@ -86,12 +91,10 @@ export function buildServer(opts: {
   app.put<{ Params: { repoId: string; prNumber: string } }>(
     "/api/reviews/:repoId/:prNumber/context",
     async (req, reply) => {
-      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
       const parsed = PrContextSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
-      }
+      if (!parsed.success) return badRequest(reply, parsed.error);
       opts.storage.setPrContext(req.params.repoId, prNumber, parsed.data);
       return reply.code(204).send();
     },
@@ -100,7 +103,7 @@ export function buildServer(opts: {
   app.get<{ Params: { repoId: string; prNumber: string } }>(
     "/api/reviews/:repoId/:prNumber/questions",
     async (req, reply) => {
-      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
       return opts.storage.listQuestions(req.params.repoId, prNumber);
     },
@@ -109,12 +112,10 @@ export function buildServer(opts: {
   app.post<{ Params: { repoId: string; prNumber: string } }>(
     "/api/reviews/:repoId/:prNumber/questions",
     async (req, reply) => {
-      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
       const parsed = NewQuestionSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
-      }
+      if (!parsed.success) return badRequest(reply, parsed.error);
       return reply.code(201).send(opts.storage.addQuestion(req.params.repoId, prNumber, parsed.data));
     },
   );
@@ -122,12 +123,10 @@ export function buildServer(opts: {
   app.delete<{ Params: { repoId: string; prNumber: string; id: string } }>(
     "/api/reviews/:repoId/:prNumber/questions/:id",
     async (req, reply) => {
-      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
-      const id = Number(req.params.id);
-      if (!Number.isInteger(id) || id <= 0) {
-        return reply.code(400).send({ error: `id must be a positive integer, got ${JSON.stringify(req.params.id)}` });
-      }
+      const id = positiveInt("id", req.params.id, reply);
+      if (id === undefined) return;
       if (!opts.storage.deleteQuestion(req.params.repoId, prNumber, id)) {
         return reply.code(404).send({ error: `no question ${id} on ${req.params.repoId}#${prNumber}` });
       }
@@ -138,16 +137,12 @@ export function buildServer(opts: {
   app.post<{ Params: { repoId: string; prNumber: string; id: string } }>(
     "/api/reviews/:repoId/:prNumber/questions/:id/replies",
     async (req, reply) => {
-      const prNumber = parsePrNumber(req.params.prNumber, reply);
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;
-      const id = Number(req.params.id);
-      if (!Number.isInteger(id) || id <= 0) {
-        return reply.code(400).send({ error: `id must be a positive integer, got ${JSON.stringify(req.params.id)}` });
-      }
+      const id = positiveInt("id", req.params.id, reply);
+      if (id === undefined) return;
       const parsed = NewQuestionReplySchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
-      }
+      if (!parsed.success) return badRequest(reply, parsed.error);
       const added = opts.storage.addReviewerReply(req.params.repoId, prNumber, id, parsed.data);
       if (added === null) {
         return reply.code(404).send({ error: `no question ${id} on ${req.params.repoId}#${prNumber}` });
