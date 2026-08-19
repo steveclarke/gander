@@ -43,8 +43,8 @@
   },
   "description": "Review code diffs, branches, and pull requests",
   "author": {
-    "name": "Sevenview Studios Inc.",
-    "email": "hello@sevenview.ca"
+    "name": "Stephen Clarke",
+    "email": "steve@sevenview.ca"
   },
   "license": "MIT",
   "repository": {
