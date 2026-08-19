@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "electron";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { repoIdFromUrl, type OpenTarget, type RepoEntry } from "@gander/shared";
+import { repoIdFromUrl, type LocalView, type OpenTarget, type RepoEntry } from "@gander/shared";
 import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
@@ -15,8 +15,17 @@ import { buildMenuTemplate } from "./menu.js";
 import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.js";
 import { linkedWorktreeLabel } from "./development-context.js";
 import { createZoomController, type ZoomController } from "./zoom-controller.js";
+import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
 
 let zoomController: ZoomController;
+const localWatchers = new Map<number, LocalViewWatcher>();
+const localViews = new Map<number, LocalView>();
+
+function closeLocalView(senderId: number): void {
+  localWatchers.get(senderId)?.close();
+  localWatchers.delete(senderId);
+  localViews.delete(senderId);
+}
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
@@ -47,11 +56,75 @@ async function bootstrap(): Promise<GanderConfig> {
     if (!cfg.repos.some((r) => r.repoId === entry.repoId)) { cfg.repos.push(entry); saveConfig(cfg); }
     return entry;
   });
+  ipcMain.handle("gander:chooseLocalRepo", async (event): Promise<RepoEntry | null> => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options: Electron.OpenDialogOptions = {
+      title: "Add a local Git repository",
+      properties: ["openDirectory"],
+    };
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options);
+    const selected = result.filePaths[0];
+    if (result.canceled || !selected) return null;
+    const localPath = await git.worktreeRoot(selected);
+    const url = await git.originUrl(localPath);
+    const repoId = repoIdFromUrl(url);
+    const existing = cfg.repos.find((repo) => repo.repoId === repoId);
+    if (existing) existing.localPath = localPath;
+    else cfg.repos.push({ repoId, url, localPath });
+    saveConfig(cfg);
+    return { repoId, url, localPath };
+  });
+  ipcMain.handle("gander:listWorktrees", async (_event, repoId: string) => {
+    const repo = cfg.repos.find((entry) => entry.repoId === repoId);
+    if (!repo) throw new Error(`Repo ${repoId} is not registered`);
+    return repo.localPath ? git.listWorktrees(repo.localPath) : [];
+  });
+  ipcMain.handle("gander:openLocal", async (event, repoId: string, path: string) => {
+    const repo = cfg.repos.find((entry) => entry.repoId === repoId);
+    if (!repo?.localPath) throw new Error(`Repo ${repoId} has no registered local checkout`);
+    const worktrees = await git.listWorktrees(repo.localPath);
+    const selected = worktrees.find((worktree) => worktree.path === path);
+    if (!selected) throw new Error(`${path} is not a worktree of ${repoId}`);
+    const view = await git.localView(selected.path);
+    const senderId = event.sender.id;
+    const watcher = await watchLocalView(git, selected.path, (update) => {
+      if (event.sender.isDestroyed()) {
+        closeLocalView(senderId);
+        return;
+      }
+      if (update.view) localViews.set(senderId, update.view);
+      event.sender.send("gander:localViewChanged", update);
+    }, view);
+    closeLocalView(senderId);
+    localWatchers.set(senderId, watcher);
+    localViews.set(senderId, view);
+    event.sender.once("destroyed", () => closeLocalView(senderId));
+    return view;
+  });
+  ipcMain.handle("gander:refreshLocal", async (event, path: string) => {
+    if (localViews.get(event.sender.id)?.worktree.path !== path) {
+      throw new Error(`${path} is not the open local worktree`);
+    }
+    const view = await git.localView(path);
+    localViews.set(event.sender.id, view);
+    return view;
+  });
+  ipcMain.handle("gander:localImagePreview", async (event, path: string) => {
+    const view = localViews.get(event.sender.id);
+    if (!view) throw new Error("A local worktree must be open before previewing an image");
+    const file = view.files.find((candidate) => candidate.path === path);
+    if (!file) throw new Error(`${path} is not part of the local change`);
+    return git.localImage(view.worktree.path, view.mergeBaseSha, path, file.basePath);
+  });
+  ipcMain.handle("gander:closeLocal", async (event) => closeLocalView(event.sender.id));
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, await githubToken()));
   ipcMain.handle("gander:serviceHealthy", async () => service.healthy());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
-  ipcMain.handle("gander:openPr", async (_e, repoId: string, n: number) => {
+  ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
+    closeLocalView(event.sender.id);
     const view = await reviewer.openPr(repoId, n);
     // Recorded only once the open succeeded, so a pull request that fails to open
     // is not the one the app tries again on every launch.

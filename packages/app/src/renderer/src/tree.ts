@@ -1,12 +1,12 @@
-import type { PrFile } from "@gander/shared";
+import type { ChangedFile, PrFile } from "@gander/shared";
 
 export type TreeNode =
   | { type: "dir"; name: string; path: string; children: TreeNode[] }
-  | { type: "file"; file: PrFile };
+  | { type: "file"; file: ChangedFile };
 
-interface MutableDir { dirs: Map<string, MutableDir>; files: PrFile[]; }
+interface MutableDir { dirs: Map<string, MutableDir>; files: ChangedFile[]; }
 
-export function buildTree(files: PrFile[]): TreeNode[] {
+export function buildTree(files: ChangedFile[]): TreeNode[] {
   const root: MutableDir = { dirs: new Map(), files: [] };
   for (const f of files) {
     const segments = f.path.split("/");
@@ -42,13 +42,13 @@ export function buildTree(files: PrFile[]): TreeNode[] {
   return emit(root, "");
 }
 
-export function filesUnder(node: TreeNode): PrFile[] {
+export function filesUnder(node: TreeNode): ChangedFile[] {
   if (node.type === "file") return [node.file];
   return node.children.flatMap(filesUnder).sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export function dirState(node: TreeNode & { type: "dir" }): "all" | "some" | "none" {
-  const files = filesUnder(node);
+  const files = filesUnder(node).filter((file): file is PrFile => "checked" in file);
   const done = files.filter((f) => f.checked).length;
   return done === 0 ? "none" : done === files.length ? "all" : "some";
 }

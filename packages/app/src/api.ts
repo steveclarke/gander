@@ -1,8 +1,9 @@
-import type { NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { LocalView, LocalWorktree, NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
 import type { ConnectionCheck } from "./main/connection.js";
 import type { ImagePreview } from "./image-preview.js";
+import type { LocalViewUpdate } from "./main/local-viewer.js";
 
 export type { ImagePreview, ImageSide } from "./image-preview.js";
 
@@ -35,6 +36,9 @@ export interface GanderApi {
   /** All non-archived repositories visible to the current GitHub credential. */
   listGithubRepos(): Promise<GithubRepository[]>;
   addRepo(url: string): Promise<RepoEntry>;
+  /** Prompts for a local checkout, validates its origin, and registers its repository. */
+  chooseLocalRepo(): Promise<RepoEntry | null>;
+  listWorktrees(repoId: string): Promise<LocalWorktree[]>;
   listPrs(repoId: string): Promise<PrSummary[]>;
   lastReview(): Promise<{ repoId: string; prNumber: number } | null>;
   /** What this launch was asked to open, from the command line. Null for an ordinary launch. */
@@ -55,6 +59,11 @@ export interface GanderApi {
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
+  openLocal(repoId: string, path: string): Promise<LocalView>;
+  refreshLocal(path: string): Promise<LocalView>;
+  localImagePreview(path: string): Promise<ImagePreview>;
+  closeLocal(): Promise<void>;
+  onLocalViewChanged(listener: (update: LocalViewUpdate) => void): () => void;
   addQuestion(repoId: string, prNumber: number, input: Omit<NewQuestion, "headSha">): Promise<PrView>;
   addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<PrView>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;

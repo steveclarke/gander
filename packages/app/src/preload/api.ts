@@ -8,6 +8,7 @@ import {
   type WindowStyle,
 } from "../api.js";
 import type { OpenTarget } from "@gander/shared";
+import type { LocalViewUpdate } from "../main/local-viewer.js";
 import { DEFAULT_THEME_ID, THEME_IDS, type ThemeId } from "../themes.js";
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>;
@@ -63,6 +64,8 @@ export function createGanderApi(
     listRepos: () => call("listRepos"),
     listGithubRepos: () => call("listGithubRepos"),
     addRepo: (url) => call("addRepo", url),
+    chooseLocalRepo: () => call("chooseLocalRepo"),
+    listWorktrees: (repoId) => call("listWorktrees", repoId),
     listPrs: (repoId) => call("listPrs", repoId),
     lastReview: () => call("lastReview"),
     initialTarget: () => call("initialTarget"),
@@ -74,6 +77,11 @@ export function createGanderApi(
     refreshPr: (repoId, prNumber) => call("refreshPr", repoId, prNumber),
     reviewedSnapshot: (repoId, prNumber, path) => call("reviewedSnapshot", repoId, prNumber, path),
     imagePreview: (repoId, prNumber, path) => call("imagePreview", repoId, prNumber, path),
+    openLocal: (repoId, path) => call("openLocal", repoId, path),
+    refreshLocal: (path) => call("refreshLocal", path),
+    localImagePreview: (path) => call("localImagePreview", path),
+    closeLocal: () => call("closeLocal"),
+    onLocalViewChanged: (listener) => subscribe("gander:localViewChanged", (update: LocalViewUpdate) => listener(update)),
     addQuestion: (repoId, prNumber, input) => call("addQuestion", repoId, prNumber, input),
     addReviewerReply: (repoId, prNumber, id, text) => call("addReviewerReply", repoId, prNumber, id, text),
     deleteQuestion: (repoId, prNumber, id) => call("deleteQuestion", repoId, prNumber, id),

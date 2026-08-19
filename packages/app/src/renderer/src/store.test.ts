@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PrView } from "@gander/shared";
+import type { LocalView, PrView } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 import { createStore } from "./store.js";
 import { DEFAULT_APP_SETTINGS } from "../../settings.js";
@@ -13,6 +13,15 @@ const prView = (checkedPaths: string[] = []): PrView => ({
   questions: [],
 });
 
+const localView = (files: LocalView["files"] = [{
+  path: "working.ts", status: "M", baseContent: "old\n", headContent: "new\n", baseHash: "base", headHash: "head",
+}]): LocalView => ({
+  worktree: { path: "/tmp/local-worktree", branch: "feature", headSha: "abc123", locked: false },
+  defaultBranch: "main",
+  mergeBaseSha: "base-sha",
+  files,
+});
+
 function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
   return {
     initialWindowState: {
@@ -24,6 +33,8 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     listRepos: async () => [{ repoId: "acme/atlas", url: "u" }],
     listGithubRepos: async () => [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", private: true }],
     addRepo: async (url) => ({ repoId: "acme/new", url }),
+    chooseLocalRepo: async () => null,
+    listWorktrees: async () => [],
     listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" }],
     openPr: async () => prView(),
     setChecked: async (_r, _n, path) => prView([path]),
@@ -39,6 +50,11 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     serviceHealthy: async () => true,
     reviewedSnapshot: async () => null,
     imagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
+    openLocal: async () => { throw new Error("no local fixture"); },
+    refreshLocal: async () => { throw new Error("no local fixture"); },
+    localImagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
+    closeLocal: async () => {},
+    onLocalViewChanged: () => () => {},
     addQuestion: async () => prView(),
     addReviewerReply: async () => prView(),
     deleteQuestion: async () => prView(),
@@ -115,6 +131,41 @@ describe("store", () => {
     await store.addRepo("https://github.com/acme/new");
     expect(store.currentRepoId).toBe("acme/new");
     expect(store.prs).toHaveLength(1);
+  });
+
+  it("opens a stateless local worktree without creating pull request review state", async () => {
+    const opened = localView();
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+    }));
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+
+    expect(store.view).toBeNull();
+    expect(store.localView).toEqual(opened);
+    expect(store.files()).toEqual(opened.files);
+    expect(store.selectedPath).toBe("working.ts");
+    expect(store.progress()).toEqual({ done: 0, total: 0 });
+  });
+
+  it("applies watched local changes and surfaces watcher failures", async () => {
+    let notify: Parameters<GanderApi["onLocalViewChanged"]>[0] | undefined;
+    const initial = localView();
+    const store = createStore(fakeApi({
+      openLocal: async () => initial,
+      onLocalViewChanged: (listener) => { notify = listener; return () => {}; },
+    }));
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(initial.worktree.path);
+
+    const next = localView([{ path: "new-file.ts", status: "A", baseContent: null, headContent: "new\n", baseHash: null, headHash: "next" }]);
+    notify?.({ path: initial.worktree.path, view: next, error: null });
+    expect(store.localView).toEqual(next);
+    expect(store.selectedPath).toBe("new-file.ts");
+
+    notify?.({ path: initial.worktree.path, view: null, error: "git diff failed: permission denied" });
+    expect(store.error).toContain("permission denied");
   });
 
   it("captures errors into store.error instead of throwing", async () => {

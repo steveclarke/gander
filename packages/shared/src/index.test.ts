@@ -11,6 +11,7 @@ describe("repoIdFromUrl", () => {
     expect(repoIdFromUrl("https://github.com/acme/atlas.git")).toBe("acme/atlas");
     expect(repoIdFromUrl("https://github.com/acme/atlas")).toBe("acme/atlas");
     expect(repoIdFromUrl("git@github.com:acme/atlas.git")).toBe("acme/atlas");
+    expect(repoIdFromUrl("ssh://git@github.com/acme/atlas.git")).toBe("acme/atlas");
   });
   it("throws on non-GitHub URLs", () => {
     expect(() => repoIdFromUrl("https://gitlab.com/a/b")).toThrow(/GitHub/);

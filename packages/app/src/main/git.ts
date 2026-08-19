@@ -1,9 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { FileStatus } from "@gander/shared";
+import type { ChangedFile, FileStatus, LocalView, LocalWorktree } from "@gander/shared";
 import { imageMediaType, MAX_IMAGE_BYTES, type ImageSide } from "../image-preview.js";
 
 const FILE_STATUSES: readonly FileStatus[] = ["A", "M", "D", "R"];
@@ -49,7 +49,14 @@ export interface GitEngine {
   showFile(cloneDir: string, rev: string, path: string): Promise<ShowFileResult>;
   showImage(cloneDir: string, rev: string, path: string): Promise<ImageSide>;
   resolveRef(cloneDir: string, ref: string): Promise<string>;
+  originUrl(repoDir: string): Promise<string>;
+  worktreeRoot(repoDir: string): Promise<string>;
+  listWorktrees(repoDir: string): Promise<LocalWorktree[]>;
+  localView(worktreeDir: string): Promise<LocalView>;
+  localImage(worktreeDir: string, mergeBaseSha: string, path: string, basePath?: string): Promise<{ base: ImageSide; head: ImageSide }>;
 }
+
+interface DiffPath { path: string; status: FileStatus; basePath: string; }
 
 async function gitPrefix(cloneDir: string, rev: string, path: string, length: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -121,6 +128,77 @@ async function gitBuffer(cwd: string, args: string[], timeoutMs = DEFAULT_TIMEOU
   } catch (err) {
     throw describeGitError(args, err, timeoutMs);
   }
+}
+
+function fileResult(buf: Buffer): ShowFileResult {
+  const hash = createHash("sha256").update(buf).digest("hex");
+  const binary = buf.includes(0) || imageMediaType(buf) !== null;
+  return binary ? { content: null, hash, binary: true } : { content: buf.toString("utf8"), hash, binary: false };
+}
+
+function safeWorkingPath(worktreeDir: string, path: string): string {
+  const root = resolve(worktreeDir);
+  const absolute = resolve(root, path);
+  const fromRoot = relative(root, absolute);
+  if (fromRoot === "" || fromRoot.startsWith("..") || isAbsolute(fromRoot)) {
+    throw new Error(`git returned a path outside the worktree: ${path}`);
+  }
+  return absolute;
+}
+
+function workingFile(worktreeDir: string, path: string): ShowFileResult {
+  const absolute = safeWorkingPath(worktreeDir, path);
+  if (!existsSync(absolute)) return { content: null, hash: null, binary: false };
+  const stat = lstatSync(absolute);
+  if (!stat.isFile() && !stat.isSymbolicLink()) {
+    throw new Error(`Cannot display non-file worktree entry: ${path}`);
+  }
+  const bytes = stat.isSymbolicLink() ? Buffer.from(readlinkSync(absolute)) : readFileSync(absolute);
+  return fileResult(bytes);
+}
+
+function imageSide(bytes: Buffer): ImageSide {
+  const size = bytes.length;
+  const mediaType = imageMediaType(bytes.subarray(0, Math.min(bytes.length, 32)));
+  if (size > MAX_IMAGE_BYTES) return mediaType === null
+    ? { kind: "unsupported", size }
+    : { kind: "too-large", size, limit: MAX_IMAGE_BYTES };
+  return mediaType === null ? { kind: "unsupported", size } : { kind: "image", mediaType, size, bytes };
+}
+
+function parseWorktrees(output: string): LocalWorktree[] {
+  return output.split("\0\0").filter(Boolean).flatMap((record) => {
+    const fields = record.split("\0");
+    const value = (name: string): string | undefined => fields.find((field) => field.startsWith(`${name} `))?.slice(name.length + 1);
+    const path = value("worktree");
+    const headSha = value("HEAD");
+    if (!path || !headSha || fields.includes("bare")) return [];
+    const branchRef = value("branch");
+    return [{
+      path,
+      headSha,
+      branch: branchRef?.replace(/^refs\/heads\//, "") ?? null,
+      locked: fields.some((field) => field === "locked" || field.startsWith("locked ")),
+    }];
+  });
+}
+
+function parseDiffPaths(output: string): DiffPath[] {
+  const fields = output.split("\0");
+  const files: DiffPath[] = [];
+  for (let index = 0; index < fields.length;) {
+    const rawStatus = fields[index++];
+    if (!rawStatus) continue;
+    const status = parseFileStatus(rawStatus.charAt(0));
+    const firstPath = fields[index++] ?? "";
+    if (status === "R") {
+      const path = fields[index++] ?? "";
+      files.push({ path, status, basePath: firstPath });
+    } else {
+      files.push({ path: firstPath, status, basePath: firstPath });
+    }
+  }
+  return files;
 }
 
 export function createGitEngine(clonesRoot: string): GitEngine {
@@ -196,15 +274,9 @@ export function createGitEngine(clonesRoot: string): GitEngine {
         if (/does not exist in|exists on disk, but not in/i.test(msg)) return { content: null, hash: null, binary: false };
         throw err;
       }
-      const hash = createHash("sha256").update(buf).digest("hex");
       // NUL byte in the content is the standard cheap binary heuristic (same one git itself
-      // uses internally). Decoding a binary blob as UTF-8 would mangle it into U+FFFD replacement
-      // characters that then get hashed and stored as the "reviewed snapshot" — nonsense.
-      // Some valid image encodings can avoid a NUL in small files. Treat a recognized
-      // image signature as binary too, so its bytes are never decoded or snapshotted as text.
-      const binary = buf.includes(0) || imageMediaType(buf) !== null;
-      if (binary) return { content: null, hash, binary: true };
-      return { content: buf.toString("utf8"), hash, binary: false };
+      // uses internally). Recognized image signatures count as binary too.
+      return fileResult(buf);
     },
 
     async showImage(cloneDir, rev, path) {
@@ -229,6 +301,92 @@ export function createGitEngine(clonesRoot: string): GitEngine {
 
     async resolveRef(cloneDir, ref) {
       return (await git(cloneDir, ["rev-parse", ref])).trim();
+    },
+
+    async originUrl(repoDir) {
+      return (await git(repoDir, ["remote", "get-url", "origin"])).trim();
+    },
+
+    async worktreeRoot(repoDir) {
+      return (await git(repoDir, ["rev-parse", "--show-toplevel"])).trim();
+    },
+
+    async listWorktrees(repoDir) {
+      return parseWorktrees(await git(repoDir, ["worktree", "list", "--porcelain", "-z"]));
+    },
+
+    async localView(worktreeDir) {
+      const worktrees = await this.listWorktrees(worktreeDir);
+      const selectedPath = realpathSync(worktreeDir);
+      const worktree = worktrees.find((candidate) => realpathSync(candidate.path) === selectedPath);
+      if (!worktree) throw new Error(`git worktree list did not include ${worktreeDir}`);
+
+      let defaultRef: string;
+      try {
+        defaultRef = (await git(worktreeDir, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])).trim();
+      } catch (err) {
+        throw new Error(`Cannot determine the default branch for ${worktreeDir}: ${(err as Error).message}`);
+      }
+      const defaultBranch = defaultRef.replace(/^origin\//, "");
+      let comparisonRef = defaultRef;
+      try {
+        await git(worktreeDir, ["rev-parse", "--verify", `refs/heads/${defaultBranch}`]);
+        comparisonRef = `refs/heads/${defaultBranch}`;
+      } catch (err) {
+        // A checkout can have only the remote-tracking default branch. It is still a
+        // valid base; failure of both refs is surfaced by merge-base below.
+        if (!/Needed a single revision|unknown revision|bad revision/i.test((err as Error).message)) throw err;
+      }
+      const mergeBaseSha = (await git(worktreeDir, ["merge-base", comparisonRef, "HEAD"])).trim();
+      const tracked = parseDiffPaths(await git(worktreeDir, ["diff", "--name-status", "-z", "-M", mergeBaseSha, "--"]));
+      const untracked = (await git(worktreeDir, ["ls-files", "--others", "--exclude-standard", "-z"]))
+        .split("\0").filter(Boolean);
+      const paths = [...tracked];
+      const untrackedPaths = new Set(untracked);
+      const seen = new Set(paths.map((file) => file.path));
+      for (const path of untracked) {
+        if (!seen.has(path)) paths.push({ path, status: "A", basePath: path });
+      }
+
+      const files: ChangedFile[] = [];
+      for (const entry of paths) {
+        const base = entry.status === "A"
+          ? { content: null, hash: null }
+          : await this.showFile(worktreeDir, mergeBaseSha, entry.basePath);
+        const head = workingFile(worktreeDir, entry.path);
+        const readded = entry.status === "D" && untrackedPaths.has(entry.path);
+        const status = readded ? "M" : entry.status;
+        // `git rm --cached` leaves the file as an untracked path. The local viewer is
+        // about the resulting working tree, so an identical re-add is unchanged and a
+        // modified re-add is a modification, never a deletion.
+        if (readded && base.hash !== null && base.hash === head.hash) continue;
+        files.push({
+          path: entry.path,
+          ...(entry.basePath === entry.path ? {} : { basePath: entry.basePath }),
+          status,
+          baseContent: base.content,
+          headContent: head.content,
+          baseHash: base.hash,
+          headHash: head.hash,
+        });
+      }
+      files.sort((left, right) => left.path.localeCompare(right.path));
+      return { worktree, defaultBranch, mergeBaseSha, files };
+    },
+
+    async localImage(worktreeDir, mergeBaseSha, path, basePath = path) {
+      const current = workingFile(worktreeDir, path);
+      const head: ImageSide = current.hash === null
+        ? { kind: "absent" }
+        : imageSide(readFileSync(safeWorkingPath(worktreeDir, path)));
+      let base: ImageSide;
+      try {
+        base = await this.showImage(worktreeDir, mergeBaseSha, basePath);
+      } catch (err) {
+        if (/does not exist in|exists on disk, but not in/i.test((err as Error).message)) base = { kind: "absent" };
+        else throw err;
+      }
+      return { base, head };
     },
   };
 }

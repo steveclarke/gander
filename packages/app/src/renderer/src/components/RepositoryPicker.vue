@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { Check, FolderGit2, LockKeyhole, Search as SearchIcon, X } from "lucide-vue-next";
+import { Check, FolderGit2, FolderOpen, LockKeyhole, Search as SearchIcon, X } from "lucide-vue-next";
 import type { GithubRepository } from "../api.js";
 import type { Store } from "../store.js";
 
@@ -10,7 +10,7 @@ const emit = defineEmits<{ close: [] }>();
 const dialog = ref<HTMLDialogElement | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
 const urlInput = ref<HTMLInputElement | null>(null);
-const activeTab = ref<"github" | "url">("github");
+const activeTab = ref<"github" | "url" | "local">("github");
 const query = ref("");
 const url = ref("");
 const actionError = ref<string | null>(null);
@@ -50,11 +50,17 @@ function onBackdropClick(event: MouseEvent): void {
   if (event.target === dialog.value) close();
 }
 
-async function showTab(tab: "github" | "url"): Promise<void> {
+async function showTab(tab: "github" | "url" | "local"): Promise<void> {
   activeTab.value = tab;
   actionError.value = null;
   await nextTick();
-  (tab === "github" ? searchInput.value : urlInput.value)?.focus();
+  (tab === "github" ? searchInput.value : tab === "url" ? urlInput.value : null)?.focus();
+}
+
+async function chooseLocal(): Promise<void> {
+  actionError.value = null;
+  const chosen = await props.store.chooseLocalRepo();
+  if (chosen) close();
 }
 
 async function choose(repo: GithubRepository): Promise<void> {
@@ -94,7 +100,7 @@ function repoOwner(repoId: string): string {
     <header class="picker-header">
       <div>
         <h1 id="repository-picker-title">Add a repository</h1>
-        <p>Choose from GitHub, or enter a repository URL.</p>
+        <p>Choose from GitHub, enter a URL, or add a local checkout.</p>
       </div>
       <button class="icon-button" type="button" aria-label="Close repository picker" @click="close">
         <X :size="17" aria-hidden="true" />
@@ -110,7 +116,7 @@ function repoOwner(repoId: string): string {
         :tabindex="activeTab === 'github' ? 0 : -1"
         @click="showTab('github')"
         @keydown.right.prevent="showTab('url')"
-        @keydown.end.prevent="showTab('url')"
+        @keydown.end.prevent="showTab('local')"
       >GitHub</button>
       <button
         id="repository-url-tab"
@@ -120,8 +126,20 @@ function repoOwner(repoId: string): string {
         :tabindex="activeTab === 'url' ? 0 : -1"
         @click="showTab('url')"
         @keydown.left.prevent="showTab('github')"
+        @keydown.right.prevent="showTab('local')"
         @keydown.home.prevent="showTab('github')"
+        @keydown.end.prevent="showTab('local')"
       >URL</button>
+      <button
+        id="local-repository-tab"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'local'"
+        :tabindex="activeTab === 'local' ? 0 : -1"
+        @click="showTab('local')"
+        @keydown.left.prevent="showTab('url')"
+        @keydown.home.prevent="showTab('github')"
+      >Local folder</button>
     </div>
 
     <section
@@ -166,7 +184,7 @@ function repoOwner(repoId: string): string {
       </ul>
     </section>
 
-    <section v-else class="picker-body url-panel" role="tabpanel" aria-labelledby="repository-url-tab">
+    <section v-else-if="activeTab === 'url'" class="picker-body url-panel" role="tabpanel" aria-labelledby="repository-url-tab">
       <form @submit.prevent="submitUrl">
         <label for="repository-url">GitHub repository URL</label>
         <div class="url-row">
@@ -185,6 +203,18 @@ function repoOwner(repoId: string): string {
         <p class="url-help">Use this when a repository does not appear in your GitHub list.</p>
       </form>
       <p v-if="actionError" class="inline-error" role="alert">{{ actionError }}</p>
+    </section>
+
+    <section v-else class="picker-body local-panel" role="tabpanel" aria-labelledby="local-repository-tab">
+      <FolderOpen :size="34" aria-hidden="true" />
+      <div>
+        <h2>Browse a local checkout</h2>
+        <p>Choose any checkout. Gander will discover every linked worktree with Git.</p>
+      </div>
+      <button class="primary-button local-button" type="button" :disabled="store.busy" @click="chooseLocal">
+        {{ store.busy ? "Opening…" : "Choose folder…" }}
+      </button>
+      <p v-if="store.error" class="inline-error" role="alert">{{ store.error }}</p>
     </section>
   </dialog>
 </template>
@@ -233,6 +263,12 @@ function repoOwner(repoId: string): string {
 .picker-error { margin: 18px; padding: 12px 14px; color: var(--danger); background: var(--danger-background); border-radius: 7px; }
 .picker-error button { margin-top: 8px; color: var(--workbench-foreground); background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .url-panel { padding: 22px; }
+.local-panel { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; align-items: center; padding: 28px 22px; }
+.local-panel > svg { color: var(--muted-foreground); }
+.local-panel h2 { font-size: 14px; }
+.local-panel p { margin-top: 3px; color: var(--muted-foreground); font-size: 12px; }
+.local-button { grid-column: 2; width: max-content; min-height: 36px; }
+.local-panel .inline-error { grid-column: 1 / -1; color: var(--danger); }
 .url-panel label { display: block; margin-bottom: 7px; font-weight: 600; }
 .url-row { display: flex; gap: 8px; }
 .url-row input { min-width: 0; flex: 1; height: 36px; padding: 0 10px; color: var(--workbench-foreground); background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: 7px; outline: 0; font: inherit; }

@@ -1,6 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
 import type { RepoEntry } from "@gander/shared";
 import { AppSettingsSchema, DEFAULT_APP_SETTINGS, type AppSettings } from "../settings.js";
@@ -20,7 +20,13 @@ const ConfigSchema = z
     // The pull request open when the app last closed, reopened on launch.
     lastReview: z.object({ repoId: RepoIdSchema, prNumber: z.number().int().positive() }).strict().optional(),
     settings: AppSettingsSchema,
-    repos: z.array(z.object({ repoId: RepoIdSchema, url: z.string() }).strict()),
+    repos: z.array(z.object({
+      repoId: RepoIdSchema,
+      url: z.string(),
+      // Optional while the config shape is in flux so existing URL-only registrations
+      // remain valid. This is navigation data, not local review state.
+      localPath: z.string().min(1).refine(isAbsolute, "must be an absolute path").optional(),
+    }).strict()),
   })
   .strict();
 export interface LastReview { repoId: string; prNumber: number; }

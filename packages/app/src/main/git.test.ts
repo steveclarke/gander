@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -160,5 +160,68 @@ describe("git engine", () => {
     const files = await engine.diffFiles(clone, base, head);
     expect(files).toContainEqual({ path: "renamed.txt", status: "R" });
     expect(files.some((f) => f.path === "unchanged.txt")).toBe(false);
+  });
+
+  it("discovers real linked worktrees and derives local changes from merge-base through the working tree", async () => {
+    const mainSha = await fixture.git(["rev-parse", "refs/heads/main"]);
+    await fixture.git(["update-ref", "refs/remotes/origin/main", mainSha]);
+    await fixture.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+    const linked = mkdtempSync(join(tmpdir(), "gander-worktree-"));
+    rmSync(linked, { recursive: true });
+    await fixture.git(["worktree", "add", linked, "feature"]);
+    writeFileSync(join(linked, "a.rb"), "class A\n  def local; end\nend\n");
+    writeFileSync(join(linked, "untracked.ts"), "export const local = true;\n");
+    writeFileSync(join(linked, ".gitignore"), "ignored.txt\n");
+    writeFileSync(join(linked, "ignored.txt"), "not reviewable\n");
+    await fixture.git(["-C", linked, "rm", "--cached", "unchanged.txt"]);
+    writeFileSync(join(linked, "unchanged.txt"), "changed but still present\n");
+
+    try {
+      const worktrees = await engine.listWorktrees(linked);
+      expect(worktrees.map((worktree) => realpathSync(worktree.path))).toEqual(expect.arrayContaining([realpathSync(fixture.dir), realpathSync(linked)]));
+      expect(worktrees.find((worktree) => realpathSync(worktree.path) === realpathSync(linked))).toMatchObject({ branch: "feature", locked: false });
+
+      const view = await engine.localView(linked);
+      expect(view.defaultBranch).toBe("main");
+      expect(view.mergeBaseSha).toBe(mainSha);
+      expect(view.files.map((file) => [file.path, file.status])).toEqual([
+        [".gitignore", "A"],
+        ["a.rb", "M"],
+        ["b.rb", "A"],
+        ["unchanged.txt", "M"],
+        ["untracked.ts", "A"],
+      ]);
+      expect(view.files.find((file) => file.path === "a.rb")).toMatchObject({
+        baseContent: "class A\nend\n",
+        headContent: "class A\n  def local; end\nend\n",
+      });
+      expect(view.files.some((file) => file.path === "ignored.txt")).toBe(false);
+    } finally {
+      await fixture.git(["worktree", "remove", "--force", linked]);
+    }
+  });
+
+  it("uses the original merge-base path for a renamed local file", async () => {
+    const mainSha = await fixture.git(["rev-parse", "refs/heads/main"]);
+    await fixture.git(["update-ref", "refs/remotes/origin/main", mainSha]);
+    await fixture.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+    const linked = mkdtempSync(join(tmpdir(), "gander-rename-worktree-"));
+    rmSync(linked, { recursive: true });
+    await fixture.git(["worktree", "add", "-b", "rename-local", linked, "main"]);
+    await fixture.git(["-C", linked, "mv", "unchanged.txt", "renamed.txt"]);
+
+    try {
+      const view = await engine.localView(linked);
+      expect(view.files).toContainEqual(expect.objectContaining({
+        path: "renamed.txt",
+        basePath: "unchanged.txt",
+        status: "R",
+        baseContent: "same\n",
+        headContent: "same\n",
+      }));
+    } finally {
+      await fixture.git(["worktree", "remove", "--force", linked]);
+      await fixture.git(["branch", "-D", "rename-local"]);
+    }
   });
 });

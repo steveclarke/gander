@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
 import TopBar from "./components/TopBar.vue";
@@ -99,6 +99,13 @@ const questionsSize = computed({
   },
 });
 const questionCount = computed(() => store.view?.questions.length ?? 0);
+const hasView = computed(() => store.view !== null || store.localView !== null);
+
+watch(() => store.localView, (local) => {
+  if (!local) return;
+  drawerOpen.value = false;
+  questionTarget.value = null;
+});
 
 function openQuestion(target?: QuestionTarget): void {
   if (!store.view) return;
@@ -148,7 +155,7 @@ window.addEventListener("keydown", onKey, true);
 const POLL_MS = 30_000;
 let refreshing = false;
 async function refreshOnce(): Promise<void> {
-  if (refreshing || !store.view) return;
+  if (refreshing || !hasView.value) return;
   refreshing = true;
   try {
     await store.refresh();
@@ -200,15 +207,15 @@ onBeforeUnmount(() => {
         @close="closeSettings"
       />
       <div v-show="activeSurface === 'review'" class="review-surface">
-        <p v-if="store.busy && !store.view" class="empty working">
-          <span class="spinner" />Opening pull request…
+        <p v-if="store.busy && !hasView" class="empty working">
+          <span class="spinner" />Opening changes…
         </p>
-        <p v-else-if="unconfigured" class="empty">
+        <p v-else-if="unconfigured && !store.localView" class="empty">
           No review service yet.
           <button class="link" type="button" @click="openSettings('connection')">Set its URL and token</button>
-          to start reviewing.
+          for pull request reviews, or add a local checkout to browse without it.
         </p>
-        <p v-else-if="!store.view" class="empty">Pick a repository, then a pull request.</p>
+        <p v-else-if="!hasView" class="empty">Pick a repository, then a pull request or local worktree.</p>
         <template v-else>
           <FileTree
             v-if="treeVisible"
@@ -236,7 +243,7 @@ onBeforeUnmount(() => {
               class="diff"
               @add-question="openQuestion"
             />
-            <template v-if="drawerOpen">
+            <template v-if="store.view && drawerOpen">
               <Splitter
                 v-model="questionsSize"
                 :orientation="questionsDock === 'right' ? 'vertical' : 'horizontal'"

@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import type { OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { ChangedFile, LocalView, LocalWorktree, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi, GithubRepository } from "./api.js";
 import type { ImagePreview } from "../../api.js";
 
@@ -9,8 +9,10 @@ export interface Store {
   githubReposBusy: boolean;
   githubReposError: string | null;
   prs: PrSummary[];
+  worktrees: LocalWorktree[];
   currentRepoId: string | null;
   view: PrView | null;
+  localView: LocalView | null;
   selectedPath: string | null;
   error: string | null;
   /** Whether the review service answered its last health check. */
@@ -26,10 +28,12 @@ export interface Store {
   /** Reopen the pull request that was open when the app last closed. */
   restoreLastReview(): Promise<void>;
   addRepo(url: string): Promise<void>;
+  chooseLocalRepo(): Promise<boolean>;
   /** Open what the command line asked for: a repository, and its pull request when one was named. */
   openTarget(target: OpenTarget): Promise<void>;
   selectRepo(repoId: string): Promise<void>;
   openPr(prNumber: number): Promise<void>;
+  openLocal(path: string): Promise<void>;
   refresh(): Promise<void>;
   /** The reviewer pressing Fetch origin: same work as refresh, but it clears a stale error. */
   fetchNow(): Promise<void>;
@@ -41,6 +45,8 @@ export interface Store {
   addReviewerReply(id: number, text: string): Promise<void>;
   deleteQuestion(id: number): Promise<void>;
   select(path: string): void;
+  files(): ChangedFile[];
+  isLocal(): boolean;
   progress(): { done: number; total: number };
 }
 
@@ -51,8 +57,10 @@ export function createStore(api: GanderApi): Store {
     githubReposBusy: false,
     githubReposError: null,
     prs: [],
+    worktrees: [],
     currentRepoId: null,
     view: null,
+    localView: null,
     selectedPath: null,
     error: null,
     serviceReachable: true,
@@ -97,14 +105,31 @@ export function createStore(api: GanderApi): Store {
       await userAction(() => withBusy(() => guard(async () => {
         const entry = await api.addRepo(url);
         store.repos = await api.listRepos();
-        store.prs = await api.listPrs(entry.repoId);
         store.currentRepoId = entry.repoId;
         store.view = null;
+        store.localView = null;
         store.selectedPath = null;
+        await loadContexts(entry.repoId);
       })));
+    },
+    async chooseLocalRepo() {
+      let chosen = false;
+      await userAction(() => withBusy(() => guard(async () => {
+        const entry = await api.chooseLocalRepo();
+        if (!entry) return;
+        chosen = true;
+        store.repos = await api.listRepos();
+        store.currentRepoId = entry.repoId;
+        store.view = null;
+        store.localView = null;
+        store.selectedPath = null;
+        await loadContexts(entry.repoId);
+      })));
+      return chosen;
     },
     async openTarget(target: OpenTarget) {
       await userAction(() => withBusy(() => guard(async () => {
+        await api.closeLocal();
         // Registering on the spot rather than refusing: whoever ran the command already
         // knows which repository they mean, and an error here would cost the reviewer a
         // detour to add it by hand.
@@ -114,10 +139,11 @@ export function createStore(api: GanderApi): Store {
         }
         // The bodies of selectRepo and openPr, inlined: nesting their busy wrappers would
         // clear the busy flag halfway through this one.
-        store.prs = await api.listPrs(target.repoId);
         store.currentRepoId = target.repoId;
         store.view = null;
+        store.localView = null;
         store.selectedPath = null;
+        await loadContexts(target.repoId);
         if (target.prNumber === null) return;
         store.view = await api.openPr(target.repoId, target.prNumber);
         store.selectedPath = store.view.files[0]?.path ?? null;
@@ -126,24 +152,39 @@ export function createStore(api: GanderApi): Store {
     },
     async selectRepo(repoId: string) {
       await userAction(() => withBusy(() => guard(async () => {
-        store.prs = await api.listPrs(repoId);
+        await api.closeLocal();
         store.currentRepoId = repoId;
         store.view = null;
+        store.localView = null;
         store.selectedPath = null;
+        await loadContexts(repoId);
       })));
     },
     async openPr(prNumber: number) {
       await userAction(() => withBusy(() => guard(async () => {
         if (!store.currentRepoId) throw new Error("no repo selected");
         store.view = await api.openPr(store.currentRepoId, prNumber);
+        store.localView = null;
         store.selectedPath = store.view.files[0]?.path ?? null;
+        store.lastFetchAt = new Date().toISOString();
+      })));
+    },
+    async openLocal(path: string) {
+      await userAction(() => withBusy(() => guard(async () => {
+        if (!store.currentRepoId) throw new Error("no repo selected");
+        store.localView = await api.openLocal(store.currentRepoId, path);
+        store.view = null;
+        store.selectedPath = store.localView.files[0]?.path ?? null;
         store.lastFetchAt = new Date().toISOString();
       })));
     },
     async refresh() {
       await withBusy(() => guard(async () => {
-        if (!store.currentRepoId || !store.view) return;
-        store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+        if (store.localView) {
+          applyLocalView(await api.refreshLocal(store.localView.worktree.path));
+        } else if (store.currentRepoId && store.view) {
+          store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+        } else return;
         store.lastFetchAt = new Date().toISOString();
       }));
     },
@@ -167,6 +208,7 @@ export function createStore(api: GanderApi): Store {
       return api.reviewedSnapshot(store.currentRepoId, store.view.pr.number, path);
     },
     async imagePreview(path: string) {
+      if (store.localView) return api.localImagePreview(path);
       if (!store.currentRepoId || !store.view) return null;
       return api.imagePreview(store.currentRepoId, store.view.pr.number, path);
     },
@@ -191,11 +233,44 @@ export function createStore(api: GanderApi): Store {
     select(path: string) {
       store.selectedPath = path;
     },
+    files() {
+      return store.localView?.files ?? store.view?.files ?? [];
+    },
+    isLocal() {
+      return store.localView !== null;
+    },
     progress() {
       const files = store.view?.files ?? [];
       return { done: files.filter((f) => f.checked).length, total: files.length };
     },
   });
+
+  api.onLocalViewChanged((update) => {
+    if (store.localView?.worktree.path !== update.path) return;
+    if (update.view === null) {
+      store.error = update.error;
+      return;
+    }
+    applyLocalView(update.view);
+    store.lastFetchAt = new Date().toISOString();
+  });
+
+  function applyLocalView(view: LocalView): void {
+    store.localView = view;
+    if (!view.files.some((file) => file.path === store.selectedPath)) {
+      store.selectedPath = view.files[0]?.path ?? null;
+    }
+  }
+
+  async function loadContexts(repoId: string): Promise<void> {
+    const [prs, worktrees] = await Promise.allSettled([api.listPrs(repoId), api.listWorktrees(repoId)]);
+    store.prs = prs.status === "fulfilled" ? prs.value : [];
+    store.worktrees = worktrees.status === "fulfilled" ? worktrees.value : [];
+    const errors = [prs, worktrees]
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => (result.reason as Error).message);
+    if (errors.length) throw new Error(errors.join("\n"));
+  }
 
   // An error stays on screen until the reviewer dismisses it or starts something new.
   // Clearing it on any success meant the 30-second poll wiped failures before they

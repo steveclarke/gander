@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { connect } from "node:net";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { $, $$, browser, expect } from "@wdio/globals";
@@ -431,6 +431,31 @@ describe("Gander end to end", () => {
     await expect($("button=Actual size")).toHaveAttribute("aria-pressed", "false");
     await $("button=Actual size").click();
     await expect($("button=Actual size")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows a live stateless local worktree without review controls", async () => {
+    await $(".seg-repo").click();
+    await $("//div[contains(@class, 'sw-item')][.//span[contains(@class, 'nm') and normalize-space()='local-viewer']]").click();
+    await $(".seg-review").click();
+    const worktree = await $("//div[contains(@class, 'local-worktree')][contains(normalize-space(.), 'feature')]");
+    await worktree.waitForDisplayed();
+    await worktree.click();
+
+    await expect($(".seg-review")).toHaveText(expect.stringContaining("Local"));
+    await expect($(".seg-review")).toHaveText(expect.stringContaining("feature"));
+    await expect($(".local-progress")).toHaveText("3 changed");
+    expect(await $$('[role="checkbox"]')).toHaveLength(0);
+    await expect($("button[aria-label='Add question (N)']")).not.toBeDisplayed();
+    await expect($("button[aria-label='Questions']")).not.toBeDisplayed();
+    await expect($(".filehead .check")).not.toBeDisplayed();
+    await expect($("button[aria-label='Full file']")).toBeDisplayed();
+    await expect($("button[aria-label='Changes against main']")).toBeDisplayed();
+    await expect(treeRow("ignored.txt")).not.toBeDisplayed();
+
+    writeFileSync(join(requiredEnv("GANDER_E2E_LOCAL_WORKTREE"), "watched.ts"), "export const watched = true;\n");
+    await treeRow("watched.ts").waitForDisplayed({ timeout: 5_000 });
+    await expect($(".local-progress")).toHaveText("4 changed");
+    await expect($(".error-banner")).not.toBeDisplayed();
   });
 
   it("shows the overflowing file-tree scrollbar only while the tree is hovered", async () => {

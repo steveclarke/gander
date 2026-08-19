@@ -21,6 +21,7 @@ function fakeStore(overrides: Partial<Store> = {}): Store {
     },
     async selectRepo() {},
     async addRepo() {},
+    async chooseLocalRepo() { return false; },
     ...overrides,
   } as unknown as Store);
 }
@@ -90,9 +91,24 @@ describe("RepositoryPicker", () => {
     await flushPromises();
 
     await wrapper.get("#github-repositories-tab").trigger("keydown", { key: "End" });
-    expect(wrapper.get("#repository-url-tab").attributes("aria-selected")).toBe("true");
-    await wrapper.get("#repository-url-tab").trigger("keydown", { key: "Home" });
+    expect(wrapper.get("#local-repository-tab").attributes("aria-selected")).toBe("true");
+    await wrapper.get("#local-repository-tab").trigger("keydown", { key: "Home" });
     expect(wrapper.get("#github-repositories-tab").attributes("aria-selected")).toBe("true");
+  });
+
+  it("registers a local checkout through the native folder flow", async () => {
+    const chooseLocalRepo = vi.fn(async () => true);
+    store = fakeStore({ chooseLocalRepo });
+    const wrapper = mount(RepositoryPicker, { props: { open: false, store } });
+    await wrapper.setProps({ open: true });
+    await flushPromises();
+
+    await wrapper.get("#local-repository-tab").trigger("click");
+    await wrapper.get(".local-button").trigger("click");
+    await flushPromises();
+
+    expect(chooseLocalRepo).toHaveBeenCalledOnce();
+    expect(wrapper.emitted("close")).toHaveLength(1);
   });
 
   it("keeps the picker open and names a failed registration", async () => {

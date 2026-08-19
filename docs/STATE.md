@@ -57,9 +57,20 @@ A development checkout can run only its Electron app against the hosted service
 with `bin/dev --hosted`; ordinary `bin/dev` keeps its isolated local service for
 development.
 
+## Local viewer
+
+Registered repositories can also point at a local checkout. Gander discovers its
+linked worktrees with `git worktree list` and shows each worktree's live change from
+the merge-base with the default branch through the current working tree. Untracked
+files are included unless ignored by Git.
+
+Local views are read-only and machine-local. They do not expose or persist checkoffs,
+snapshots, changed-since state, or questions. One bounded poller follows the selected
+worktree's files, index, HEAD, and refs and refreshes the view when derived content
+changes.
+
 ## Still open
 
-- Local branch/worktree viewer (stateless, no review state)
 - Packaging: signing, notarization, and the Homebrew cask. Gander runs only from
   a development checkout.
 

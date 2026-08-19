@@ -30,8 +30,10 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     githubReposBusy: false,
     githubReposError: null,
     prs: [],
+    worktrees: [],
     currentRepoId: "acme/atlas",
     view,
+    localView: null,
     selectedPath: view.files[0]!.path,
     error: null,
     serviceReachable: true,
@@ -43,9 +45,11 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async checkService() {},
     dismissError() {},
     async addRepo() {},
+    async chooseLocalRepo() { return false; },
     async openTarget() {},
     async selectRepo() {},
     async openPr() {},
+    async openLocal() {},
     async refresh() {},
     async fetchNow() {},
     async reviewedSnapshot() { return null; },
@@ -62,6 +66,8 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     select(path: string) {
       store.selectedPath = path;
     },
+    files() { return store.localView?.files ?? store.view?.files ?? []; },
+    isLocal() { return store.localView !== null; },
     progress() {
       return { done: 0, total: 0 };
     },
@@ -239,5 +245,24 @@ describe("FileTree", () => {
     await src.trigger("click");
     expect(dirRow(wrapper, "src").find(".file-icon").attributes("data-icon-id")).toBe("folder_src");
     expect(store.selectedPath).toBe("Gemfile");
+  });
+
+  it("renders local changes without checkoffs, snapshots, changed-since markers, or questions", () => {
+    const { store } = fakeStore(prView(1, [file("src/local.ts")]));
+    store.localView = {
+      worktree: { path: "/tmp/local", branch: "feature", headSha: "head", locked: false },
+      defaultBranch: "main",
+      mergeBaseSha: "base",
+      files: [{ path: "src/local.ts", status: "M", baseContent: "old", headContent: "new", baseHash: "b", headHash: "h" }],
+    };
+    store.view = null;
+    store.selectedPath = "src/local.ts";
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
+
+    expect(wrapper.get(".fname").text()).toBe("src");
+    expect(wrapper.findAll('[role="checkbox"]')).toHaveLength(0);
+    expect(wrapper.find(".qmark").exists()).toBe(false);
+    expect(wrapper.find(".delta-mark").exists()).toBe(false);
+    expect(fileRow(wrapper, "src/local.ts").get(".st").text()).toBe("M");
   });
 });
