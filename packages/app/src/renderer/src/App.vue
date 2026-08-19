@@ -304,10 +304,13 @@ function runCommand(command: Command): boolean {
       if (file !== null) void store.setChecked(file.path, !file.checked);
       return true;
     }
-    case "check-and-advance": {
+    case "mark-and-advance":
+    case "mark-and-retreat": {
       const file = reviewFileAt(selected);
       if (file === null) return true;
-      const next = nextUnchecked(files, file.path);
+      // Read before marking: once this file is checked it would no longer be a candidate,
+      // and the search would skip over where the reviewer actually is.
+      const next = nextUnchecked(files, file.path, command === "mark-and-advance" ? 1 : -1);
       if (!file.checked) void store.setChecked(file.path, true);
       if (next !== null && next !== file.path) store.select(next);
       return true;

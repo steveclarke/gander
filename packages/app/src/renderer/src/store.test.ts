@@ -107,18 +107,17 @@ describe("store", () => {
   // closes the worktree in the main process. Its refusal reached the reviewer as an error
   // naming a worktree they had already left.
   it("discards a local refresh the reviewer has already moved on from", async () => {
-    let release: (() => void) | null = null;
+    let release: () => void = () => {};
+    const worktree = { path: "/tmp/beacon", headSha: "b", branch: "main", locked: false };
+    const localView: LocalView = { worktree, defaultBranch: "main", mergeBaseSha: "a", files: [] };
     const store = createStore(fakeApi({
       listRepos: async () => [
         { repoId: "acme/atlas", url: "u", localPath: "/tmp/atlas" },
         { repoId: "acme/beacon", url: "u2", localPath: "/tmp/beacon" },
       ],
-      listWorktrees: async () => [{ path: "/tmp/beacon", branch: "main", head: "b", isPrimary: true, prNumber: null }],
-      openLocal: async () => ({
-        worktree: { path: "/tmp/beacon", branch: "main", head: "b", isPrimary: true, prNumber: null },
-        files: [], baseRef: "main",
-      }),
-      refreshLocal: async () => new Promise((_resolve, reject) => {
+      listWorktrees: async () => [worktree],
+      openLocal: async () => localView,
+      refreshLocal: async () => new Promise<LocalView>((_resolve, reject) => {
         release = () => reject(new Error("/tmp/beacon is not the open local worktree"));
       }),
     }));
@@ -128,7 +127,7 @@ describe("store", () => {
 
     const refreshing = store.refresh();
     await store.openTarget({ repoId: "acme/atlas", prNumber: 1 });
-    release?.();
+    release();
     await refreshing;
 
     expect(store.error).toBeNull();

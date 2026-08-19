@@ -15,7 +15,8 @@ export type Command =
   | "focus-tree"
   | "focus-diff"
   | "toggle-checked"
-  | "check-and-advance"
+  | "mark-and-advance"
+  | "mark-and-retreat"
   | "next-change"
   | "previous-change"
   | "delta-view"
@@ -48,8 +49,9 @@ export const BINDINGS: Binding[] = [
   { command: "focus-tree", keys: ["Tab"], label: "Tab", description: "Focus the file tree", group: "Move" },
   { command: "focus-diff", keys: ["Escape"], label: "Esc", description: "Return to the diff", group: "Move" },
 
-  { command: "toggle-checked", keys: ["x", " "], label: "x / Space", description: "Check or un-check this file", group: "Review" },
-  { command: "check-and-advance", keys: ["X"], label: "⇧X", description: "Check it and go to the next unchecked file", group: "Review" },
+  { command: "toggle-checked", keys: ["m", " "], label: "m / Space", description: "Mark or unmark this file", group: "Review" },
+  { command: "mark-and-advance", keys: ["J"], label: "⇧J", description: "Mark it and go to the next unmarked file", group: "Review" },
+  { command: "mark-and-retreat", keys: ["K"], label: "⇧K", description: "Mark it and go to the previous unmarked file", group: "Review" },
   { command: "capture-note", keys: ["n"], label: "n", description: "Capture a note", group: "Review" },
   { command: "toggle-notes", keys: ["N"], label: "⇧N", description: "Show or hide the notes", group: "Review" },
 

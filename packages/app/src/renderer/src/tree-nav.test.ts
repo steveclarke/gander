@@ -65,6 +65,11 @@ describe("tree navigation", () => {
     expect(nextUnchecked(files, "README.md")).toBe("src/deep/inner.ts");
   });
 
+  it("searches backwards too, so marking can walk a review in reverse", () => {
+    expect(nextUnchecked(files, "README.md", -1)).toBe("vendor/bundle.js");
+    expect(nextUnchecked(files, "src/deep/inner.ts", -1)).toBe("README.md");
+  });
+
   it("has no next unchecked file once everything is checked", () => {
     expect(nextUnchecked(files.map((f) => file(f.path, true)), "src/app.ts")).toBeNull();
   });

@@ -86,12 +86,13 @@ export function edge(files: ChangedFile[], which: "first" | "last"): string | nu
 }
 
 /**
- * The next unchecked file after `from`. Collapsed directories stay out of it for the same
- * reason the cursor skips them — they are the noise the reviewer set aside. Wraps once, so
- * a pass that started in the middle still reaches the files above where it began.
+ * The nearest unmarked file in `delta`'s direction. Collapsed directories stay out of it
+ * for the same reason the cursor skips them — they are the noise the reviewer set aside.
+ * Wraps once, so a pass that started in the middle still reaches the files it skipped past;
+ * that backward jump is the point, since it shows the hole the reviewer left.
  */
-export function nextUnchecked(files: ChangedFile[], from: string | null): string | null {
-  const ordered = visibleFiles(files);
+export function nextUnchecked(files: ChangedFile[], from: string | null, delta: 1 | -1 = 1): string | null {
+  const ordered = delta === 1 ? visibleFiles(files) : [...visibleFiles(files)].reverse();
   const start = ordered.findIndex((file) => file.path === from);
   const rotated = start === -1 ? ordered : [...ordered.slice(start + 1), ...ordered.slice(0, start + 1)];
   return rotated.find((file) => "checked" in file && !file.checked)?.path ?? null;

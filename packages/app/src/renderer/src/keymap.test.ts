@@ -10,8 +10,10 @@ describe("keymap", () => {
   });
 
   it("tells a shifted letter from its lower case", () => {
-    expect(bindingFor(press("x"))?.command).toBe("toggle-checked");
-    expect(bindingFor(press("X"))?.command).toBe("check-and-advance");
+    expect(bindingFor(press("m"))?.command).toBe("toggle-checked");
+    expect(bindingFor(press("j"))?.command).toBe("next-file");
+    expect(bindingFor(press("J"))?.command).toBe("mark-and-advance");
+    expect(bindingFor(press("K"))?.command).toBe("mark-and-retreat");
   });
 
   // ⌘B toggles the tree; a bare b would otherwise claim the same key.
