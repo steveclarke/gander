@@ -47,6 +47,15 @@ export interface Store {
   refresh(): Promise<void>;
   /** The reviewer pressing Fetch origin: same work as refresh, but it clears a stale error. */
   fetchNow(): Promise<void>;
+  /**
+   * Re-asks GitHub which pull requests are open on the target repository.
+   *
+   * The list arrives once, when a repository becomes the target. A pull request opened
+   * after that — in a browser, by an agent, by `gh pr create` — never appears, and there is
+   * nothing in the workbench to ask again with, so the reviewer is left with a list that
+   * quietly disagrees with GitHub.
+   */
+  refreshPrs(): Promise<void>;
   setChecked(path: string, checked: boolean): Promise<void>;
   setCheckedMany(paths: string[], checked: boolean): Promise<void>;
   reviewedSnapshot(path: string): Promise<string | null>;
@@ -279,6 +288,13 @@ export function createStore(api: GanderApi): Store {
     },
     async fetchNow() {
       await userAction(() => store.refresh());
+    },
+    async refreshPrs() {
+      const repoId = store.targetRepoId;
+      if (repoId === null) return;
+      // Deliberately quiet: no busy flag and no error reset, because this also runs when the
+      // window regains focus, where a spinner and a cleared error would arrive unasked for.
+      await guard(() => loadContexts(repoId));
     },
     async setChecked(path: string, checked: boolean) {
       await guard(async () => {
