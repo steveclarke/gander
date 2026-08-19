@@ -4,11 +4,11 @@ set -euo pipefail
 # Electron 33's install script extracts its download with extract-zip, which under
 # Node 24 stops after the first archive entry and still exits 0 — leaving a few
 # hundred KB in node_modules/electron/dist. The failure surfaces much later, as
-# `Error: Electron uninstall` from bin/dev or `chromedriver ENOENT` from E2E.
+# `Error: Electron uninstall` from bin/dev.
 #
 # This runs from the root postinstall hook, so every pnpm install repairs itself
-# rather than only the ones that go through bin/setup. It is two --version calls
-# when the binaries are healthy.
+# rather than only the ones that go through bin/setup. It is one --version call
+# when the binary is healthy.
 #
 # Delete this script, the postinstall hook, and the AGENTS.md note when Electron
 # is upgraded past the broken extract-zip. See issue #81.
@@ -16,7 +16,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 electron_dir="packages/app/node_modules/electron"
-chromedriver_dir="packages/app/node_modules/electron-chromedriver"
 
 # An install that leaves out the app package has no Electron to repair — the
 # service image builds `--filter @gander/service...`, and this hook still runs at
@@ -28,38 +27,27 @@ electron_works() {
   packages/app/node_modules/.bin/electron --version >/dev/null 2>&1
 }
 
-chromedriver_works() {
-  packages/app/node_modules/.bin/chromedriver --version >/dev/null 2>&1
-}
-
-electron_works && chromedriver_works && exit 0
+electron_works && exit 0
 
 if ! command -v mise >/dev/null 2>&1; then
   echo "Electron's downloaded binaries are incomplete, and mise is required to repair them." >&2
   exit 1
 fi
-if [[ ! -f "$electron_dir/install.js" || ! -f "$chromedriver_dir/download-chromedriver.js" ]]; then
-  echo "Electron's package installers are missing. Re-run pnpm install and try again." >&2
+if [[ ! -f "$electron_dir/install.js" ]]; then
+  echo "Electron's package installer is missing. Re-run pnpm install and try again." >&2
   exit 1
 fi
 
-echo "==> Repairing Electron downloads with Node 22"
+echo "==> Repairing Electron download with Node 22"
 # Keep pnpm on Node 24 for native modules; run only the official Electron download
-# scripts under Node 22.
+# script under Node 22.
 mise install node@22 >/dev/null
 
+rm -rf "${electron_dir:?}/dist"
+rm -f "${electron_dir:?}/path.txt"
+mise exec node@22 -- node "$electron_dir/install.js"
+
 if ! electron_works; then
-  rm -rf "${electron_dir:?}/dist"
-  rm -f "${electron_dir:?}/path.txt"
-  mise exec node@22 -- node "$electron_dir/install.js"
-fi
-
-if ! chromedriver_works; then
-  rm -rf "${chromedriver_dir:?}/bin"
-  mise exec node@22 -- node "$chromedriver_dir/download-chromedriver.js"
-fi
-
-if ! electron_works || ! chromedriver_works; then
-  echo "Electron or chromedriver is still incomplete after repair." >&2
+  echo "Electron is still incomplete after repair." >&2
   exit 1
 fi
