@@ -120,21 +120,31 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     await Promise.all([write(pr), ...siblings.map(write)]);
   }
 
-  async function loadPr(repoId: string, prNumber: number): Promise<PrView> {
+  /**
+   * Fetches the branch and records its context, up to the point where the head sha is known.
+   *
+   * Recorded here so an agent working in a checkout of this branch can ask the service for
+   * its questions by branch name, without the service needing GitHub credentials — and so
+   * the answer can name which pull request, and which member of a stack, it is. Kept current
+   * on every refresh too: it is what tells an agent that a question's line number predates
+   * the commits now on the branch.
+   */
+  async function fetchHead(repoId: string, prNumber: number): Promise<{ pr: PrSummary; clone: string; head: string }> {
     const all = await deps.listPrs(repoId);
     const pr = all.find((p) => p.number === prNumber);
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
 
     const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
     await deps.git.fetchPr(clone, prNumber, pr.baseRef);
-    // Recorded here so an agent working in a checkout of this branch can ask the service
-    // for its questions by branch name, without the service needing GitHub credentials —
-    // and so the answer can name which pull request, and which member of a stack, it is.
     await recordContext(repoId, prNumber, pr, all);
     const head = await deps.git.resolveRef(clone, `refs/gander/pr/${prNumber}`);
+    return { pr, clone, head };
+  }
+
+  /** Reads every blob afresh and caches the result: the path taken whenever the head moved. */
+  async function recomputeView(repoId: string, prNumber: number, pr: PrSummary, clone: string, head: string): Promise<PrView> {
     const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
     const mergeBase = await deps.git.mergeBase(clone, base, head);
-
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
     const questions = await deps.service.listQuestions(repoId, prNumber);
     const view: PrView = { pr, files, questions };
@@ -142,21 +152,17 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     return view;
   }
 
+  async function loadPr(repoId: string, prNumber: number): Promise<PrView> {
+    const { pr, clone, head } = await fetchHead(repoId, prNumber);
+    return recomputeView(repoId, prNumber, pr, clone, head);
+  }
+
   async function openPr(repoId: string, prNumber: number): Promise<PrView> {
     return useCachedViewOnConnectionFailure(repoId, prNumber, () => loadPr(repoId, prNumber));
   }
 
   async function loadRefresh(repoId: string, prNumber: number): Promise<PrView> {
-    const all = await deps.listPrs(repoId);
-    const pr = all.find((p) => p.number === prNumber);
-    if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
-
-    const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
-    await deps.git.fetchPr(clone, prNumber, pr.baseRef);
-    // Kept current on every refresh: it is what tells an agent that a question's line
-    // number predates the commits now on the branch.
-    await recordContext(repoId, prNumber, pr, all);
-    const head = await deps.git.resolveRef(clone, `refs/gander/pr/${prNumber}`);
+    const { pr, clone, head } = await fetchHead(repoId, prNumber);
 
     const cached = cache.get(key(repoId, prNumber));
     if (cached && cached.headSha === head) {
@@ -172,13 +178,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     }
 
     // Head moved (or nothing was cached yet): fall back to a full recompute, same as openPr.
-    const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
-    const mergeBase = await deps.git.mergeBase(clone, base, head);
-    const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
-    const questions = await deps.service.listQuestions(repoId, prNumber);
-    const view: PrView = { pr, files, questions };
-    cache.set(key(repoId, prNumber), { view, headSha: head, clone, mergeBase, serviceStateFresh: true });
-    return view;
+    return recomputeView(repoId, prNumber, pr, clone, head);
   }
 
   async function refreshPr(repoId: string, prNumber: number): Promise<PrView> {
@@ -186,11 +186,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
   }
 
   async function applyChecked(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView> {
-    const entry = cache.get(key(repoId, prNumber));
-    if (!entry) throw new Error(`PR #${prNumber} on ${repoId} must be opened before checking files`);
-    if (!entry.serviceStateFresh) {
-      throw new ServiceConnectionError(STALE_SERVICE_DATA_WRITE_ERROR);
-    }
+    const entry = requireWritable(repoId, prNumber);
     const { view } = entry;
     for (const path of paths) {
       const file = view.files.find((f) => f.path === path);

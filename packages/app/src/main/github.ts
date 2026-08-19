@@ -17,13 +17,15 @@ interface GhPr {
 const PER_PAGE = 100;
 const DEFAULT_API_URL = "https://api.github.com";
 
+const apiBase = (): string => (process.env.GANDER_GITHUB_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, "");
+
 function githubHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
 }
 
 export async function listOpenPrs(repoId: string, token: string, fetchImpl: typeof fetch = fetch): Promise<PrSummary[]> {
   const headers = githubHeaders(token);
-  const apiUrl = (process.env.GANDER_GITHUB_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, "");
+  const apiUrl = apiBase();
   const all: GhPr[] = [];
   let page = 1;
   for (;;) {
@@ -52,7 +54,7 @@ const GH_PATHS = ["gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/home/linu
 
 /** Whether a token GitHub will accept, and who it belongs to — for the settings pane. */
 export async function checkGithubToken(token: string, fetchImpl: typeof fetch = fetch): Promise<{ ok: true; login: string } | { ok: false; reason: string }> {
-  const apiUrl = (process.env.GANDER_GITHUB_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, "");
+  const apiUrl = apiBase();
   let res: Response;
   try {
     res = await fetchImpl(`${apiUrl}/user`, {

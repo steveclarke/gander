@@ -31,6 +31,10 @@ const DEFAULT_TIMEOUT_MS = 60 * 1000;
 const MAX_LOCAL_CONTENT_BYTES = 8 * 1024 * 1024;
 const MAX_EXPLORER_ENTRIES_PER_DIRECTORY = 50_000;
 
+// git's wording when the *path* is absent at an otherwise valid revision. "invalid object
+// name" / "bad revision" mean the revision itself is unresolvable and must never match here.
+const PATH_ABSENT_AT_REVISION = /does not exist in|exists on disk, but not in/i;
+
 export interface ShowFileResult {
   /** Decoded UTF-8 content, or null if the path is absent at this revision or the blob is binary. */
   content: string | null;
@@ -113,16 +117,7 @@ function describeGitError(args: string[], err: unknown, timeoutMs: number): Erro
 }
 
 async function git(cwd: string, args: string[], timeoutMs = DEFAULT_TIMEOUT_MS): Promise<string> {
-  try {
-    const { stdout } = await run("git", ["-C", cwd, ...args], {
-      maxBuffer: 64 * 1024 * 1024,
-      timeout: timeoutMs,
-      env: GIT_ENV,
-    });
-    return stdout;
-  } catch (err) {
-    throw describeGitError(args, err, timeoutMs);
-  }
+  return (await gitBuffer(cwd, args, timeoutMs)).toString("utf8");
 }
 
 async function gitBuffer(cwd: string, args: string[], timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Buffer> {
@@ -337,10 +332,7 @@ export function createGitEngine(clonesRoot: string): GitEngine {
         buf = await gitBuffer(cloneDir, ["show", `${rev}:${path}`]);
       } catch (err) {
         const msg = (err as Error).message;
-        // Only absorb messages about the *path* being absent at a valid revision.
-        // "invalid object name" / "bad revision" mean the revision itself is
-        // unresolvable (corrupt clone, stale ref) and must throw, not fake a miss.
-        if (/does not exist in|exists on disk, but not in/i.test(msg)) return { content: null, hash: null, binary: false };
+        if (PATH_ABSENT_AT_REVISION.test(msg)) return { content: null, hash: null, binary: false };
         throw err;
       }
       // NUL byte in the content is the standard cheap binary heuristic (same one git itself
@@ -477,7 +469,7 @@ export function createGitEngine(clonesRoot: string): GitEngine {
       try {
         base = await this.showImage(worktreeDir, mergeBaseSha, basePath);
       } catch (err) {
-        if (/does not exist in|exists on disk, but not in/i.test((err as Error).message)) base = { kind: "absent" };
+        if (PATH_ABSENT_AT_REVISION.test((err as Error).message)) base = { kind: "absent" };
         else throw err;
       }
       return { base, head };
