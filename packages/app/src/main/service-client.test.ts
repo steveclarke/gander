@@ -83,7 +83,7 @@ describe("a request with no body", () => {
       app.post("/api/reviews/:repoId/:prNumber/notes", async (req, reply) => {
         seen.push(req.headers["content-type"]);
         return reply.code(201).send({
-          id: 1, path: "a.rb", line: null, text: "why?", state: "open", replies: [],
+          id: 1, path: "a.rb", line: null, text: "why?", state: "open",
           headSha: null, commitRef: null, summary: null, createdAt: new Date().toISOString(),
         });
       });

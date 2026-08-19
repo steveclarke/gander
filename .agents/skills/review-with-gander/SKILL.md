@@ -57,9 +57,10 @@ Treat a note as work, not as a checkbox:
 bin/mcp call mark_note_addressed id=NOTE_ID commitRef=COMMIT_SHA summary="WHAT CHANGED"
 ```
 
-Only the reviewer resolves a note after re-reviewing the file. The current
-MCP contract has no threaded agent reply; the `note` on
-`mark_note_addressed` is the temporary response channel.
+Discuss the note with the reviewer in the active agent session. Only mark it
+addressed after the work is complete, and use `summary` for a concise durable
+record of what changed. Only the reviewer resolves a note after re-reviewing the
+file; the MCP contract has no reply tool.
 
 ## Diagnose the bridge
 

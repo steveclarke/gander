@@ -47,14 +47,6 @@ describe("preload API", () => {
     expect(invoke).toHaveBeenLastCalledWith("gander:updateSettings", settings);
   });
 
-  it("routes reviewer replies through the reply IPC channel", async () => {
-    const invoke = vi.fn(async () => ({}));
-    const api = createGanderApi(invoke, vi.fn());
-
-    await api.addReviewerReply("acme/atlas", 7, 12, "A reviewer reply");
-    expect(invoke).toHaveBeenLastCalledWith("gander:addReviewerReply", "acme/atlas", 7, 12, "A reviewer reply");
-  });
-
   it("requests an image preview only through its explicit IPC channel", async () => {
     const invoke = vi.fn(async () => ({}));
     const api = createGanderApi(invoke, vi.fn());

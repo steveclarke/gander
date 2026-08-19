@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { flushPromises, mount } from "@vue/test-utils";
+import { mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { reactive } from "vue";
 import type { PrView } from "@gander/shared";
 import type { Store } from "../store.js";
 import { pendingReveal } from "../selection.js";
@@ -30,7 +29,6 @@ function store(notes: PrView["notes"], overrides: Partial<Store> = {}): Store {
   return {
     view: view(notes),
     selectedPath: null,
-    async addReviewerReply() {},
     async deleteNote() {},
     select() {},
     ...overrides,
@@ -48,7 +46,6 @@ const notes: PrView["notes"] = [
     commitRef: null,
     summary: null,
     createdAt: "2026-08-18T00:00:00.000Z",
-    replies: [],
   },
   {
     id: 2,
@@ -60,10 +57,6 @@ const notes: PrView["notes"] = [
     commitRef: "abc1234",
     summary: "Kept the contract and added coverage.",
     createdAt: "2026-08-18T01:00:00.000Z",
-    replies: [
-      { id: 3, author: "agent", text: "The regression test now covers both callers.", createdAt: "2026-08-18T02:00:00.000Z" },
-      { id: 4, author: "reviewer", text: "That covers my concern.", createdAt: "2026-08-18T03:00:00.000Z" },
-    ],
   },
 ];
 
@@ -95,7 +88,6 @@ describe("NotesDrawer", () => {
           commitRef: null,
           summary: null,
           createdAt: "2026-08-18T00:00:00.000Z",
-          replies: [],
         }]),
         dock: "right",
       },
@@ -107,7 +99,7 @@ describe("NotesDrawer", () => {
     expect(wrapper.emitted("addNote")).toHaveLength(1);
   });
 
-  it("opens new notes and collapses addressed threads without losing their identity", () => {
+  it("opens new notes and collapses addressed notes without losing their identity", () => {
     const wrapper = mount(NotesDrawer, { props: { store: store(notes), dock: "right" } });
 
     const toggles = wrapper.findAll("button[aria-expanded]");
@@ -119,11 +111,10 @@ describe("NotesDrawer", () => {
     expect(addressed.text()).toContain("addressed.ts:9");
     expect(addressed.get(".state").text()).toBe("addressed");
     expect(addressed.text()).toContain("Could this preserve the existing caller contract?");
-    expect(addressed.text()).toContain("2 replies");
     expect(addressed.find("[data-note-body]").isVisible()).toBe(false);
   });
 
-  it("exposes a keyboard-operable disclosure and a labeled reply hierarchy", async () => {
+  it("exposes a keyboard-operable disclosure and labeled agent update", async () => {
     const wrapper = mount(NotesDrawer, { props: { store: store(notes), dock: "bottom" } });
     const addressed = wrapper.get("[data-note-id='2']");
     const toggle = addressed.get("button[aria-expanded='false']");
@@ -136,25 +127,18 @@ describe("NotesDrawer", () => {
     expect(addressed.get("[data-note-body]").isVisible()).toBe(true);
     expect(addressed.get("[aria-label='Agent update']").text()).toContain("Kept the contract and added coverage.");
     expect(addressed.get("[aria-label='Agent update'] code").text()).toBe("abc1234");
-    expect(addressed.get("[aria-label='Replies']").text()).toContain("Agent");
-    expect(addressed.get("[aria-label='Replies']").text()).toContain("Reviewer");
   });
 
-  it("preserves navigation, delete, and reply actions inside an expanded thread", async () => {
+  it("preserves navigation and delete actions inside an expanded note", async () => {
     const select = vi.fn();
     const deleteNote = vi.fn(async () => {});
-    const addReviewerReply = vi.fn(async () => {});
-    const drawerStore = store(notes, { select, deleteNote, addReviewerReply });
+    const drawerStore = store(notes, { select, deleteNote });
     const wrapper = mount(NotesDrawer, { props: { store: drawerStore, dock: "right" } });
     const open = wrapper.get("[data-note-id='1']");
 
     await open.get("button[data-note-location]").trigger("click");
     expect(select).toHaveBeenCalledWith("src/a-very-long-file-name.ts");
     expect(pendingReveal.value).toBe(37);
-
-    await open.get("input[aria-label='Reply to note 1']").setValue("A reviewer follow-up");
-    await open.get("form").trigger("submit");
-    expect(addReviewerReply).toHaveBeenCalledWith(1, "A reviewer follow-up");
 
     await open.get("button[aria-label='Delete note 1']").trigger("click");
     // The click opens the confirmation; nothing is deleted until it is answered.
@@ -187,36 +171,17 @@ describe("NotesDrawer", () => {
     expect(open.get("dialog.confirm .detail").text()).toMatch(/cannot be undone/);
   });
 
-  it("preserves an explicit disclosure choice when a reply refreshes the note", async () => {
-    const drawerStore = reactive(store(notes)) as Store;
-    drawerStore.addReviewerReply = async (id, text) => {
-      drawerStore.view = view(notes.map((note) => note.id === id
-        ? { ...note, replies: [...note.replies, { id: 5, author: "reviewer", text, createdAt: "2026-08-18T04:00:00.000Z" }] }
-        : note));
-    };
-    const wrapper = mount(NotesDrawer, { props: { store: drawerStore, dock: "right" } });
-    const addressed = wrapper.get("[data-note-id='2']");
-    await addressed.get("button[aria-expanded='false']").trigger("click");
-    await addressed.get("input").setValue("One more thought");
-    await addressed.get("form").trigger("submit");
-    await flushPromises();
-
-    expect(addressed.get("button[aria-expanded]").attributes("aria-expanded")).toBe("true");
-    expect(addressed.get("[aria-label='Replies']").text()).toContain("One more thought");
-  });
-
-  it("copies a complete note thread and all threads as markdown", async () => {
+  it("copies a complete note and all notes as markdown", async () => {
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     const wrapper = mount(NotesDrawer, { props: { store: store(notes), dock: "right" } });
     const addressed = wrapper.get("[data-note-id='2']");
     await addressed.get("button[aria-expanded='false']").trigger("click");
 
-    await addressed.get("button[aria-label='Copy note 2 thread']").trigger("click");
+    await addressed.get("button[aria-label='Copy note 2']").trigger("click");
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("Agent update (abc1234): Kept the contract"));
-    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("Agent: The regression test now covers both callers."));
 
-    await wrapper.get("button[aria-label='Copy all note threads']").trigger("click");
+    await wrapper.get("button[aria-label='Copy all notes']").trigger("click");
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("### src/a-very-long-file-name.ts:37 — open"));
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("### src/addressed.ts:9 — addressed"));
   });

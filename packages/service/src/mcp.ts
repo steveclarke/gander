@@ -4,11 +4,11 @@ import { z } from "zod";
 import type { Storage } from "./storage.js";
 
 /**
- * The MCP contract is deliberately tiny: agents read the reviewer's notes, reply,
- * and say when they have acted on one. Nothing here reads diffs, lists files, touches
+ * The MCP contract is deliberately tiny: agents read the reviewer's notes and say when
+ * they have acted on one. Nothing here reads diffs, lists files, touches
  * checkoffs, or resolves a note — resolution is the reviewer's act alone, made in
  * the app by re-checking the file. Agents already have git and gh for code; this carries
- * only the conversation.
+ * only the reviewer's notes and their durable completion state.
  */
 export function buildMcpServer(storage: Storage, version: string): McpServer {
   const server = new McpServer({ name: "gander", version });
@@ -62,12 +62,6 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
           line: q.line,
           text: q.text,
           state: q.state,
-          replies: q.replies.map((reply) => ({
-            id: reply.id,
-            author: reply.author,
-            text: reply.text,
-            createdAt: reply.createdAt,
-          })),
           ...(q.state === "open" ? {} : { commitRef: q.commitRef, summary: q.summary }),
           capturedAtSha: q.headSha,
           // The branch may have moved since the reviewer read it, in which case the line
@@ -127,30 +121,6 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         : "";
 
       return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) + hint }] };
-    },
-  );
-
-  server.registerTool(
-    "reply_to_note",
-    {
-      title: "Reply to a review note",
-      description:
-        "Add an agent reply to a review note. Use this for clarification, reasoning, or a response that should remain with the review. " +
-        "Replying does not address or resolve the note and does not change its lifecycle state.",
-      inputSchema: {
-        id: z.number().int().positive().describe("Note id from get_review_notes."),
-        text: z.string().trim().min(1).describe("The reply to add to the note thread."),
-      },
-    },
-    async ({ id, text }) => {
-      const added = storage.addAgentReply(id, { text });
-      if (added === null) {
-        return {
-          content: [{ type: "text", text: `Note ${id} does not exist.` }],
-          isError: true,
-        };
-      }
-      return { content: [{ type: "text", text: `Reply added to note ${id}. Its state was not changed.` }] };
     },
   );
 

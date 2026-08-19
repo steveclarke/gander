@@ -52,7 +52,6 @@ export interface Store {
   reviewedSnapshot(path: string): Promise<string | null>;
   imagePreview(path: string): Promise<ImagePreview | null>;
   addNote(text: string, path: string | null, line: number | null): Promise<void>;
-  addReviewerReply(id: number, text: string): Promise<void>;
   deleteNote(id: number): Promise<void>;
   select(path: string): void;
   files(): ChangedFile[];
@@ -294,12 +293,6 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         const { repoId, prNumber } = requireOpenPr();
         store.view = await api.deleteNote(repoId, prNumber, id);
-      });
-    },
-    async addReviewerReply(id: number, text: string) {
-      await guard(async () => {
-        const { repoId, prNumber } = requireOpenPr();
-        store.view = await api.addReviewerReply(repoId, prNumber, id, text);
       });
     },
     select(path: string) {

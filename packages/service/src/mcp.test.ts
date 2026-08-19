@@ -49,10 +49,10 @@ afterEach(async () => {
 });
 
 describe("MCP endpoint", () => {
-  it("offers the three note conversation tools", async () => {
+  it("offers only the note pickup and completion tools", async () => {
     const client = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["get_review_notes", "mark_note_addressed", "reply_to_note"]);
+    expect(names).toEqual(["get_review_notes", "mark_note_addressed"]);
     await client.close();
   });
 
@@ -72,39 +72,8 @@ describe("MCP endpoint", () => {
     expect(payload.title).toBe("Feature");
     expect(payload.notes).toEqual([{
       id: expect.any(Number), file: "a.rb", line: 12, text: "Why the retry here?", state: "open",
-      replies: [], capturedAtSha: null, lineMayHaveMoved: false,
+      capturedAtSha: null, lineMayHaveMoved: false,
     }]);
-    await client.close();
-  });
-
-  it("lets an agent reply and returns the thread without changing note state", async () => {
-    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
-
-    const client = await connect();
-    const replied = await client.callTool({
-      name: "reply_to_note",
-      arguments: { id: q.id, text: "This belongs in the model because both callers need it." },
-    });
-    expect(textOf(replied as { content?: unknown })).toContain("state was not changed");
-
-    const payload = JSON.parse(textOf((await client.callTool({
-      name: "get_review_notes",
-      arguments: { repo: "acme/atlas", branch: "feat/thing" },
-    })) as { content?: unknown })) as { notes: Array<{ state: string; replies: Array<{ author: string; text: string }> }> };
-    expect(payload.notes[0]).toMatchObject({
-      state: "open",
-      replies: [{ author: "agent", text: "This belongs in the model because both callers need it." }],
-    });
-    expect(storage.listNotes("acme/atlas", 7)[0]?.state).toBe("open");
-    await client.close();
-  });
-
-  it("reports an unknown note when an agent tries to reply", async () => {
-    const client = await connect();
-    const result = await client.callTool({ name: "reply_to_note", arguments: { id: 999, text: "Anyone there?" } });
-    expect(result.isError).toBe(true);
-    expect(textOf(result as { content?: unknown })).toContain("does not exist");
     await client.close();
   });
 
@@ -161,7 +130,7 @@ describe("MCP endpoint", () => {
     })) as { content?: unknown })) as { notes: Array<Record<string, unknown>> };
     expect(withResolved.notes).toEqual([{
       id: resolved.id, file: "a.rb", line: null, text: "handled", state: "resolved",
-      replies: [], commitRef: "abc1234", summary: "Dropped the retry", capturedAtSha: null, lineMayHaveMoved: false,
+      commitRef: "abc1234", summary: "Dropped the retry", capturedAtSha: null, lineMayHaveMoved: false,
     }]);
     await client.close();
   });
