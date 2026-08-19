@@ -33,6 +33,26 @@ describe("storage", () => {
     expect(storage.getSnapshot("acme/atlas", 7, "app/a.rb")).toEqual({ baseContent: "old body", headContent: "new body" });
   });
 
+  it("lists repository review state in one query without including untouched reviews", () => {
+    storage.getReview("acme/atlas", 6);
+    storage.putFileState("acme/atlas", 7, {
+      checked: true, path: "app/a.rb",
+      baseHash: "b1", headHash: "h1",
+      baseContent: "old", headContent: "new", machine: "studio",
+    });
+    storage.putFileState("acme/other", 8, {
+      checked: true, path: "other.rb",
+      baseHash: "b2", headHash: "h2",
+      baseContent: "old", headContent: "new", machine: "studio",
+    });
+
+    expect(storage.listReviews("acme/atlas")).toEqual([{
+      repoId: "acme/atlas",
+      prNumber: 7,
+      files: [expect.objectContaining({ path: "app/a.rb", checked: true, headHash: "h1" })],
+    }]);
+  });
+
   it("un-check retains the snapshot (delta base for M2)", () => {
     storage.putFileState("acme/atlas", 7, {
       checked: true, path: "app/a.rb",

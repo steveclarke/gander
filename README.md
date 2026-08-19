@@ -4,6 +4,26 @@
 
 <p align="center">A desktop app for reviewing code diffs, branches, and pull requests.</p>
 
+## Install
+
+Packaged releases are available from [GitHub Releases](https://github.com/steveclarke/gander/releases):
+
+- On Apple silicon macOS, open the versioned `.dmg` and drag Gander to Applications.
+- On Linux, download the versioned `.AppImage`, make it executable, and run it.
+
+The macOS Homebrew cask is prepared but its separate personal tap has not been
+published yet. Once that manual tap setup is complete, the install command will be:
+
+```
+brew install --cask steveclarke/gander/gander
+```
+
+Packaged macOS and AppImage builds check GitHub Releases once at launch. An
+update downloads in the background, then Gander asks before restarting and
+installing it. Choosing **Later** does not install the update when Gander quits.
+Use **Gander → Check for Updates…** on macOS or **Help → Check for Updates…** on
+Linux to check immediately. Development builds never contact the update feed.
+
 ## Getting started
 
 ```

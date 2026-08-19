@@ -83,3 +83,37 @@ builds and notarizes the macOS artifacts on the maintainer's machine, and
 uploads them. The Linux AppImage is built by GitHub Actions when the release is
 published. macOS signing stays local because the certificate belongs in a
 keychain rather than in a public repository's secrets.
+
+The packaged app uses the `latest-mac.yml` and `latest-linux.yml` files from the
+release. It checks once after opening its first window and also offers a manual
+check in the native application menu. Updates download automatically, but
+`autoInstallOnAppQuit` is disabled: the reviewer must choose **Restart and
+Install** after the download completes. Development builds and unsigned
+directory builds, which have no generated `app-update.yml`, do not initialize
+the updater; Linux additionally requires the `APPIMAGE` runtime path.
+
+The first real update between two signed releases still needs manual acceptance
+on both platforms. On macOS, verify that the old and new builds use the same
+Developer ID identity and that the downloaded update installs after consent. On
+Linux, launch the old AppImage as an AppImage (so `APPIMAGE` is present), accept
+the update, and verify the file and running version changed. A local unsigned
+build or a successful unit test is not evidence for either cross-version path.
+
+### Homebrew cask handoff
+
+`bin/release` renders `packages/app/dist/gander.rb` from the versioned macOS DMG,
+pins its SHA-256, and uploads it as a release asset. The cask deliberately uses
+the DMG for installation; the ZIP remains the macOS updater artifact.
+
+The personal tap is a separate public repository and is not managed here. After
+the release and its install/update path have been verified manually:
+
+1. Copy the release's `gander.rb` into `Casks/gander.rb` in the tap.
+2. Run `brew style --cask Casks/gander.rb` and
+   `brew audit --cask --strict Casks/gander.rb` there.
+3. Install the fully qualified cask from the tap and launch it before publishing
+   the tap change.
+
+Do not copy signing identities, notarization credentials, tokens, or keychain
+profile names into either repository. The generated cask contains only the
+public release URL and checksum.

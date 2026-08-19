@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="${1:?Usage: bin/render-homebrew-cask VERSION DMG OUTPUT}"
+DMG="${2:?Usage: bin/render-homebrew-cask VERSION DMG OUTPUT}"
+OUTPUT="${3:?Usage: bin/render-homebrew-cask VERSION DMG OUTPUT}"
+
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+  echo "Invalid release version: $VERSION" >&2
+  exit 1
+fi
+if [[ ! -f "$DMG" ]]; then
+  echo "DMG does not exist: $DMG" >&2
+  exit 1
+fi
+
+EXPECTED="Gander-${VERSION}-arm64.dmg"
+if [[ "$(basename "$DMG")" != "$EXPECTED" ]]; then
+  echo "Expected the release DMG to be named $EXPECTED" >&2
+  exit 1
+fi
+
+SHA256="$(shasum --algorithm 256 "$DMG" | awk '{print $1}')"
+mkdir -p "$(dirname "$OUTPUT")"
+
+sed \
+  -e "s/__VERSION__/${VERSION}/g" \
+  -e "s/__SHA256__/${SHA256}/g" \
+  "$(dirname "$0")/../packaging/homebrew/gander.rb.template" > "$OUTPUT"
+
+echo "Rendered $OUTPUT"

@@ -53,6 +53,8 @@ CREATE INDEX IF NOT EXISTS question_replies_by_question ON question_replies(ques
 
 export interface Storage {
   getReview(repoId: string, prNumber: number): ReviewState;
+  /** Reviews with file state, fetched together for repository-level progress summaries. */
+  listReviews(repoId: string): ReviewState[];
   putFileState(repoId: string, prNumber: number, input: PutFileState): FileCheckoff;
   getSnapshot(repoId: string, prNumber: number, path: string): { baseContent: string | null; headContent: string | null } | null;
   /** Records what the app knows about a pull request, so agents can be told which one they are on. */
@@ -126,6 +128,23 @@ export function openStorage(dbPath: string): Storage {
       const rid = reviewId(repoId, prNumber);
       const rows = db.prepare("SELECT path, checked, base_hash, head_hash, checked_at, machine FROM file_states WHERE review_id = ? ORDER BY path").all(rid) as Parameters<typeof rowToCheckoff>[0][];
       return { repoId, prNumber, files: rows.map(rowToCheckoff) };
+    },
+
+    listReviews(repoId) {
+      const rows = db.prepare(`
+        SELECT r.pr_number, fs.path, fs.checked, fs.base_hash, fs.head_hash, fs.checked_at, fs.machine
+        FROM reviews r
+        JOIN file_states fs ON fs.review_id = r.id
+        WHERE r.repo_id = ?
+        ORDER BY r.pr_number, fs.path
+      `).all(repoId) as Array<Parameters<typeof rowToCheckoff>[0] & { pr_number: number }>;
+      const reviews = new Map<number, FileCheckoff[]>();
+      for (const row of rows) {
+        const files = reviews.get(row.pr_number) ?? [];
+        files.push(rowToCheckoff(row));
+        reviews.set(row.pr_number, files);
+      }
+      return [...reviews].map(([prNumber, files]) => ({ repoId, prNumber, files }));
     },
 
     putFileState(repoId, prNumber, input) {

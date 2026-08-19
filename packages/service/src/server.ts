@@ -44,6 +44,11 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
     },
   );
 
+  app.get<{ Params: { repoId: string } }>(
+    "/api/reviews/:repoId",
+    async (req) => opts.storage.listReviews(req.params.repoId),
+  );
+
   app.put<{ Params: { repoId: string; prNumber: string } }>(
     "/api/reviews/:repoId/:prNumber/files",
     async (req, reply) => {

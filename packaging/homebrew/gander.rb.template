@@ -1,0 +1,14 @@
+cask "gander" do
+  version "__VERSION__"
+  sha256 "__SHA256__"
+
+  url "https://github.com/steveclarke/gander/releases/download/v#{version}/Gander-#{version}-arm64.dmg"
+  name "Gander"
+  desc "Review code diffs, branches, and pull requests"
+  homepage "https://github.com/steveclarke/gander"
+
+  auto_updates true
+  depends_on arch: :arm64
+
+  app "Gander.app"
+end
