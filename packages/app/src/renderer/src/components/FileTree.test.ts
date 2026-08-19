@@ -192,6 +192,58 @@ describe("FileTree", () => {
     expect(wrapper.findAll(".tnode.isdir .chev")).toHaveLength(3);
   });
 
+  it("counts unresolved questions on a file and leaves resolved ones out", () => {
+    const target = file("app/models/member.rb");
+    const other = file("app/models/local.rb");
+    const question = (id: number, path: string, state: "open" | "addressed" | "resolved") => ({
+      id,
+      path,
+      line: id,
+      text: `Question ${id}`,
+      state,
+      headSha: "b",
+      commitRef: null,
+      note: null,
+      createdAt: "2026-08-18T00:00:00.000Z",
+      replies: [],
+    });
+    const { store } = fakeStore(prView(1, [target, other], [
+      question(1, target.path, "open"),
+      question(2, target.path, "addressed"),
+      question(3, target.path, "resolved"),
+      question(4, other.path, "resolved"),
+    ]));
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
+
+    const marker = fileRow(wrapper, target.path).find(".qmark");
+    expect(marker.find(".qcount").text()).toBe("2");
+    expect(marker.attributes("title")).toBe("2 unresolved questions on this file");
+    // Its only question is resolved, so the file carries no marker at all.
+    expect(fileRow(wrapper, other.path).find(".qmark").exists()).toBe(false);
+  });
+
+  it("shows the marker without a number when a file has a single question", () => {
+    const target = file("app/models/member.rb");
+    const { store } = fakeStore(prView(1, [target], [{
+      id: 1,
+      path: target.path,
+      line: 1,
+      text: "Check this line",
+      state: "open" as const,
+      headSha: "b",
+      commitRef: null,
+      note: null,
+      createdAt: "2026-08-18T00:00:00.000Z",
+      replies: [],
+    }]));
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
+
+    const marker = fileRow(wrapper, target.path).find(".qmark");
+    expect(marker.exists()).toBe(true);
+    expect(marker.find(".qcount").exists()).toBe(false);
+    expect(marker.attributes("title")).toBe("1 unresolved question on this file");
+  });
+
   it("applies effective typography once at the root so every nested row inherits it", () => {
     const { store } = fakeStore(prView(1, treeFiles));
     const wrapper = mount(FileTree, {
