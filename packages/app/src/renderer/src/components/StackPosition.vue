@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Layers3 } from "lucide-vue-next";
+import { Layers3 } from "@lucide/vue";
 
 const props = defineProps<{ position: number; size: number }>();
 </script>

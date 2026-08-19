@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import { PanelLeft } from "lucide-vue-next";
+import { PanelLeft } from "@lucide/vue";
 import type { Store } from "../store.js";
 import ZoomControl from "./ZoomControl.vue";
 

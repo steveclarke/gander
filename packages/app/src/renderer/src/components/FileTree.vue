@@ -11,7 +11,7 @@ import {
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import type { EffectiveTreeTypography } from "../../../settings.js";
 import { languageForPath } from "../languages.js";
-import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
+import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "@lucide/vue";
 import FileIcon from "./FileIcon.vue";
 import type { ChangedFile, PrFile } from "@gander/shared";
 import type { JumpTarget } from "../tree-jump.js";

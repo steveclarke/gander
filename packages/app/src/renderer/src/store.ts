@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { isUnreachableReason } from "@gander/shared";
 import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 import type { ImagePreview } from "../../api.js";
@@ -124,7 +125,7 @@ export function createStore(api: GanderApi): Store {
       // a different sentence with their no-retry consequence and deliberately stay visible.
       if ((store.serviceStatus.state === "connected" || store.serviceStatus.state === "newer")
         && ((previous.state === "unreachable" && store.error === previous.reason)
-          || (/^Could not reach https?:\/\/\S+: [^\n]+$/.test(store.error ?? "")
+          || (isUnreachableReason(store.error ?? "")
             && !store.error?.includes("This change was not saved and will not be retried.")))) {
         store.error = null;
       }

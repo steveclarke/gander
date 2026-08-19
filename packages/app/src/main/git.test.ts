@@ -26,8 +26,8 @@ describe("git engine", () => {
 
     const files = await engine.diffFiles(clone, mb, head);
     expect(files).toEqual([
-      { path: "a.rb", status: "M" },
-      { path: "b.rb", status: "A" },
+      { path: "a.rb", status: "M", basePath: "a.rb" },
+      { path: "b.rb", status: "A", basePath: "b.rb" },
     ]);
   });
 
@@ -158,8 +158,62 @@ describe("git engine", () => {
     const base = await engine.resolveRef(clone, "refs/gander/base/main");
     const head = await engine.resolveRef(clone, "refs/gander/pr/1");
     const files = await engine.diffFiles(clone, base, head);
-    expect(files).toContainEqual({ path: "renamed.txt", status: "R" });
+    expect(files).toContainEqual({ path: "renamed.txt", status: "R", basePath: "unchanged.txt" });
     expect(files.some((f) => f.path === "unchanged.txt")).toBe(false);
+  });
+
+  it("diffFiles keeps the merge-base path of a rename that also changed content", async () => {
+    // The reviewable file is the new path, but its base side only exists under the old
+    // one. Losing basePath here is what made a renamed file read as wholly added.
+    // The file is long enough that a one-line edit stays above git's -M similarity
+    // threshold, so this is a real R and not a delete/add pair.
+    const original = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n";
+    const renamed = await makeFixtureRepo({}, { "long.txt": original });
+    try {
+      await renamed.git(["checkout", "feature"]);
+      await renamed.git(["mv", "long.txt", "moved.txt"]);
+      writeFileSync(join(renamed.dir, "moved.txt"), original.replace("three\n", "THREE\n"));
+      await renamed.git(["add", "-A"]);
+      await renamed.git(["commit", "-m", "rename and edit"]);
+      await renamed.git(["update-ref", "refs/pull/1/head", await renamed.git(["rev-parse", "HEAD"])]);
+      await renamed.git(["checkout", "main"]);
+
+      const clone = await engine.ensureClone("acme/moved", renamed.dir);
+      await engine.fetchPr(clone, 1, "main");
+      const base = await engine.resolveRef(clone, "refs/gander/base/main");
+      const head = await engine.resolveRef(clone, "refs/gander/pr/1");
+      const files = await engine.diffFiles(clone, base, head);
+
+      const moved = files.find((f) => f.path === "moved.txt");
+      expect(moved).toEqual({ path: "moved.txt", status: "R", basePath: "long.txt" });
+      // The base side has to be readable at the old path, or the diff shows a whole new file.
+      expect((await engine.showFile(clone, base, moved!.basePath)).content).toBe(original);
+    } finally {
+      rmSync(renamed.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("diffFiles returns paths git would otherwise quote and escape", async () => {
+    // Without -z, git applies core.quotePath: a non-ASCII name comes back as
+    // "src/caf\303\251.ts" — quotes and octal escapes included — and no longer
+    // names a blob that showFile can resolve.
+    await fixture.git(["checkout", "feature"]);
+    mkdirSync(join(fixture.dir, "src"), { recursive: true });
+    writeFileSync(join(fixture.dir, "src/café.ts"), "export const x = 1;\n");
+    writeFileSync(join(fixture.dir, "src/with space.ts"), "export const y = 2;\n");
+    await fixture.git(["add", "-A"]);
+    await fixture.git(["commit", "-m", "unicode and spaces"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    const clone = await engine.ensureClone("acme/atlas", fixture.dir);
+    await engine.fetchPr(clone, 1, "main");
+    const base = await engine.resolveRef(clone, "refs/gander/base/main");
+    const head = await engine.resolveRef(clone, "refs/gander/pr/1");
+    const files = await engine.diffFiles(clone, base, head);
+
+    expect(files.map((f) => f.path)).toEqual(expect.arrayContaining(["src/café.ts", "src/with space.ts"]));
+    expect((await engine.showFile(clone, head, "src/café.ts")).content).toBe("export const x = 1;\n");
   });
 
   it("discovers real linked worktrees and derives local changes from merge-base through the working tree", async () => {

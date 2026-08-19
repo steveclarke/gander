@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from "vue";
 import { api, type ConnectionCheck, type GithubTokenCheck } from "../api.js";
-import { Loader2 } from "lucide-vue-next";
+import { Loader2 } from "@lucide/vue";
 
 // A saved connection changes what the rest of the window can do, and the status bar's own
 // poll is half a minute away — too long to leave "Service unreachable" on screen under a

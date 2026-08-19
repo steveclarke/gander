@@ -49,13 +49,16 @@ export interface ShowFileResult {
   binary: boolean;
 }
 
+export interface DiffPath { path: string; status: FileStatus; basePath: string; }
+
 export interface GitEngine {
   ensureClone(repoId: string, url: string): Promise<string>;
   fetchPr(cloneDir: string, prNumber: number, baseRef: string): Promise<void>;
   /** Fetch several pull request heads and their base branches in one network operation. */
   fetchPrs(cloneDir: string, prs: Array<{ number: number; baseRef: string }>): Promise<void>;
   mergeBase(cloneDir: string, a: string, b: string): Promise<string>;
-  diffFiles(cloneDir: string, base: string, head: string): Promise<Array<{ path: string; status: FileStatus }>>;
+  /** `basePath` is the path at `base`, which differs from `path` only for a rename. */
+  diffFiles(cloneDir: string, base: string, head: string): Promise<DiffPath[]>;
   showFile(cloneDir: string, rev: string, path: string): Promise<ShowFileResult>;
   showImage(cloneDir: string, rev: string, path: string): Promise<ImageSide>;
   resolveRef(cloneDir: string, ref: string): Promise<string>;
@@ -69,7 +72,6 @@ export interface GitEngine {
   localImage(worktreeDir: string, mergeBaseSha: string, path: string, basePath?: string): Promise<{ base: ImageSide; head: ImageSide }>;
 }
 
-interface DiffPath { path: string; status: FileStatus; basePath: string; }
 
 async function gitPrefix(cloneDir: string, rev: string, path: string, length: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -315,15 +317,13 @@ export function createGitEngine(clonesRoot: string): GitEngine {
     },
 
     async diffFiles(cloneDir, base, head) {
-      // -M only (no -C), so git never emits a "C" (copy) status line here.
-      const out = await git(cloneDir, ["diff", "--name-status", "-M", base, head]);
-      return out.split("\n").filter(Boolean).map((line) => {
-        const parts = line.split("\t");
-        const status = parseFileStatus((parts[0] ?? "").charAt(0));
-        // Renames report old\tnew — the new path is the reviewable file.
-        const path = (status === "R" ? parts[2] : parts[1]) ?? "";
-        return { path, status };
-      });
+      // -M only (no -C), so git never emits a "C" (copy) status line here. -z is not
+      // optional: without it git applies core.quotePath, so a non-ASCII name arrives as
+      // "src/caf\303\251.ts" — quotes and octal escapes included — and a name containing
+      // a tab or newline splits into the wrong fields entirely. Either way the path no
+      // longer names a blob, and showFile's "does not exist in" branch swallows it as
+      // absent rather than raising. Same parse as localView, so both views agree.
+      return parseDiffPaths(await git(cloneDir, ["diff", "--name-status", "-z", "-M", base, head, "--"]));
     },
 
     async showFile(cloneDir, rev, path) {

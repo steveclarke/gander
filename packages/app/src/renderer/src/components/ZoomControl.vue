@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Minus, Plus, Settings2, ZoomIn } from "lucide-vue-next";
+import { Minus, Plus, Settings2, ZoomIn } from "@lucide/vue";
 import {
   DEFAULT_ZOOM_LEVEL,
   ZOOM_LEVEL_MAX,

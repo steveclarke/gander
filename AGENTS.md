@@ -173,6 +173,6 @@ reverting the fix.
   review machinery (comments, approvals, merge) — that's out of scope by design.
 - Errors surface: no silent degradation, no write queues, no swallowed git or
   GitHub error text.
-- Icons come from `lucide-vue-next`. Panel sizes and docking live in
+- Icons come from `@lucide/vue`. Panel sizes and docking live in
   localStorage (`renderer/src/layout.ts`); anything a second machine should see
   belongs in the service instead.

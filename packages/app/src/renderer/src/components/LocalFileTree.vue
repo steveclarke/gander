@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from "vue";
 import type { LocalFileEntry } from "@gander/shared";
-import { ChevronDown, ChevronRight, LoaderCircle } from "lucide-vue-next";
+import { ChevronDown, ChevronRight, LoaderCircle } from "@lucide/vue";
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import type { EffectiveTreeTypography } from "../../../settings.js";
 import type { Store } from "../store.js";

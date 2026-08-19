@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
-import { Braces, Palette, Plug, Settings2, SlidersHorizontal, Type, X } from "lucide-vue-next";
+import { Braces, Palette, Plug, Settings2, SlidersHorizontal, Type, X } from "@lucide/vue";
 import type { EditorSettingsStore } from "../editor-settings-store.js";
 import { settingsFromJson, settingsToJson, type AppSettings } from "../../../settings.js";
 import EditorSettings from "./EditorSettings.vue";

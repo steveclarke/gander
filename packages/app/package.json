@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@gander/shared": "workspace:*",
+    "@lucide/vue": "^1.33.0",
     "electron-updater": "^6.8.9",
-    "lucide-vue-next": "^1.0.0",
     "monaco-editor": "^0.52.0",
     "vue": "^3.5.0",
     "zod": "^4.4.3"
@@ -24,21 +24,14 @@
     "@types/node": "^22.0.0",
     "@vitejs/plugin-vue": "^5.2.0",
     "@vue/test-utils": "^2.4.11",
-    "@wdio/cli": "9.29.1",
-    "@wdio/electron-service": "10.2.0",
-    "@wdio/globals": "9.29.1",
-    "@wdio/local-runner": "9.29.1",
-    "@wdio/mocha-framework": "9.29.1",
-    "@wdio/spec-reporter": "9.29.1",
     "electron": "^33.0.0",
-    "electron-chromedriver": "33.4.11",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^3.0.0",
     "fastify": "^5.12.0",
     "tsx": "4.22.4",
     "typescript": "5.9.3",
     "vite": "^6.4.3",
-    "vue-tsc": "^3.3.10",
-    "electron-builder": "^26.15.3"
+    "vue-tsc": "^3.3.10"
   },
   "description": "Review code diffs, branches, and pull requests",
   "author": {

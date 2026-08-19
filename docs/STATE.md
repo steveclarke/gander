@@ -100,7 +100,8 @@ Interface work is tracked as GitHub issues.
 ## Testing
 
 `pnpm test` runs the unit suites against real git repositories and real service
-instances. `pnpm test:e2e` drives the built Electron window through WebDriverIO —
-select a locally registered repository, open a pull request, tick a file, restart,
-and confirm the tick survived, plus the clone race that reached a person before it
-reached a test.
+instances. There is no end-to-end suite: the previous one drove the built app as a
+single eleven-step session, so one broken step took the rest with it and every
+check cost a full rebuild. Issue #91 tracks a replacement that starts each check
+from a clean app. Until it lands, nothing exercises the packaged build, the preload
+bridge, or checkoff survival across a restart.
