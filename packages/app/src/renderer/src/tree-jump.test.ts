@@ -30,12 +30,13 @@ describe("tree jump", () => {
     expect(jumpTargets(files, "s").map((target) => target.path)).toEqual(["src"]);
   });
 
-  it("gives each remaining row a distinct one-key hint, except for a sole target", () => {
+  it("gives each remaining row a distinct one-key hint that cannot continue the search", () => {
     const files = [file("src/FileTree.vue"), file("src/formatter.ts"), file("docs/fixture.ts")];
     const many = jumpTargets(files, "f");
 
-    expect(many.map((target) => target.label)).toEqual(["A", "S", "D"]);
+    expect(many.every((target) => target.label?.match(/^[a-z0-9]$/))).toBe(true);
     expect(new Set(many.map((target) => target.label)).size).toBe(many.length);
+    for (const target of many) expect(jumpTargets(files, `f${target.label}`)).toEqual([]);
     expect(jumpTargets(files, "formatter")).toMatchObject([{ path: "src/formatter.ts", label: null }]);
   });
 
@@ -57,7 +58,7 @@ describe("tree jump", () => {
 
     jump.start();
     const target = [...jump.targetsByPath.value.values()][1]!;
-    expect(jump.handleKey(press(target.label!, { shiftKey: true }))).toBe(true);
+    expect(jump.handleKey(press(target.label!))).toBe(true);
     expect(moved).toEqual([target.path]);
 
     jump.start();

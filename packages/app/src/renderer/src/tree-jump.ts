@@ -2,9 +2,10 @@ import { computed, shallowRef, type ComputedRef } from "vue";
 import type { ChangedFile } from "@gander/shared";
 import { pathOf, rows } from "./tree-nav.js";
 
-// Uppercase hints leave every unmodified character available for narrowing. The home row
-// comes first because most jumps end before the less comfortable keys are assigned.
-const TARGET_LABELS = [..."ASDFGHJKLQWERTYUIOPZXCVBNM"];
+// Flash's crucial trick: labels come from ordinary keys that cannot extend the current
+// search on any target. A key can therefore mean "keep typing" or "jump" without a mode
+// switch, modifier, or completion key. Digits cover small trees whose names use most letters.
+const TARGET_LABELS = [..."asdfghjklqwertyuiopzxcvbnm1234567890"];
 
 export interface JumpTarget {
   path: string;
@@ -44,9 +45,14 @@ export function jumpTargets(files: ChangedFile[], query: string): JumpTarget[] {
     return matchIndices === null ? [] : [{ path, name, matchIndices }];
   });
   const sole = matches.length === 1;
+  const continuations = new Set(matches.flatMap((match) => {
+    const afterMatch = (match.matchIndices.at(-1) ?? -1) + 1;
+    return [...match.name].slice(afterMatch).map((character) => character.toLocaleLowerCase());
+  }));
+  const labels = TARGET_LABELS.filter((label) => !continuations.has(label));
   return matches.map((match, index) => ({
     ...match,
-    label: sole ? null : TARGET_LABELS[index] ?? null,
+    label: sole ? null : labels[index] ?? null,
   }));
 }
 

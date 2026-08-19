@@ -178,9 +178,9 @@ describe("FileTree", () => {
     const member = fileRow(wrapper, "app/models/member.rb");
     expect(member.find(".fname").text()).toBe("member.rb");
     expect(member.find("mark").text()).toBe("r");
-    expect(member.find(".jump-label").text()).toMatch(/^[A-Z]$/);
+    expect(member.find(".jump-label").text()).toMatch(/^[a-z0-9]$/);
     expect(member.find(".jump-label").attributes("aria-hidden")).toBe("true");
-    expect(member.attributes("aria-keyshortcuts")).toBe(`Shift+${member.find(".jump-label").text()}`);
+    expect(member.attributes("aria-keyshortcuts")).toBe(member.find(".jump-label").text());
   });
 
   it("keeps file and directory hierarchy columns aligned at every depth", () => {

@@ -107,7 +107,7 @@ function nameParts(path: string, name: string): { text: string; matched: boolean
 
 function jumpShortcut(path: string): string | undefined {
   const label = props.jumpTargets?.get(path)?.label;
-  return label === null || label === undefined ? undefined : `Shift+${label}`;
+  return label ?? undefined;
 }
 </script>
 
