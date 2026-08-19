@@ -141,30 +141,21 @@ function render(): void {
   if (!file || isBinary.value) return; // no `host` element in the DOM for a binary file — see template
   if (!host.value) return;
   const lang = languageForPath(file.path);
-  if (view.value === "diff") {
-    const original = monaco.editor.createModel(file.baseContent ?? "", lang);
-    const modified = monaco.editor.createModel(file.headContent ?? "", lang);
-    models = [original, modified];
-    const diff = monaco.editor.createDiffEditor(host.value, diffEditorOptions(props.editorSettings));
-    diff.setModel({ original, modified });
-    editor = diff;
-    trackCursor();
-  } else if (view.value === "since") {
-    // What has landed since the reviewer last signed this file off: their stored
-    // snapshot on the left, the current head on the right.
-    const original = monaco.editor.createModel(snapshot.value ?? "", lang);
-    const modified = monaco.editor.createModel(file.headContent ?? "", lang);
-    models = [original, modified];
-    const diff = monaco.editor.createDiffEditor(host.value, diffEditorOptions(props.editorSettings));
-    diff.setModel({ original, modified });
-    editor = diff;
-    trackCursor();
-  } else {
+  if (view.value === "full") {
     const model = monaco.editor.createModel(file.headContent ?? "", lang);
     models = [model];
     editor = monaco.editor.create(host.value, { model, ...codeEditorOptions(props.editorSettings) });
-    trackCursor();
+  } else {
+    // The delta tab shows what has landed since the reviewer last signed this file off:
+    // their stored snapshot on the left rather than the base revision, current head on the right.
+    const original = monaco.editor.createModel((view.value === "since" ? snapshot.value : file.baseContent) ?? "", lang);
+    const modified = monaco.editor.createModel(file.headContent ?? "", lang);
+    models = [original, modified];
+    const diff = monaco.editor.createDiffEditor(host.value, diffEditorOptions(props.editorSettings));
+    diff.setModel({ original, modified });
+    editor = diff;
   }
+  trackCursor();
   reveal();
 }
 

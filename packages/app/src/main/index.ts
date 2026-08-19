@@ -31,6 +31,21 @@ function closeLocalView(senderId: number): void {
   localViews.delete(senderId);
 }
 
+/** Invalidates any open still in flight for this window, so a superseded one discards its result. */
+function nextLocalOpenGeneration(senderId: number): number {
+  const generation = (localOpenGenerations.get(senderId) ?? 0) + 1;
+  localOpenGenerations.set(senderId, generation);
+  return generation;
+}
+
+// The renderer names the worktree on every read; only the one this window actually has
+// open may be read through, whatever path arrives over IPC.
+function requireOpenWorktree(senderId: number, path: string): void {
+  if (localViews.get(senderId)?.worktree.path !== path) {
+    throw new Error(`${path} is not the open local worktree`);
+  }
+}
+
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
   const git = createGitEngine(join(app.getPath("userData"), "clones"));
@@ -41,15 +56,15 @@ async function bootstrap(): Promise<GanderConfig> {
   // Finder gets a minimal PATH with no `gh` on it, which must leave the window open and
   // the settings reachable rather than killing the launch.
   const githubToken = async (): Promise<string> => resolveGithubToken(cfg.githubToken);
-  const urlFor = (repoId: string): string => {
+  const requireRepo = (repoId: string): RepoEntry => {
     const entry = cfg.repos.find((r) => r.repoId === repoId);
     if (!entry) throw new Error(`Repo ${repoId} is not registered`);
-    return entry.url;
+    return entry;
   };
   const reviewer = createReviewer({
     git, service,
     listPrs: async (repoId) => listOpenPrs(repoId, await githubToken()),
-    repoUrl: urlFor,
+    repoUrl: (repoId) => requireRepo(repoId).url,
     machine: hostname(),
   });
 
@@ -80,17 +95,12 @@ async function bootstrap(): Promise<GanderConfig> {
     saveConfig(cfg);
   });
   ipcMain.handle("gander:listWorktrees", async (_event, repoId: string) => {
-    const repo = cfg.repos.find((entry) => entry.repoId === repoId);
-    if (!repo) throw new Error(`Repo ${repoId} is not registered`);
-    return git.listWorktrees(repo.localPath);
+    return git.listWorktrees(requireRepo(repoId).localPath);
   });
   ipcMain.handle("gander:openLocal", async (event, repoId: string, path: string) => {
     const senderId = event.sender.id;
-    const generation = (localOpenGenerations.get(senderId) ?? 0) + 1;
-    localOpenGenerations.set(senderId, generation);
-    const repo = cfg.repos.find((entry) => entry.repoId === repoId);
-    if (!repo) throw new Error(`Repo ${repoId} is not registered`);
-    const worktrees = await git.listWorktrees(repo.localPath);
+    const generation = nextLocalOpenGeneration(senderId);
+    const worktrees = await git.listWorktrees(requireRepo(repoId).localPath);
     const selected = worktrees.find((worktree) => worktree.path === path);
     if (!selected) throw new Error(`${path} is not a worktree of ${repoId}`);
     const view = await git.localView(selected.path);
@@ -113,23 +123,17 @@ async function bootstrap(): Promise<GanderConfig> {
     return view;
   });
   ipcMain.handle("gander:refreshLocal", async (event, path: string) => {
-    if (localViews.get(event.sender.id)?.worktree.path !== path) {
-      throw new Error(`${path} is not the open local worktree`);
-    }
+    requireOpenWorktree(event.sender.id, path);
     const view = await git.localView(path);
     localViews.set(event.sender.id, view);
     return view;
   });
   ipcMain.handle("gander:listLocalFiles", async (event, path: string, directory = "") => {
-    if (localViews.get(event.sender.id)?.worktree.path !== path) {
-      throw new Error(`${path} is not the open local worktree`);
-    }
+    requireOpenWorktree(event.sender.id, path);
     return git.listLocalFiles(path, directory);
   });
   ipcMain.handle("gander:localFile", async (event, path: string, filePath: string) => {
-    if (localViews.get(event.sender.id)?.worktree.path !== path) {
-      throw new Error(`${path} is not the open local worktree`);
-    }
+    requireOpenWorktree(event.sender.id, path);
     return git.localFile(path, filePath);
   });
   ipcMain.handle("gander:localImagePreview", async (event, path: string) => {
@@ -140,7 +144,7 @@ async function bootstrap(): Promise<GanderConfig> {
     return git.localImage(view.worktree.path, view.mergeBaseSha, path, file.basePath);
   });
   ipcMain.handle("gander:closeLocal", async (event) => {
-    localOpenGenerations.set(event.sender.id, (localOpenGenerations.get(event.sender.id) ?? 0) + 1);
+    nextLocalOpenGeneration(event.sender.id);
     closeLocalView(event.sender.id);
   });
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => reviewer.listPrsWithProgress(repoId));
@@ -149,8 +153,7 @@ async function bootstrap(): Promise<GanderConfig> {
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
     const senderId = event.sender.id;
-    const generation = (localOpenGenerations.get(senderId) ?? 0) + 1;
-    localOpenGenerations.set(senderId, generation);
+    const generation = nextLocalOpenGeneration(senderId);
     const view = await reviewer.openPr(repoId, n);
     if (localOpenGenerations.get(senderId) !== generation) return view;
     // Preserve the live local view when opening the PR fails. The renderer keeps showing

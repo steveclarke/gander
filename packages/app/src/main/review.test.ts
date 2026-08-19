@@ -132,7 +132,7 @@ describe("review pipeline", () => {
   });
 
   it("setChecked throws if the PR was never opened", async () => {
-    await expect(reviewer.setChecked("acme/atlas", 1, "a.rb", true)).rejects.toThrow(/opened before/i);
+    await expect(reviewer.setChecked("acme/atlas", 1, "a.rb", true)).rejects.toThrow(/must be opened/i);
   });
 
   it("content change after checkoff un-checks with changedSince — and identical content survives history rewrites", async () => {

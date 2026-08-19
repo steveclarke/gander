@@ -118,17 +118,8 @@ async function changeZoom(level: number): Promise<void> {
   zoomLevel.value = await api.setZoomLevel(level);
 }
 
-async function openFolder(): Promise<void> {
-  if (!await store.chooseLocalRepo()) return;
-  const contextError = store.error;
-  if (!store.targetWorktreePath) {
-    activeMode.value = "explorer";
-    return;
-  }
-  await openLocalTarget(store.targetWorktreePath, "explorer", contextError);
-}
-
-async function locateRepo(repoId: string): Promise<void> {
+/** Register a repository from a folder on disk, and open its checkout. `repoId` names the one the reviewer is being asked to locate. */
+async function chooseRepo(repoId?: string): Promise<void> {
   if (!await store.chooseLocalRepo(repoId)) return;
   const contextError = store.error;
   if (!store.targetWorktreePath) {
@@ -305,8 +296,8 @@ onBeforeUnmount(() => {
         :integrated-title-bar="integratedTitleBar"
         @select-repo="selectTargetRepo"
         @select-worktree="selectTargetWorktree"
-        @open-folder="openFolder"
-        @locate-repo="locateRepo"
+        @open-folder="chooseRepo()"
+        @locate-repo="chooseRepo($event)"
         @remove-repo="repoPendingRemoval = $event"
       />
       <div v-if="store.error" class="error-banner">
@@ -369,13 +360,13 @@ onBeforeUnmount(() => {
             <div v-else-if="!store.targetRepoId" class="welcome">
               <h1>Open a repository from disk</h1>
               <p>Gander will discover its linked worktrees and pull requests from one local checkout.</p>
-              <button type="button" @click="openFolder">Open repository folder…</button>
+              <button type="button" @click="chooseRepo()">Open repository folder…</button>
               <button v-if="unconfigured" class="text-action" type="button" @click="openSettings('connection')">Connect a review service for pull requests</button>
             </div>
             <div v-else-if="!store.targetWorktreePath" class="empty-state">
               <h1>Checkout unavailable</h1>
               <p>Gander cannot read the registered checkout for this repository.</p>
-              <button type="button" @click="store.targetRepoId && locateRepo(store.targetRepoId)">Locate checkout…</button>
+              <button type="button" @click="store.targetRepoId && chooseRepo(store.targetRepoId)">Locate checkout…</button>
             </div>
             <div v-else-if="!store.localView" class="empty">Select the target again to load this worktree.</div>
             <FullFilePane v-else-if="surfaceMode === 'explorer'" :file="store.localFile" :editor-settings="editorSettings.settings.editor" class="diff" />
@@ -399,7 +390,7 @@ onBeforeUnmount(() => {
             <div v-else-if="!store.targetRepoId" class="welcome">
               <h1>Open a repository from disk</h1>
               <p>Pull requests belong to the repository you choose as your target.</p>
-              <button type="button" @click="openFolder">Open repository folder…</button>
+              <button type="button" @click="chooseRepo()">Open repository folder…</button>
             </div>
             <div v-else-if="!store.view || store.currentRepoId !== store.targetRepoId" class="empty-state">
               <h1>Select a pull request</h1>

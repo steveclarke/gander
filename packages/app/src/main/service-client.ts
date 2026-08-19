@@ -152,9 +152,10 @@ export function createServiceClient(connection: Connection): ServiceClient {
     return parsed.data;
   }
   const enc = encodeURIComponent;
+  const reviewPath = (repoId: string, prNumber: number): string => `/api/reviews/${enc(repoId)}/${prNumber}`;
   return {
     getReview: async (repoId, prNumber) => {
-      const path = `/api/reviews/${enc(repoId)}/${prNumber}`;
+      const path = reviewPath(repoId, prNumber);
       const review = validate(ReviewStateSchema, path, await req("GET", path));
       reviewsReadSinceRecovery.add(reviewKey(repoId, prNumber));
       return review;
@@ -164,33 +165,33 @@ export function createServiceClient(connection: Connection): ServiceClient {
       return validate(ReviewStateSchema.array(), path, await req("GET", path));
     },
     putFileState: async (repoId, prNumber, input) => {
-      const path = `/api/reviews/${enc(repoId)}/${prNumber}/files`;
+      const path = `${reviewPath(repoId, prNumber)}/files`;
       return validate(FileCheckoffSchema, path, await req("PUT", path, input, { reviewKey: reviewKey(repoId, prNumber) }));
     },
     listQuestions: async (repoId, prNumber) => {
-      const path = `/api/reviews/${enc(repoId)}/${prNumber}/questions`;
+      const path = `${reviewPath(repoId, prNumber)}/questions`;
       return validate(QuestionSchema.array(), path, await req("GET", path));
     },
     addQuestion: async (repoId, prNumber, input) => {
-      const path = `/api/reviews/${enc(repoId)}/${prNumber}/questions`;
+      const path = `${reviewPath(repoId, prNumber)}/questions`;
       return validate(QuestionSchema, path, await req("POST", path, input, { reviewKey: reviewKey(repoId, prNumber) }));
     },
     addReviewerReply: async (repoId, prNumber, id, text) => {
-      const path = `/api/reviews/${enc(repoId)}/${prNumber}/questions/${id}/replies`;
+      const path = `${reviewPath(repoId, prNumber)}/questions/${id}/replies`;
       return validate(QuestionReplySchema, path, await req("POST", path, { text }, { reviewKey: reviewKey(repoId, prNumber) }));
     },
     deleteQuestion: async (repoId, prNumber, id) => {
-      await req("DELETE", `/api/reviews/${enc(repoId)}/${prNumber}/questions/${id}`, undefined, { reviewKey: reviewKey(repoId, prNumber) });
+      await req("DELETE", `${reviewPath(repoId, prNumber)}/questions/${id}`, undefined, { reviewKey: reviewKey(repoId, prNumber) });
     },
     status: serviceStatus,
     getSnapshot: async (repoId, prNumber, path) => {
-      const url = `/api/reviews/${enc(repoId)}/${prNumber}/snapshot?path=${enc(path)}`;
+      const url = `${reviewPath(repoId, prNumber)}/snapshot?path=${enc(path)}`;
       return validate(SnapshotSchema, url, await req("GET", url));
     },
     setPrContext: async (repoId, prNumber, context) => {
       // Refresh records derived GitHub context before reading authored review state. It
       // never copies cached authored data, so it is safe on the recovery path.
-      await req("PUT", `/api/reviews/${enc(repoId)}/${prNumber}/context`, context, { allowBeforeRecoveryRead: true });
+      await req("PUT", `${reviewPath(repoId, prNumber)}/context`, context, { allowBeforeRecoveryRead: true });
     },
   };
 }

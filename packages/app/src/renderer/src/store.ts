@@ -152,12 +152,7 @@ export function createStore(api: GanderApi): Store {
         if (!entry) return;
         chosen = true;
         store.repos = await api.listRepos();
-        await prepareTargetRepo(entry.repoId);
-        try {
-          await loadContexts(entry.repoId);
-        } finally {
-          if (store.targetRepoId === entry.repoId) store.targetWorktreePath = preferredWorktreePath(entry.repoId);
-        }
+        await activateRepo(entry.repoId);
         store.selectedPrNumber = null;
       })));
       return chosen;
@@ -182,55 +177,22 @@ export function createStore(api: GanderApi): Store {
         if (!store.repos.some((r) => r.repoId === target.repoId)) {
           throw new Error(`${target.repoId} is not registered. Open one of its checkout folders first.`);
         }
-        // The bodies of selectRepo and openPr, inlined: nesting their busy wrappers would
-        // clear the busy flag halfway through this one.
-        await prepareTargetRepo(target.repoId);
-        try {
-          await loadContexts(target.repoId);
-        } finally {
-          if (store.targetRepoId === target.repoId) store.targetWorktreePath = preferredWorktreePath(target.repoId);
-        }
+        // The bodies of selectRepo and openPr, called without their busy wrappers: nesting
+        // those would clear the busy flag halfway through this one.
+        await activateRepo(target.repoId);
         if (target.prNumber === null) return;
         if (generation !== localContextGeneration) return;
-        const view = await api.openPr(target.repoId, target.prNumber);
-        if (generation !== localContextGeneration) return;
-        store.view = view;
-        store.currentRepoId = target.repoId;
-        store.localView = null;
-        store.selectedPrNumber = target.prNumber;
-        syncCurrentProgress();
-        await store.checkService();
-        store.selectedPath = store.view.files[0]?.path ?? null;
-        store.lastFetchAt = new Date().toISOString();
+        await applyOpenedPr(target.repoId, target.prNumber, generation);
       })));
     },
     async selectRepo(repoId: string) {
-      await userAction(() => withBusy(() => guard(async () => {
-        await prepareTargetRepo(repoId);
-        try {
-          await loadContexts(repoId);
-        } finally {
-          // A GitHub failure must not make a usable local checkout disappear, but a slow
-          // superseded load must not rewrite the target chosen after it either.
-          if (store.targetRepoId === repoId) store.targetWorktreePath = preferredWorktreePath(repoId);
-        }
-      })));
+      await userAction(() => withBusy(() => guard(() => activateRepo(repoId))));
     },
     async openPr(prNumber: number) {
       await userAction(() => withBusy(() => guard(async () => {
         const repoId = store.targetRepoId;
         if (!repoId) throw new Error("no repo selected");
-        const generation = ++localContextGeneration;
-        const view = await api.openPr(repoId, prNumber);
-        if (generation !== localContextGeneration) return;
-        store.view = view;
-        store.currentRepoId = repoId;
-        store.localView = null;
-        store.selectedPrNumber = prNumber;
-        syncCurrentProgress();
-        await store.checkService();
-        store.selectedPath = store.view.files[0]?.path ?? null;
-        store.lastFetchAt = new Date().toISOString();
+        await applyOpenedPr(repoId, prNumber, ++localContextGeneration);
       })));
     },
     async openLocal(path: string) {
@@ -301,15 +263,15 @@ export function createStore(api: GanderApi): Store {
     },
     async setChecked(path: string, checked: boolean) {
       await guard(async () => {
-        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
-        store.view = await api.setChecked(store.currentRepoId, store.view.pr.number, path, checked);
+        const { repoId, prNumber } = requireOpenPr();
+        store.view = await api.setChecked(repoId, prNumber, path, checked);
         syncCurrentProgress();
       });
     },
     async setCheckedMany(paths: string[], checked: boolean) {
       await guard(async () => {
-        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
-        store.view = await api.setCheckedMany(store.currentRepoId, store.view.pr.number, paths, checked);
+        const { repoId, prNumber } = requireOpenPr();
+        store.view = await api.setCheckedMany(repoId, prNumber, paths, checked);
         syncCurrentProgress();
       });
     },
@@ -324,20 +286,20 @@ export function createStore(api: GanderApi): Store {
     },
     async addQuestion(text: string, path: string | null, line: number | null) {
       await guard(async () => {
-        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
-        store.view = await api.addQuestion(store.currentRepoId, store.view.pr.number, { path, line, text });
+        const { repoId, prNumber } = requireOpenPr();
+        store.view = await api.addQuestion(repoId, prNumber, { path, line, text });
       });
     },
     async deleteQuestion(id: number) {
       await guard(async () => {
-        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
-        store.view = await api.deleteQuestion(store.currentRepoId, store.view.pr.number, id);
+        const { repoId, prNumber } = requireOpenPr();
+        store.view = await api.deleteQuestion(repoId, prNumber, id);
       });
     },
     async addReviewerReply(id: number, text: string) {
       await guard(async () => {
-        if (!store.currentRepoId || !store.view) throw new Error("no PR open");
-        store.view = await api.addReviewerReply(store.currentRepoId, store.view.pr.number, id, text);
+        const { repoId, prNumber } = requireOpenPr();
+        store.view = await api.addReviewerReply(repoId, prNumber, id, text);
       });
     },
     select(path: string) {
@@ -450,6 +412,37 @@ export function createStore(api: GanderApi): Store {
       ?? store.worktrees.find((worktree) => worktree.path === registered)?.path
       ?? store.worktrees[0]?.path
       ?? null;
+  }
+
+  function requireOpenPr(): { repoId: string; prNumber: number } {
+    if (!store.currentRepoId || !store.view) throw new Error("no PR open");
+    return { repoId: store.currentRepoId, prNumber: store.view.pr.number };
+  }
+
+  /** Makes a repository the target and loads its pull requests and worktrees. */
+  async function activateRepo(repoId: string): Promise<void> {
+    await prepareTargetRepo(repoId);
+    try {
+      await loadContexts(repoId);
+    } finally {
+      // A GitHub failure must not make a usable local checkout disappear, but a slow
+      // superseded load must not rewrite the target chosen after it either.
+      if (store.targetRepoId === repoId) store.targetWorktreePath = preferredWorktreePath(repoId);
+    }
+  }
+
+  /** Opens a pull request and lands the view on it, unless a later open superseded this one. */
+  async function applyOpenedPr(repoId: string, prNumber: number, generation: number): Promise<void> {
+    const view = await api.openPr(repoId, prNumber);
+    if (generation !== localContextGeneration) return;
+    store.view = view;
+    store.currentRepoId = repoId;
+    store.localView = null;
+    store.selectedPrNumber = prNumber;
+    syncCurrentProgress();
+    await store.checkService();
+    store.selectedPath = view.files[0]?.path ?? null;
+    store.lastFetchAt = new Date().toISOString();
   }
 
   async function prepareTargetRepo(repoId: string): Promise<void> {
