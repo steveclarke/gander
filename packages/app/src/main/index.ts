@@ -20,6 +20,18 @@ import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
 import { loadUpdateController, supportsInPlaceUpdates, type UpdateController } from "./updates.js";
 import { assertRepositoryRegistered, registerFromCheckout, repositoryFromLocalPath } from "./repository-registration.js";
 
+// In a packaged build the name comes from productName, but in dev Electron falls back to
+// the package name and the macOS app menu reads "@gander/app". Set it before ready so the
+// menu, the About item, and userData all use the same name in both.
+app.setName("Gander");
+
+// Renderer debugging: with GANDER_DEBUG_PORT set, the window speaks CDP on that port, so
+// DevTools — or a script driving Runtime.evaluate and Page.captureScreenshot — can inspect
+// the running app's layout without rebuilding it. Never in a packaged build: the port has
+// no auth and would expose the reviewer's window to anything on the machine.
+const debugPort = process.env.GANDER_DEBUG_PORT;
+if (debugPort && !app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", debugPort);
+
 let zoomController: ZoomController;
 const localWatchers = new Map<number, LocalViewWatcher>();
 const localViews = new Map<number, LocalView>();

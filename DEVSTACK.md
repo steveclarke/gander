@@ -162,6 +162,28 @@ other's clones.
 
 The app has to be running: `bin/dev -D` first, then the command.
 
+## Inspecting the running window
+
+Set `GANDER_DEBUG_PORT` before starting the app and the renderer speaks the Chrome
+DevTools Protocol on that port, so a layout or state question can be answered against the
+window already on screen instead of a rebuild. It is ignored in a packaged build — the
+port has no authentication.
+
+```bash
+GANDER_DEBUG_PORT=9229 bin/dev
+curl -s localhost:9229/json          # the page's webSocketDebuggerUrl
+```
+
+Open `chrome://inspect` in Chrome, or drive the socket from a script: `Runtime.evaluate`
+reads live geometry and store state, `Page.captureScreenshot` takes a picture of the
+window (pass `fromSurface: false` on macOS, or the call hangs whenever the window is not
+frontmost), and `Emulation.setDeviceMetricsOverride` resizes the viewport to reproduce a
+size-dependent bug.
+
+Restarting the app to attach the port throws away whatever repository, file, and scroll
+position the bug appeared in. When the bug is on screen, attach to a second window or
+reproduce it again after the restart.
+
 ## Testing and debugging MCP
 
 `bin/mcp` runs the official MCP Inspector against the service for the current
