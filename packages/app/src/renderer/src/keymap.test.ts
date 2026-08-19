@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BINDINGS, GROUPS, bindingFor } from "./keymap.js";
+import { BINDINGS, GROUPS, bindingFor, isPrefix } from "./keymap.js";
 
 const press = (key: string, modifiers: Partial<KeyboardEvent> = {}): KeyboardEvent =>
   ({ key, metaKey: false, ctrlKey: false, altKey: false, ...modifiers }) as KeyboardEvent;
@@ -39,8 +39,26 @@ describe("keymap", () => {
     for (const binding of BINDINGS) expect(GROUPS).toContain(binding.group);
   });
 
+  // gg is vim's, and g does nothing on its own, so it can begin a chord without any other
+  // binding having to know about it.
+  it("reaches a chord only while its prefix is pending", () => {
+    expect(bindingFor(press("g"))).toBeNull();
+    expect(isPrefix(press("g"), null)).toBe("g");
+    expect(bindingFor(press("g"), "g")?.command).toBe("first-file");
+  });
+
+  it("hides plain bindings while a prefix is pending", () => {
+    expect(bindingFor(press("j"), "g")).toBeNull();
+    expect(bindingFor(press("G"))?.command).toBe("last-file");
+  });
+
+  it("does not start a chord on a modified key, or while one is already pending", () => {
+    expect(isPrefix(press("g", { metaKey: true }), null)).toBeNull();
+    expect(isPrefix(press("g"), "g")).toBeNull();
+  });
+
   it("claims each key once", () => {
-    const seen = BINDINGS.flatMap((b) => b.keys.map((k) => `${b.meta === true ? "meta+" : ""}${k}`));
+    const seen = BINDINGS.flatMap((b) => b.keys.map((k) => `${b.prefix ?? ""}${b.meta === true ? "meta+" : ""}${k}`));
     expect(new Set(seen).size).toBe(seen.length);
   });
 });

@@ -10,7 +10,7 @@ import { effectiveTreeTypography } from "../../settings.js";
 import { currentLine } from "./selection.js";
 import type { NoteTarget } from "./selection.js";
 import type { PrFile } from "@gander/shared";
-import { bindingFor, type Command } from "./keymap.js";
+import { bindingFor, isPrefix, type Command, type Prefix } from "./keymap.js";
 import { collapsedDirs, cursor, edge, filesAt, nextUnmarked, parentOf, rowAt, step } from "./tree-nav.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
@@ -357,9 +357,21 @@ watch(() => store.selectedPath, (path) => {
   if (path !== null && rowAt(store.files(), cursor.value)?.type !== "dir") cursor.value = path;
 });
 
+// The half-typed prefix of a two-key binding. Cleared by whatever comes next, so a `g`
+// followed by anything other than the key that completes a chord does nothing at all.
+let pending: Prefix | null = null;
+
 function onKey(event: KeyboardEvent): void {
   if (isTyping(event.target as HTMLElement | null)) return;
-  const binding = bindingFor(event);
+  const started = isPrefix(event, pending);
+  if (started !== null) {
+    pending = started;
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  const binding = bindingFor(event, pending);
+  pending = null;
   if (binding === null) return;
   // Everything but the panel toggles is about a pull request under review; in the local
   // viewer there is no checkoff, no note, and no delta to reach.
