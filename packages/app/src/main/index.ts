@@ -48,7 +48,7 @@ async function bootstrap(): Promise<GanderConfig> {
     return entry;
   });
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, await githubToken()));
-  ipcMain.handle("gander:serviceHealthy", async () => service.healthy());
+  ipcMain.handle("gander:serviceStatus", async () => service.status());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
   ipcMain.handle("gander:openPr", async (_e, repoId: string, n: number) => {
