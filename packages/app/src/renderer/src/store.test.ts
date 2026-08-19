@@ -24,9 +24,9 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     listRepos: async () => [{ repoId: "acme/atlas", url: "u" }],
     listGithubRepos: async () => [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", private: true }],
     addRepo: async (url) => ({ repoId: "acme/new", url }),
-    listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" }],
+    listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b", reviewProgress: null }],
     openPr: async () => prView(),
-    setChecked: async (_r, _n, path) => prView([path]),
+    setChecked: async (_r, _n, path, checked) => prView(checked ? [path] : []),
     setCheckedMany: async (_r, _n, paths) => prView(paths),
     refreshPr: async () => prView(),
     lastReview: async () => null,
@@ -98,6 +98,9 @@ describe("store", () => {
     expect(store.progress()).toEqual({ done: 0, total: 2 });
     await store.setChecked("a.rb", true);
     expect(store.progress()).toEqual({ done: 1, total: 2 });
+    expect(store.prs[0]?.reviewProgress).toEqual({ done: 1, total: 2 });
+    await store.setChecked("a.rb", false);
+    expect(store.prs[0]?.reviewProgress).toEqual({ done: 0, total: 2 });
   });
 
   it("loads GitHub repositories separately from registered repositories", async () => {

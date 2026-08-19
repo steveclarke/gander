@@ -116,6 +116,14 @@ export interface PrSummary {
   headSha: string;
 }
 
+export interface ReviewProgress { done: number; total: number; }
+
+/** GitHub's pull request summary joined with content-derived review progress. */
+export interface PrListItem extends PrSummary {
+  /** null until at least one file has a retained review snapshot. */
+  reviewProgress: ReviewProgress | null;
+}
+
 export interface RepoEntry { repoId: string; url: string; }
 
 export interface PrFile {

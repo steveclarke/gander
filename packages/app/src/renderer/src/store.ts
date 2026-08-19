@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import type { OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi, GithubRepository } from "./api.js";
 import type { ImagePreview } from "../../api.js";
 import type { ServiceStatus } from "../../api.js";
@@ -9,7 +9,7 @@ export interface Store {
   githubRepos: GithubRepository[];
   githubReposBusy: boolean;
   githubReposError: string | null;
-  prs: PrSummary[];
+  prs: PrListItem[];
   currentRepoId: string | null;
   view: PrView | null;
   selectedPath: string | null;
@@ -46,6 +46,18 @@ export interface Store {
 }
 
 export function createStore(api: GanderApi): Store {
+  function syncCurrentProgress(): void {
+    if (!store.view) return;
+    const item = store.prs.find((pr) => pr.number === store.view?.pr.number);
+    if (!item) return;
+    const done = store.view.files.filter((file) => file.checked).length;
+    // Once progress exists, an explicit un-check remains progress: the retained
+    // snapshot means this review has begun even when its current count returns to zero.
+    if (item.reviewProgress !== null || done > 0 || store.view.files.some((file) => file.changedSince)) {
+      item.reviewProgress = { done, total: store.view.files.length };
+    }
+  }
+
   const store: Store = reactive({
     repos: [],
     githubRepos: [],
@@ -121,6 +133,7 @@ export function createStore(api: GanderApi): Store {
         store.selectedPath = null;
         if (target.prNumber === null) return;
         store.view = await api.openPr(target.repoId, target.prNumber);
+        syncCurrentProgress();
         await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
         store.lastFetchAt = new Date().toISOString();
@@ -138,6 +151,7 @@ export function createStore(api: GanderApi): Store {
       await userAction(() => withBusy(() => guard(async () => {
         if (!store.currentRepoId) throw new Error("no repo selected");
         store.view = await api.openPr(store.currentRepoId, prNumber);
+        syncCurrentProgress();
         await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
         store.lastFetchAt = new Date().toISOString();
@@ -147,6 +161,7 @@ export function createStore(api: GanderApi): Store {
       await withBusy(() => guard(async () => {
         if (!store.currentRepoId || !store.view) return;
         store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+        syncCurrentProgress();
         await store.checkService();
         store.lastFetchAt = new Date().toISOString();
       }));
@@ -158,12 +173,14 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         if (!store.currentRepoId || !store.view) throw new Error("no PR open");
         store.view = await api.setChecked(store.currentRepoId, store.view.pr.number, path, checked);
+        syncCurrentProgress();
       });
     },
     async setCheckedMany(paths: string[], checked: boolean) {
       await guard(async () => {
         if (!store.currentRepoId || !store.view) throw new Error("no PR open");
         store.view = await api.setCheckedMany(store.currentRepoId, store.view.pr.number, paths, checked);
+        syncCurrentProgress();
       });
     },
     async reviewedSnapshot(path: string) {

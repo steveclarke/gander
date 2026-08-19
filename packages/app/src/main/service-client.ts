@@ -7,6 +7,7 @@ export const STALE_SERVICE_DATA_WRITE_ERROR = "This review is showing cached ser
 
 export interface ServiceClient {
   getReview(repoId: string, prNumber: number): Promise<ReviewState>;
+  listReviews(repoId: string): Promise<ReviewState[]>;
   putFileState(repoId: string, prNumber: number, input: PutFileState): Promise<FileCheckoff>;
   listQuestions(repoId: string, prNumber: number): Promise<Question[]>;
   addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<Question>;
@@ -114,6 +115,10 @@ export function createServiceClient(connection: Connection): ServiceClient {
       const review = validate(ReviewStateSchema, path, await req("GET", path));
       reviewsReadSinceRecovery.add(reviewKey(repoId, prNumber));
       return review;
+    },
+    listReviews: async (repoId) => {
+      const path = `/api/reviews/${enc(repoId)}`;
+      return validate(ReviewStateSchema.array(), path, await req("GET", path));
     },
     putFileState: async (repoId, prNumber, input) => {
       const path = `/api/reviews/${enc(repoId)}/${prNumber}/files`;

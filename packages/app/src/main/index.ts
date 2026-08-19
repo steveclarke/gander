@@ -47,7 +47,7 @@ async function bootstrap(): Promise<GanderConfig> {
     if (!cfg.repos.some((r) => r.repoId === entry.repoId)) { cfg.repos.push(entry); saveConfig(cfg); }
     return entry;
   });
-  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, await githubToken()));
+  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => reviewer.listPrsWithProgress(repoId));
   ipcMain.handle("gander:serviceStatus", async () => service.status());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
