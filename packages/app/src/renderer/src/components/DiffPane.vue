@@ -8,7 +8,7 @@ import type { Store } from "../store.js";
 import type { EditorSettings } from "../../../settings.js";
 import { currentLine, pendingReveal } from "../selection.js";
 import type { NoteTarget } from "../selection.js";
-import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
+import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "@lucide/vue";
 import ImageDiff from "./ImageDiff.vue";
 import type { ImagePreview } from "../../../api.js";
 import type { PrFile } from "@gander/shared";

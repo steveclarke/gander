@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import type { OpenTarget } from "@gander/shared";
-import { MessageSquare, Plus, RefreshCw, X } from "lucide-vue-next";
+import { MessageSquare, Plus, RefreshCw, X } from "@lucide/vue";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
 import { createEditorSettingsStore } from "./editor-settings-store.js";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { ChevronDown, FolderGit2, FolderOpen, FolderPlus, GitBranch, Trash2 } from "lucide-vue-next";
+import { ChevronDown, FolderGit2, FolderOpen, FolderPlus, GitBranch, Trash2 } from "@lucide/vue";
 import type { Store } from "../store.js";
 
 const props = defineProps<{ store: Store; integratedTitleBar: boolean }>();

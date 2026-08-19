@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ReviewProgress } from "@gander/shared";
-import { Check } from "lucide-vue-next";
+import { Check } from "@lucide/vue";
 
 defineProps<{ progress: ReviewProgress }>();
 </script>
