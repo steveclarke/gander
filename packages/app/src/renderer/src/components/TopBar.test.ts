@@ -32,10 +32,8 @@ function storeWithProgress(done: number, total: number, options: {
     githubReposBusy: false,
     githubReposError: null,
     prs: options.prs ?? [],
-    worktrees: [],
     currentRepoId: null,
     view: options.currentPr ? { pr: options.currentPr, files: [], questions: [] } : null,
-    localView: null,
     busy: false,
     openPr: options.openPr ?? vi.fn(),
     progress: () => ({ done, total }),
@@ -96,30 +94,6 @@ describe("TopBar", () => {
     expect(wrapper.get(".chip").text()).toBe("#30");
     expect(wrapper.find(".header-stack-position").exists()).toBe(false);
 
-    wrapper.unmount();
-  });
-
-  it("labels a local worktree without review progress or question controls", () => {
-    const store = storeWithProgress(0, 0);
-    store.localView = {
-      worktree: { path: "/tmp/feature", branch: "feature", headSha: "head", locked: false },
-      defaultBranch: "main",
-      mergeBaseSha: "base",
-      files: [
-        { path: "a.ts", status: "M", baseContent: "a", headContent: "b", baseHash: "a", headHash: "b" },
-        { path: "b.ts", status: "A", baseContent: null, headContent: "b", baseHash: null, headHash: "b" },
-      ],
-    };
-    const wrapper = mount(TopBar, {
-      props: { store, questions: 3, settingsActive: false, integratedTitleBar: false },
-    });
-
-    expect(wrapper.get(".seg-review").text()).toContain("Local");
-    expect(wrapper.get(".seg-review").text()).toContain("feature");
-    expect(wrapper.get(".local-progress").text()).toBe("2 changed");
-    expect(wrapper.find("button[aria-label='Questions']").exists()).toBe(false);
-    expect(wrapper.find("button[aria-label='Add question (N)']").exists()).toBe(false);
-    expect(wrapper.get("button[aria-label='Refresh local changes']").attributes("title")).toContain("updates live");
     wrapper.unmount();
   });
 

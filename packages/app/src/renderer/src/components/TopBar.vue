@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Store } from "../store.js";
-import { ChevronDown, FolderGit2, GitBranch, GitPullRequest, MessageSquare, Plus, RefreshCw, Settings } from "lucide-vue-next";
+import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw, Settings } from "lucide-vue-next";
 import SwitcherDropdown from "./SwitcherDropdown.vue";
 import RepositoryPicker from "./RepositoryPicker.vue";
 import ReviewingList from "./ReviewingList.vue";
 import StackPosition from "./StackPosition.vue";
-import LocalWorktreeList from "./LocalWorktreeList.vue";
 
 const props = defineProps<{
   store: Store;
@@ -55,11 +54,6 @@ async function pickPr(prNumber: number) {
   closeAll();
 }
 
-async function pickWorktree(path: string) {
-  await props.store.openLocal(path);
-  closeAll();
-}
-
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") closeAll();
 }
@@ -80,7 +74,6 @@ const currentRepoLabel = computed(() =>
   props.store.currentRepoId ? repoName(props.store.currentRepoId) : "Select repo",
 );
 const currentPr = computed(() => props.store.view?.pr ?? null);
-const currentLocal = computed(() => props.store.localView?.worktree ?? null);
 const progress = computed(() => props.store.progress());
 const progressState = computed(() => {
   if (progress.value.total === 0) return "progress-empty";
@@ -120,8 +113,7 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
       @click.stop="toggleReview"
       @keydown.enter.space.prevent="toggleReview"
     >
-      <GitBranch v-if="currentLocal" class="ic" :size="18" />
-      <GitPullRequest v-else class="ic" :size="18" />
+      <GitPullRequest class="ic" :size="18" />
       <div class="col">
         <span class="lbl">Reviewing</span>
         <span class="val">
@@ -135,11 +127,7 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
             />
             {{ currentPr.title }}
           </template>
-          <template v-else-if="currentLocal">
-            <span class="chip local">Local</span>
-            {{ currentLocal.branch ?? `Detached at ${currentLocal.headSha.slice(0, 8)}` }}
-          </template>
-          <template v-else>Select a pull request or worktree</template>
+          <template v-else>Select a pull request</template>
           <ChevronDown class="caret" :size="14" />
         </span>
       </div>
@@ -177,17 +165,16 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
         <span v-if="questions" class="badge">{{ questions }}</span>
       </button>
       <button
-        v-if="store.view || store.localView"
+        v-if="store.view"
         class="fetch"
         :disabled="store.busy"
-        :aria-label="store.localView ? 'Refresh local changes' : 'Fetch origin'"
-        :title="store.localView ? 'Refresh local changes — the selected worktree also updates live' : 'Fetch origin — also runs every 30 seconds and whenever the window regains focus'"
+        aria-label="Fetch origin"
+        title="Fetch origin — also runs every 30 seconds and whenever the window regains focus"
         @click="store.fetchNow()"
       >
         <RefreshCw :size="16" :class="{ spin: store.busy }" />
       </button>
-      <span v-if="!store.localView" class="progress" :class="progressState">{{ progress.done }}/{{ progress.total }} reviewed</span>
-      <span v-else-if="store.localView" class="progress local-progress">{{ store.localView.files.length }} changed</span>
+      <span class="progress" :class="progressState">{{ progress.done }}/{{ progress.total }} reviewed</span>
     </div>
   </div>
 
@@ -222,14 +209,6 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
     <div class="sw-h">OPEN PULL REQUESTS</div>
     <div v-if="store.prs.length === 0" class="sw-empty">No open pull requests</div>
     <ReviewingList v-else :prs="store.prs" @select="pickPr" />
-    <div class="sw-h local-heading">LOCAL WORKTREES</div>
-    <div v-if="store.worktrees.length === 0" class="sw-empty">Add a local checkout to browse its worktrees</div>
-    <LocalWorktreeList
-      v-else
-      :worktrees="store.worktrees"
-      :selected-path="store.localView?.worktree.path ?? null"
-      @select="pickWorktree"
-    />
   </SwitcherDropdown>
 
   <RepositoryPicker :open="repositoryPickerOpen" :store="store" @close="repositoryPickerOpen = false" />
@@ -261,14 +240,12 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
 
 .chip { font: 10.5px var(--mono); background: var(--badge-background); color: var(--muted-foreground); border-radius: 9px; padding: 0 7px; white-space: nowrap; flex: none; }
 .chip.draft { color: var(--warning); border: 1px solid var(--warning); background: var(--warning-background); }
-.chip.local { color: var(--info); }
 
 .spacer { flex: 1; }
 .right { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
 .progress { font-size: 12px; color: var(--muted-foreground); background: var(--badge-background); border-radius: 10px; padding: 2px 10px; white-space: nowrap; }
 .progress.progress-empty { color: var(--faint-foreground); }
 .progress.progress-complete { color: var(--success); background: var(--success-background); }
-.local-progress { color: var(--info); }
 .add-question {
   display: flex; align-items: center; gap: 5px;
   min-height: 28px; padding: 0 9px;
@@ -302,7 +279,6 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
 
 .sw-h { font-size: 10.5px; letter-spacing: .8px; color: var(--faint-foreground); font-weight: 700; padding: 10px 14px 4px; }
 .sw-empty { padding: 10px 14px; color: var(--faint-foreground); font-size: 12px; }
-.local-heading { margin-top: 5px; border-top: 1px solid var(--workbench-border); }
 .sw-item { display: flex; align-items: center; gap: 8px; padding: 6px 14px; cursor: pointer; }
 .sw-item:hover { background: var(--selection-background); }
 .sw-item .ic { color: var(--muted-foreground); flex: none; }

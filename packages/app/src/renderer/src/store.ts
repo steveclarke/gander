@@ -12,15 +12,17 @@ export interface Store {
   prs: PrListItem[];
   worktrees: LocalWorktree[];
   currentRepoId: string | null;
-  /** Repository expanded in the persistent navigator; independent of the active tab. */
-  navigatorRepoId: string | null;
+  /** Repository the workbench modes operate on, independent of whichever view is loaded. */
+  targetRepoId: string | null;
+  /** Worktree Explorer and Current Diff return to after visiting a pull request. */
+  targetWorktreePath: string | null;
+  /** Pull request the Pull Requests mode returns to after visiting a local worktree. */
+  selectedPrNumber: number | null;
   view: PrView | null;
   localView: LocalView | null;
   selectedPath: string | null;
   localFiles: LocalFileEntry[];
   localFile: LocalFile | null;
-  tabs: WorkspaceTab[];
-  activeTabKey: string | null;
   localSurface: "explorer" | "changes";
   error: string | null;
   /** Reachability and compatibility from the service's version handshake. */
@@ -42,8 +44,6 @@ export interface Store {
   selectRepo(repoId: string): Promise<void>;
   openPr(prNumber: number): Promise<void>;
   openLocal(path: string): Promise<void>;
-  activateTab(key: string): Promise<void>;
-  closeTab(key: string): Promise<void>;
   showLocalSurface(surface: "explorer" | "changes"): void;
   refresh(): Promise<void>;
   /** The reviewer pressing Fetch origin: same work as refresh, but it clears a stale error. */
@@ -61,14 +61,10 @@ export interface Store {
   progress(): { done: number; total: number };
 }
 
-export type WorkspaceTab =
-  | { key: string; type: "local"; repoId: string; path: string; label: string; selectedPath: string | null; surface: "explorer" | "changes" }
-  | { key: string; type: "pr"; repoId: string; prNumber: number; label: string; selectedPath: string | null };
-
 export function createStore(api: GanderApi): Store {
   let localFileRequest = 0;
   let localContextGeneration = 0;
-  let navigatorContextRequest = 0;
+  let targetContextRequest = 0;
 
   function syncCurrentProgress(): void {
     if (!store.view) return;
@@ -89,14 +85,14 @@ export function createStore(api: GanderApi): Store {
     prs: [],
     worktrees: [],
     currentRepoId: null,
-    navigatorRepoId: null,
+    targetRepoId: null,
+    targetWorktreePath: null,
+    selectedPrNumber: null,
     view: null,
     localView: null,
     selectedPath: null,
     localFiles: [],
     localFile: null,
-    tabs: [],
-    activeTabKey: null,
     localSurface: "explorer",
     error: null,
     serviceStatus: { state: "unreachable", reason: "Checking the Gander service…" },
@@ -141,8 +137,13 @@ export function createStore(api: GanderApi): Store {
       await userAction(() => withBusy(() => guard(async () => {
         const entry = await api.addRepo(url);
         store.repos = await api.listRepos();
-        store.navigatorRepoId = entry.repoId;
-        await loadContexts(entry.repoId);
+        await prepareTargetRepo(entry.repoId);
+        try {
+          await loadContexts(entry.repoId);
+        } finally {
+          if (store.targetRepoId === entry.repoId) store.targetWorktreePath = preferredWorktreePath(entry.repoId);
+        }
+        store.selectedPrNumber = null;
       })));
     },
     async chooseLocalRepo() {
@@ -152,8 +153,13 @@ export function createStore(api: GanderApi): Store {
         if (!entry) return;
         chosen = true;
         store.repos = await api.listRepos();
-        store.navigatorRepoId = entry.repoId;
-        await loadContexts(entry.repoId);
+        await prepareTargetRepo(entry.repoId);
+        try {
+          await loadContexts(entry.repoId);
+        } finally {
+          if (store.targetRepoId === entry.repoId) store.targetWorktreePath = preferredWorktreePath(entry.repoId);
+        }
+        store.selectedPrNumber = null;
       })));
       return chosen;
     },
@@ -169,63 +175,66 @@ export function createStore(api: GanderApi): Store {
         }
         // The bodies of selectRepo and openPr, inlined: nesting their busy wrappers would
         // clear the busy flag halfway through this one.
-        store.navigatorRepoId = target.repoId;
-        await loadContexts(target.repoId);
+        await prepareTargetRepo(target.repoId);
+        try {
+          await loadContexts(target.repoId);
+        } finally {
+          if (store.targetRepoId === target.repoId) store.targetWorktreePath = preferredWorktreePath(target.repoId);
+        }
         if (target.prNumber === null) return;
         if (generation !== localContextGeneration) return;
-        rememberActiveTab();
         const view = await api.openPr(target.repoId, target.prNumber);
         if (generation !== localContextGeneration) return;
         store.view = view;
         store.currentRepoId = target.repoId;
         store.localView = null;
+        store.selectedPrNumber = target.prNumber;
         syncCurrentProgress();
         await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
-        const key = `pr:${target.repoId}:${target.prNumber}`;
-        upsertTab({ key, type: "pr", repoId: target.repoId, prNumber: target.prNumber, label: store.view.pr.title, selectedPath: store.selectedPath });
-        store.activeTabKey = key;
         store.lastFetchAt = new Date().toISOString();
       })));
     },
     async selectRepo(repoId: string) {
       await userAction(() => withBusy(() => guard(async () => {
-        store.navigatorRepoId = repoId;
-        await loadContexts(repoId);
+        await prepareTargetRepo(repoId);
+        try {
+          await loadContexts(repoId);
+        } finally {
+          // A GitHub failure must not make a usable local checkout disappear, but a slow
+          // superseded load must not rewrite the target chosen after it either.
+          if (store.targetRepoId === repoId) store.targetWorktreePath = preferredWorktreePath(repoId);
+        }
       })));
     },
     async openPr(prNumber: number) {
       await userAction(() => withBusy(() => guard(async () => {
-        const repoId = store.navigatorRepoId ?? store.currentRepoId;
+        const repoId = store.targetRepoId;
         if (!repoId) throw new Error("no repo selected");
-        rememberActiveTab();
         const generation = ++localContextGeneration;
         const view = await api.openPr(repoId, prNumber);
         if (generation !== localContextGeneration) return;
         store.view = view;
         store.currentRepoId = repoId;
         store.localView = null;
+        store.selectedPrNumber = prNumber;
         syncCurrentProgress();
         await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
-        const key = `pr:${repoId}:${prNumber}`;
-        const summary = store.prs.find((pr) => pr.number === prNumber);
-        upsertTab({ key, type: "pr", repoId, prNumber, label: summary?.title ?? `Pull request #${prNumber}`, selectedPath: store.selectedPath });
-        store.activeTabKey = key;
         store.lastFetchAt = new Date().toISOString();
       })));
     },
     async openLocal(path: string) {
       await userAction(() => withBusy(() => guard(async () => {
-        const repoId = store.navigatorRepoId ?? store.currentRepoId;
+        const repoId = store.targetRepoId;
         if (!repoId) throw new Error("no repo selected");
-        rememberActiveTab();
         localFileRequest++;
         const generation = ++localContextGeneration;
         const localView = await api.openLocal(repoId, path);
         if (generation !== localContextGeneration) return;
         store.localView = localView;
         store.currentRepoId = repoId;
+        store.targetWorktreePath = path;
         store.view = null;
         store.selectedPath = store.localView.files[0]?.path ?? null;
         const localFiles = await api.listLocalFiles(path);
@@ -236,46 +245,8 @@ export function createStore(api: GanderApi): Store {
         const localFile = store.selectedPath ? await api.localFile(path, store.selectedPath) : null;
         if (generation !== localContextGeneration) return;
         store.localFile = localFile;
-        const worktree = store.localView.worktree;
-        const key = `local:${repoId}:${path}`;
-        upsertTab({ key, type: "local", repoId, path, label: worktree.branch ?? worktree.headSha.slice(0, 8), selectedPath: store.selectedPath, surface: "explorer" });
-        store.activeTabKey = key;
         store.lastFetchAt = new Date().toISOString();
       })));
-    },
-    async activateTab(key: string) {
-      const tab = store.tabs.find((candidate) => candidate.key === key);
-      if (!tab || tab.key === store.activeTabKey) return;
-      rememberActiveTab();
-      await store.selectRepo(tab.repoId);
-      if (tab.type === "local") {
-        await store.openLocal(tab.path);
-        store.localSurface = tab.surface;
-        if (tab.selectedPath) await selectLocalFile(tab.selectedPath);
-      } else {
-        await store.openPr(tab.prNumber);
-        if (tab.selectedPath) store.selectedPath = tab.selectedPath;
-      }
-      store.activeTabKey = key;
-    },
-    async closeTab(key: string) {
-      const index = store.tabs.findIndex((tab) => tab.key === key);
-      if (index < 0) return;
-      const wasActive = store.activeTabKey === key;
-      store.tabs.splice(index, 1);
-      if (!wasActive) return;
-      const next = store.tabs[Math.min(index, store.tabs.length - 1)];
-      store.activeTabKey = null;
-      if (next) await store.activateTab(next.key);
-      else {
-        localContextGeneration++;
-        await api.closeLocal();
-        store.view = null;
-        store.localView = null;
-        store.localFiles = [];
-        store.localFile = null;
-        store.selectedPath = null;
-      }
     },
     showLocalSurface(surface) {
       if (!store.localView) return;
@@ -286,7 +257,6 @@ export function createStore(api: GanderApi): Store {
         store.selectedPath = store.localFiles[0]?.path ?? null;
       }
       if (surface === "explorer" && store.selectedPath) void selectLocalFile(store.selectedPath);
-      rememberActiveTab();
     },
     async refresh() {
       await withBusy(() => guard(async () => {
@@ -347,7 +317,6 @@ export function createStore(api: GanderApi): Store {
     },
     select(path: string) {
       store.selectedPath = path;
-      rememberActiveTab();
       if (store.localView && store.localSurface === "explorer") void selectLocalFile(path);
     },
     files() {
@@ -378,19 +347,6 @@ export function createStore(api: GanderApi): Store {
     if (store.localSurface === "changes" && !view.files.some((file) => file.path === store.selectedPath)) {
       store.selectedPath = view.files[0]?.path ?? null;
     }
-  }
-
-  function upsertTab(tab: WorkspaceTab): void {
-    const index = store.tabs.findIndex((candidate) => candidate.key === tab.key);
-    if (index < 0) store.tabs.push(tab);
-    else store.tabs[index] = { ...store.tabs[index], ...tab } as WorkspaceTab;
-  }
-
-  function rememberActiveTab(): void {
-    const tab = store.tabs.find((candidate) => candidate.key === store.activeTabKey);
-    if (!tab) return;
-    tab.selectedPath = store.selectedPath;
-    if (tab.type === "local") tab.surface = store.localSurface;
   }
 
   async function selectLocalFile(path: string): Promise<void> {
@@ -426,15 +382,43 @@ export function createStore(api: GanderApi): Store {
   }
 
   async function loadContexts(repoId: string): Promise<void> {
-    const request = ++navigatorContextRequest;
+    const request = ++targetContextRequest;
     const [prs, worktrees] = await Promise.allSettled([api.listPrs(repoId), api.listWorktrees(repoId)]);
-    if (request !== navigatorContextRequest) return;
+    if (request !== targetContextRequest) return;
     store.prs = prs.status === "fulfilled" ? prs.value : [];
     store.worktrees = worktrees.status === "fulfilled" ? worktrees.value : [];
     const errors = [prs, worktrees]
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
       .map((result) => (result.reason as Error).message);
     if (errors.length) throw new Error(errors.join("\n"));
+  }
+
+  function preferredWorktreePath(repoId: string): string | null {
+    const registered = store.repos.find((repo) => repo.repoId === repoId)?.localPath;
+    return store.worktrees.find((worktree) => worktree.path === store.targetWorktreePath)?.path
+      ?? store.worktrees.find((worktree) => worktree.path === registered)?.path
+      ?? store.worktrees[0]?.path
+      ?? null;
+  }
+
+  async function prepareTargetRepo(repoId: string): Promise<void> {
+    if (store.targetRepoId === repoId) return;
+    if (store.currentRepoId !== null || store.view !== null || store.localView !== null) await clearLoadedView();
+    store.targetRepoId = repoId;
+    store.targetWorktreePath = null;
+    store.selectedPrNumber = null;
+  }
+
+  async function clearLoadedView(): Promise<void> {
+    localContextGeneration++;
+    localFileRequest++;
+    await api.closeLocal();
+    store.currentRepoId = null;
+    store.view = null;
+    store.localView = null;
+    store.localFiles = [];
+    store.localFile = null;
+    store.selectedPath = null;
   }
 
   // An error stays on screen until the reviewer dismisses it or starts something new.

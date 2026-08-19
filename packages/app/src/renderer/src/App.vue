@@ -1,68 +1,102 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import type { ChangedFile, OpenTarget } from "@gander/shared";
+import { MessageSquare, Plus, RefreshCw, X } from "lucide-vue-next";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
-import FileTree from "./components/FileTree.vue";
-import DiffPane from "./components/DiffPane.vue";
-import QuestionCapture from "./components/QuestionCapture.vue";
-import QuestionsDrawer from "./components/QuestionsDrawer.vue";
-import StatusBar from "./components/StatusBar.vue";
-import Splitter from "./components/Splitter.vue";
-import SettingsPane from "./components/SettingsPane.vue";
-import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
-import { MessageSquare, Plus, RefreshCw, X } from "lucide-vue-next";
-import ActivityRail from "./components/ActivityRail.vue";
-import RepositoryNavigator from "./components/RepositoryNavigator.vue";
-import ContextTabs from "./components/ContextTabs.vue";
-import FullFilePane from "./components/FullFilePane.vue";
-import StackPosition from "./components/StackPosition.vue";
-import ReviewingList from "./components/ReviewingList.vue";
-import type { ChangedFile } from "@gander/shared";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
+import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
 import { effectiveTreeTypography } from "../../settings.js";
 import { currentLine } from "./selection.js";
 import type { QuestionTarget } from "./selection.js";
-import "./theme.css";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
+import ActivityRail from "./components/ActivityRail.vue";
+import DiffPane from "./components/DiffPane.vue";
+import FullFilePane from "./components/FullFilePane.vue";
+import LocalSidebar from "./components/LocalSidebar.vue";
+import PullRequestSidebar from "./components/PullRequestSidebar.vue";
+import QuestionCapture from "./components/QuestionCapture.vue";
+import QuestionsDrawer from "./components/QuestionsDrawer.vue";
+import SettingsPane from "./components/SettingsPane.vue";
+import Splitter from "./components/Splitter.vue";
+import StackPosition from "./components/StackPosition.vue";
+import StatusBar from "./components/StatusBar.vue";
+import TargetBar from "./components/TargetBar.vue";
+import "./theme.css";
+
+type WorkbenchMode = "explorer" | "changes" | "pulls" | "settings";
 
 const store = createStore(api);
 const editorSettings = createEditorSettingsStore(api, api.initialWindowState.colorTheme);
 const integratedTitleBar = api.initialWindowState.windowStyle === "integrated-titlebar";
-let unsubscribeOpenTarget: (() => void) | null = null;
-let unsubscribeOpenSettings: (() => void) | null = null;
-let unsubscribeZoomChanged: (() => void) | null = null;
-
-onMounted(async () => {
-  // Registered first, so commands arriving while the app restores its last review are not dropped.
-  unsubscribeOpenTarget = api.onOpenTarget((target) => { void store.openTarget(target); });
-  unsubscribeOpenSettings = api.onOpenSettings(() => openSettings());
-  unsubscribeZoomChanged = api.onZoomChanged((level) => { zoomLevel.value = level; });
-  zoomLevel.value = await api.getZoomLevel();
-  void editorSettings.load();
-  // An installed app starts with no connection at all. Knowing that here is what lets the
-  // window say where to set one instead of showing an empty review that cannot be filled.
-  await refreshConnectionState();
-  await store.loadRepos();
-  const target = await api.initialTarget();
-  if (target !== null) await store.openTarget(target);
-  else await store.restoreLastReview();
-});
-
+const activeMode = shallowRef<WorkbenchMode>("explorer");
+const modeBeforeSettings = shallowRef<Exclude<WorkbenchMode, "settings">>("explorer");
 const unconfigured = ref(false);
 const questionTarget = shallowRef<QuestionTarget | null>(null);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const treeScrolling = shallowRef(false);
-let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
-const activeSurface = shallowRef<"review" | "pulls" | "settings">("review");
 const zoomLevel = shallowRef(DEFAULT_ZOOM_LEVEL);
-const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
-// Which section the settings surface opens on. The prompt about a missing service leads
-// straight to the one that fixes it, rather than to whatever was showing last.
 const settingsCategory = shallowRef<"workbench" | "editor" | "connection">("workbench");
+let unsubscribeOpenTarget: (() => void) | null = null;
+let unsubscribeOpenSettings: (() => void) | null = null;
+let unsubscribeZoomChanged: (() => void) | null = null;
+let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
 
-// A connection just saved is worth checking now: the status bar's poll is 30 seconds
-// away, and until it runs the window contradicts what the settings pane just said.
+const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
+const questionCount = computed(() => store.view?.questions.length ?? 0);
+const hasLoadedView = computed(() => store.view !== null || store.localView !== null);
+const explorerFiles = computed<ChangedFile[]>(() => store.localFiles.map((file) => ({
+  path: file.path,
+  status: "M",
+  baseContent: null,
+  headContent: null,
+  baseHash: null,
+  headHash: null,
+})));
+const localSidebarFiles = computed(() => activeMode.value === "changes" ? store.localView?.files ?? [] : explorerFiles.value);
+const questionsSize = computed({
+  get: () => (questionsDock.value === "right" ? questionsWidth.value : questionsHeight.value),
+  set: (value: number) => {
+    if (questionsDock.value === "right") questionsWidth.value = value;
+    else questionsHeight.value = value;
+  },
+});
+
+onMounted(async () => {
+  unsubscribeOpenTarget = api.onOpenTarget((target) => { void openExternalTarget(target); });
+  unsubscribeOpenSettings = api.onOpenSettings(() => openSettings());
+  unsubscribeZoomChanged = api.onZoomChanged((level) => { zoomLevel.value = level; });
+  zoomLevel.value = await api.getZoomLevel();
+  void editorSettings.load();
+  await refreshConnectionState();
+  await store.loadRepos();
+
+  const target = await api.initialTarget();
+  if (target !== null) {
+    await openExternalTarget(target);
+    return;
+  }
+
+  const localRepo = store.repos.find((repo) => repo.localPath);
+  if (localRepo) await selectTargetRepo(localRepo.repoId);
+  else {
+    await store.restoreLastReview();
+    if (store.view) activeMode.value = "pulls";
+  }
+});
+
+async function openExternalTarget(target: OpenTarget): Promise<void> {
+  await store.openTarget(target);
+  if (target.prNumber !== null) {
+    activeMode.value = "pulls";
+    return;
+  }
+  if (store.targetWorktreePath) {
+    await openLocalTarget(store.targetWorktreePath, "explorer", store.error);
+  } else activeMode.value = "pulls";
+}
+
 async function onConnected(): Promise<void> {
   await refreshConnectionState();
   await store.loadRepos();
@@ -74,12 +108,13 @@ async function refreshConnectionState(): Promise<void> {
 }
 
 function openSettings(category: "workbench" | "editor" | "connection" = "workbench"): void {
+  if (activeMode.value !== "settings") modeBeforeSettings.value = activeMode.value;
   settingsCategory.value = category;
-  activeSurface.value = "settings";
+  activeMode.value = "settings";
 }
 
 function closeSettings(): void {
-  activeSurface.value = "review";
+  activeMode.value = modeBeforeSettings.value;
   void refreshConnectionState();
 }
 
@@ -88,62 +123,78 @@ async function changeZoom(level: number): Promise<void> {
   zoomLevel.value = await api.setZoomLevel(level);
 }
 
-// v-model needs something assignable, and which dimension the questions splitter drags
-// depends on where the panel is docked.
-const questionsSize = computed({
-  get: () => (questionsDock.value === "right" ? questionsWidth.value : questionsHeight.value),
-  set: (value: number) => {
-    if (questionsDock.value === "right") questionsWidth.value = value;
-    else questionsHeight.value = value;
-  },
-});
-const questionCount = computed(() => store.view?.questions.length ?? 0);
-const hasView = computed(() => store.view !== null || store.localView !== null);
-const activeRail = computed<"explorer" | "changes" | "pulls" | "settings">(() => {
-  if (activeSurface.value === "settings") return "settings";
-  if (activeSurface.value === "pulls") return "pulls";
-  if (store.localView) return store.localSurface;
-  return "pulls";
-});
-const explorerFiles = computed<ChangedFile[]>(() => store.localFiles.map((file) => ({
-  path: file.path,
-  status: "M",
-  baseContent: null,
-  headContent: null,
-  baseHash: null,
-  headHash: null,
-})));
-
 async function openFolder(): Promise<void> {
   if (!await store.chooseLocalRepo()) return;
-  const first = store.worktrees[0];
-  if (first) await store.openLocal(first.path);
+  const contextError = store.error;
+  if (!store.targetWorktreePath) {
+    activeMode.value = "pulls";
+    return;
+  }
+  await openLocalTarget(store.targetWorktreePath, "explorer", contextError);
 }
 
-function selectRail(value: "explorer" | "changes" | "pulls" | "settings"): void {
-  if (value === "settings") { openSettings(); return; }
-  if (value === "pulls") { activeSurface.value = "pulls"; return; }
-  activeSurface.value = "review";
-  if (value === "explorer" || value === "changes") store.showLocalSurface(value);
+async function selectTargetRepo(repoId: string): Promise<void> {
+  await store.selectRepo(repoId);
+  const contextError = store.error;
+  if (!store.targetWorktreePath) {
+    activeMode.value = "pulls";
+    return;
+  }
+  await openLocalTarget(store.targetWorktreePath, "explorer", contextError);
 }
 
-async function openPrFromBrowser(prNumber: number): Promise<void> {
+async function selectTargetWorktree(path: string): Promise<void> {
+  const nextMode = activeMode.value === "changes" ? "changes" : "explorer";
+  await store.openLocal(path);
+  if (store.error) return;
+  store.showLocalSurface(nextMode);
+  activeMode.value = nextMode;
+}
+
+async function openLocalTarget(path: string, mode: "explorer" | "changes", contextError: string | null): Promise<void> {
+  await store.openLocal(path);
+  const localError = store.error;
+  const errors = [...new Set([contextError, localError].filter((error): error is string => error !== null))];
+  store.error = errors.length ? errors.join("\n") : null;
+  if (localError) return;
+  store.showLocalSurface(mode);
+  activeMode.value = mode;
+}
+
+async function selectMode(value: WorkbenchMode): Promise<void> {
+  if (value === "settings") {
+    openSettings();
+    return;
+  }
+  if (value === "pulls") {
+    activeMode.value = "pulls";
+    if (store.selectedPrNumber !== null && (store.view?.pr.number !== store.selectedPrNumber || store.currentRepoId !== store.targetRepoId)) {
+      await store.openPr(store.selectedPrNumber);
+    }
+    return;
+  }
+
+  activeMode.value = value;
+  const path = store.targetWorktreePath;
+  if (!path) return;
+  if (store.localView?.worktree.path !== path || store.currentRepoId !== store.targetRepoId) await store.openLocal(path);
+  if (!store.error) store.showLocalSurface(value);
+}
+
+async function openPr(prNumber: number): Promise<void> {
+  activeMode.value = "pulls";
   await store.openPr(prNumber);
-  if (!store.error) activeSurface.value = "review";
 }
 
-watch(() => store.activeTabKey, (key, previous) => {
-  if (key !== previous && key !== null && activeSurface.value !== "settings") activeSurface.value = "review";
-});
-
-watch(() => store.localView, (local) => {
-  if (!local) return;
-  drawerOpen.value = false;
-  questionTarget.value = null;
+watch(activeMode, (mode) => {
+  if (mode !== "pulls") {
+    drawerOpen.value = false;
+    questionTarget.value = null;
+  }
 });
 
 function openQuestion(target?: QuestionTarget): void {
-  if (!store.view) return;
+  if (!store.view || activeMode.value !== "pulls") return;
   questionTarget.value = target ?? {
     path: store.selectedPath,
     line: store.selectedPath === null ? null : currentLine.value,
@@ -156,10 +207,6 @@ function onTreeScroll(): void {
   treeScrollTimer = setTimeout(() => { treeScrolling.value = false; }, 500);
 }
 
-// Monaco takes keyboard input through a hidden textarea, so clicking a line to position
-// the cursor makes the diff the focused "text field" — and a naive typing check hands it
-// every keystroke, including the one that opens capture. Every editor in this app is
-// read-only, so a key pressed inside one is never being typed into anything.
 function isTyping(target: HTMLElement | null): boolean {
   if (target === null) return false;
   if (target.closest("[data-app-typing='true']") !== null) return true;
@@ -167,21 +214,19 @@ function isTyping(target: HTMLElement | null): boolean {
   return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 }
 
-function onKey(e: KeyboardEvent): void {
-  const target = e.target as HTMLElement | null;
+function onKey(event: KeyboardEvent): void {
+  const target = event.target as HTMLElement | null;
   if (isTyping(target)) return;
-  if (e.key === "b" && (e.metaKey || e.ctrlKey)) {
-    // Same shortcut VS Code uses for its side bar.
-    e.preventDefault();
-    e.stopPropagation();
+  if (event.key === "b" && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    event.stopPropagation();
     treeVisible.value = !treeVisible.value;
     return;
   }
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key === "n" && store.view) {
-    e.preventDefault();
-    // Monaco would otherwise still handle it and flash "Cannot edit in read-only editor".
-    e.stopPropagation();
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.key === "n" && store.view && activeMode.value === "pulls") {
+    event.preventDefault();
+    event.stopPropagation();
     openQuestion();
   }
 }
@@ -190,18 +235,11 @@ window.addEventListener("keydown", onKey, true);
 const POLL_MS = 30_000;
 let refreshing = false;
 async function refreshOnce(): Promise<void> {
-  if (refreshing || !hasView.value) return;
+  if (refreshing || !hasLoadedView.value) return;
   refreshing = true;
-  try {
-    await store.refresh();
-  } finally {
-    refreshing = false;
-  }
+  try { await store.refresh(); } finally { refreshing = false; }
 }
 const timer = setInterval(() => void refreshOnce(), POLL_MS);
-// The health dot is the only live signal when no pull request is open, and the window
-// can sit unfocused for hours — so it gets its own timer rather than riding on the
-// refresh poll, which returns early with nothing open and only wakes on focus.
 const HEALTH_MS = 15_000;
 const healthTimer = setInterval(() => void store.checkService(), HEALTH_MS);
 const onFocus = (): void => { void store.checkService(); void refreshOnce(); };
@@ -219,127 +257,130 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!--
-    THESIS: Gander is one durable, local-first review workbench across every repository.
-    OWN-WORLD: A dense native desktop shell, grounded in the existing dark Gander palette and Monaco surfaces.
-    STORY: Open a repository once, pick any discovered worktree or pull request, keep useful contexts open as tabs.
-    FIRST VIEWPORT: Repository library at left, open contexts across the top, current tree and code always visible.
-    FORM: Persistent rail + repository navigator + context tabs + one focused reading surface.
-    FINISH: It should feel like VS Code rebuilt around moving between reviews, not editing code.
-  -->
   <div class="app">
-    <ContextTabs
-      :tabs="store.tabs"
-      :active-key="store.activeTabKey"
-      :integrated-title-bar="integratedTitleBar"
-      @activate="store.activateTab"
-      @close="store.closeTab"
-    />
-    <div v-if="store.error" class="error-banner">
-      <span>{{ store.error }}</span>
-      <button aria-label="Dismiss" title="Dismiss" @click="store.dismissError()"><X :size="14" /></button>
+    <div class="top-stack">
+      <TargetBar
+        :store="store"
+        :integrated-title-bar="integratedTitleBar"
+        @select-repo="selectTargetRepo"
+        @select-worktree="selectTargetWorktree"
+        @open-folder="openFolder"
+      />
+      <div v-if="store.error" class="error-banner">
+        <span>{{ store.error }}</span>
+        <button aria-label="Dismiss" title="Dismiss" @click="store.dismissError()"><X :size="14" /></button>
+      </div>
     </div>
     <main class="body">
-      <ActivityRail :active="activeRail" :local-open="store.localView !== null" @select="selectRail" />
-      <RepositoryNavigator :store="store" @open-folder="openFolder" />
+      <ActivityRail
+        :active="activeMode"
+        :has-local-target="store.targetWorktreePath !== null"
+        :has-repo-target="store.targetRepoId !== null"
+        @select="selectMode"
+      />
+
+      <div
+        v-if="treeVisible && activeMode !== 'settings'"
+        class="view-sidebar"
+        :class="{ scrolling: treeScrolling }"
+        :style="{ width: `${treeWidth}px` }"
+      >
+        <LocalSidebar
+          v-if="activeMode === 'explorer' || activeMode === 'changes'"
+          :store="store"
+          :mode="activeMode"
+          :files="localSidebarFiles"
+          :icon-theme="editorSettings.settings.workbench.iconTheme"
+          :typography="treeTypography"
+          @scroll="onTreeScroll"
+        />
+        <PullRequestSidebar
+          v-else
+          :store="store"
+          :icon-theme="editorSettings.settings.workbench.iconTheme"
+          :typography="treeTypography"
+          @select-pr="openPr"
+          @scroll="onTreeScroll"
+        />
+      </div>
+      <Splitter v-if="treeVisible && activeMode !== 'settings'" v-model="treeWidth" orientation="vertical" :min="190" :max="520" />
+
       <div class="content">
         <SettingsPane
-          v-if="activeSurface === 'settings'"
+          v-if="activeMode === 'settings'"
           :store="editorSettings"
           :initial-category="settingsCategory"
           @connected="onConnected"
           @close="closeSettings"
         />
-        <section v-else-if="activeSurface === 'pulls'" class="pull-browser">
-          <header>
-            <h1>Pull requests</h1>
-            <p v-if="store.navigatorRepoId">{{ store.navigatorRepoId }}</p>
-          </header>
-          <ReviewingList v-if="store.navigatorRepoId && store.prs.length" :prs="store.prs" :selected-pr-number="store.currentRepoId === store.navigatorRepoId ? store.view?.pr.number ?? null : null" @select="openPrFromBrowser" />
-          <p v-else-if="store.navigatorRepoId" class="pull-empty">No open pull requests.</p>
-          <p v-else class="pull-empty">Select a repository to see its pull requests.</p>
-        </section>
-      <div v-if="activeSurface === 'review' && hasView" class="context-toolbar">
-        <div class="context-title">
-          <strong>{{ store.currentRepoId?.split('/').at(-1) }}</strong>
-          <span v-if="store.localView">{{ store.localView.worktree.branch ?? store.localView.worktree.headSha.slice(0, 8) }}</span>
-          <span v-else-if="store.view"><StackPosition v-if="store.view.pr.stack" class="header-stack-position" :position="store.view.pr.stack.position" :size="store.view.pr.stack.size" /> #{{ store.view.pr.number }} {{ store.view.pr.title }}</span>
-        </div>
-        <button v-if="store.view" aria-label="Add question (N)" title="Add question (N)" @click="openQuestion()"><Plus :size="14" /> Question</button>
-        <button v-if="store.view" aria-label="Questions" :title="`Questions (${questionCount})`" @click="drawerOpen = !drawerOpen"><MessageSquare :size="15" /><span v-if="questionCount">{{ questionCount }}</span></button>
-        <button :disabled="store.busy" :aria-label="store.localView ? 'Refresh local changes' : 'Fetch origin'" :title="store.localView ? 'Refresh local changes' : 'Fetch origin'" @click="store.fetchNow()"><RefreshCw :size="15" :class="{ spin: store.busy }" /></button>
-        <span v-if="store.view" class="progress">{{ store.progress().done }}/{{ store.progress().total }} reviewed</span>
-        <span v-else-if="store.localView" class="progress local-progress">{{ store.localView.files.length }} changed</span>
-      </div>
-      <div v-if="activeSurface === 'review'" class="review-surface">
-        <p v-if="store.busy && !hasView" class="empty working">
-          <span class="spinner" />Opening changes…
-        </p>
-        <div v-else-if="!hasView" class="welcome">
-          <h1>Open a repository from disk</h1>
-          <p>Gander will find its worktrees and pull requests, then keep them within reach in this window.</p>
-          <button type="button" @click="openFolder">Open repository folder…</button>
-          <button v-if="unconfigured" class="text-action" type="button" @click="openSettings('connection')">Connect a review service for pull requests</button>
-        </div>
-        <template v-else>
-          <FileTree
-            v-if="treeVisible"
-            :store="store"
-            :files="store.localView && store.localSurface === 'explorer' ? explorerFiles : undefined"
-            :show-status="!(store.localView && store.localSurface === 'explorer')"
-            :icon-theme="editorSettings.settings.workbench.iconTheme"
-            :typography="treeTypography"
-            class="tree"
-            :class="{ scrolling: treeScrolling }"
-            :style="{ width: `${treeWidth}px` }"
-            @scroll.passive="onTreeScroll"
-          />
-          <Splitter
-            v-if="treeVisible"
-            v-model="treeWidth"
-            orientation="vertical"
-            :min="160"
-            :max="600"
-          />
-          <!-- Docked right, questions sit beside the diff; docked bottom, under both the
-               diff and the tree, which is what gives the diff the full window width. -->
-          <div class="workspace" :class="questionsDock">
-            <FullFilePane
-              v-if="store.localView && store.localSurface === 'explorer'"
-              :file="store.localFile"
-              :editor-settings="editorSettings.settings.editor"
-              class="diff"
-            />
-            <DiffPane
-              v-else
-              :store="store"
-              :editor-settings="editorSettings.settings.editor"
-              class="diff"
-              @add-question="openQuestion"
-            />
-            <template v-if="store.view && drawerOpen">
-              <Splitter
-                v-model="questionsSize"
-                :orientation="questionsDock === 'right' ? 'vertical' : 'horizontal'"
-                :min="questionsDock === 'right' ? 220 : 120"
-                :max="700"
-                inverted
-              />
-              <QuestionsDrawer
-                :store="store"
-                class="drawer"
-                :dock="questionsDock"
-                @dock="questionsDock = $event"
-                :style="questionsDock === 'right'
-                  ? { width: `${questionsWidth}px` }
-                  : { height: `${questionsHeight}px` }"
-                @close="drawerOpen = false"
-                @add-question="openQuestion()"
-              />
-            </template>
+
+        <template v-else-if="activeMode === 'explorer' || activeMode === 'changes'">
+          <div v-if="store.localView" class="context-toolbar">
+            <div class="context-title">
+              <strong>{{ store.currentRepoId?.split('/').at(-1) }}</strong>
+              <span>{{ store.localView.worktree.branch ?? store.localView.worktree.headSha.slice(0, 8) }}</span>
+            </div>
+            <button :disabled="store.busy" aria-label="Refresh local changes" title="Refresh local changes" @click="store.fetchNow()"><RefreshCw :size="15" :class="{ spin: store.busy }" /></button>
+            <span class="progress local-progress">{{ store.localView.files.length }} changed</span>
           </div>
+          <section class="work-surface">
+            <p v-if="store.busy && !store.localView" class="empty working"><span class="spinner" />Opening worktree…</p>
+            <div v-else-if="!store.targetRepoId" class="welcome">
+              <h1>Open a repository from disk</h1>
+              <p>Gander will discover its linked worktrees and pull requests from one local checkout.</p>
+              <button type="button" @click="openFolder">Open repository folder…</button>
+              <button v-if="unconfigured" class="text-action" type="button" @click="openSettings('connection')">Connect a review service for pull requests</button>
+            </div>
+            <div v-else-if="!store.targetWorktreePath" class="empty-state">
+              <h1>No local worktree</h1>
+              <p>Open this repository from disk to browse files and current changes.</p>
+              <button type="button" @click="openFolder">Open repository folder…</button>
+            </div>
+            <div v-else-if="!store.localView" class="empty">Select the target again to load this worktree.</div>
+            <FullFilePane v-else-if="activeMode === 'explorer'" :file="store.localFile" :editor-settings="editorSettings.settings.editor" class="diff" />
+            <DiffPane v-else :store="store" :editor-settings="editorSettings.settings.editor" class="diff" />
+          </section>
         </template>
-      </div>
+
+        <template v-else>
+          <div v-if="store.view && store.currentRepoId === store.targetRepoId" class="context-toolbar">
+            <div class="context-title">
+              <strong>{{ store.currentRepoId?.split('/').at(-1) }}</strong>
+              <span><StackPosition v-if="store.view.pr.stack" class="header-stack-position" :position="store.view.pr.stack.position" :size="store.view.pr.stack.size" /> #{{ store.view.pr.number }} {{ store.view.pr.title }}</span>
+            </div>
+            <button aria-label="Add question (N)" title="Add question (N)" @click="openQuestion()"><Plus :size="14" /> Question</button>
+            <button aria-label="Questions" :title="`Questions (${questionCount})`" @click="drawerOpen = !drawerOpen"><MessageSquare :size="15" /><span v-if="questionCount">{{ questionCount }}</span></button>
+            <button :disabled="store.busy" aria-label="Fetch origin" title="Fetch origin" @click="store.fetchNow()"><RefreshCw :size="15" :class="{ spin: store.busy }" /></button>
+            <span class="progress">{{ store.progress().done }}/{{ store.progress().total }} reviewed</span>
+          </div>
+          <section class="work-surface">
+            <p v-if="store.busy && !store.view" class="empty working"><span class="spinner" />Opening pull request…</p>
+            <div v-else-if="!store.targetRepoId" class="welcome">
+              <h1>Open a repository from disk</h1>
+              <p>Pull requests belong to the repository you choose as your target.</p>
+              <button type="button" @click="openFolder">Open repository folder…</button>
+            </div>
+            <div v-else-if="!store.view || store.currentRepoId !== store.targetRepoId" class="empty-state">
+              <h1>Select a pull request</h1>
+              <p>Choose a pull request or stack from the sidebar to begin reviewing.</p>
+            </div>
+            <div v-else class="workspace" :class="questionsDock">
+              <DiffPane :store="store" :editor-settings="editorSettings.settings.editor" class="diff" @add-question="openQuestion" />
+              <template v-if="drawerOpen">
+                <Splitter v-model="questionsSize" :orientation="questionsDock === 'right' ? 'vertical' : 'horizontal'" :min="questionsDock === 'right' ? 220 : 120" :max="700" inverted />
+                <QuestionsDrawer
+                  :store="store"
+                  class="drawer"
+                  :dock="questionsDock"
+                  :style="questionsDock === 'right' ? { width: `${questionsWidth}px` } : { height: `${questionsHeight}px` }"
+                  @dock="questionsDock = $event"
+                  @close="drawerOpen = false"
+                  @add-question="openQuestion()"
+                />
+              </template>
+            </div>
+          </section>
+        </template>
       </div>
     </main>
     <StatusBar
@@ -357,70 +398,42 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.app { display: grid; grid-template-rows: 38px 1fr auto; height: 100vh; }
+.app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+.top-stack { min-width: 0; }
 .error-banner { display: flex; align-items: center; gap: 10px; background: var(--danger-background); color: var(--danger); padding: 8px 14px; font-size: 12px; border-bottom: 1px solid var(--workbench-border); }
 .error-banner span { flex: 1; }
-.error-banner button { background: none; border: none; color: inherit; cursor: pointer; display: flex; flex: none; }
-.empty { color: var(--faint-foreground); padding: 2rem; }
-.empty .link { border: 0; padding: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
-.working { display: flex; align-items: center; gap: 10px; }
-.spinner {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid var(--workbench-border); border-top-color: var(--faint-foreground);
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
-/* Flex rather than grid: panel sizes are dragged, so they are inline styles on the panels
-   themselves and the container only has to decide direction. */
+.error-banner button { flex: none; display: flex; border: 0; background: none; color: inherit; cursor: pointer; }
 .body { display: flex; min-height: 0; }
 .content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.view-sidebar { --scrollbar-thumb: transparent; --scrollbar-track: transparent; flex: none; min-height: 0; border-right: 1px solid var(--workbench-border); scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; transition: scrollbar-color 120ms cubic-bezier(0.16, 1, 0.3, 1); }
+.view-sidebar:hover, .view-sidebar:focus-within, .view-sidebar.scrolling { --scrollbar-thumb: color-mix(in srgb, var(--faint-foreground) 45%, transparent); }
 .context-toolbar { height: 35px; flex: none; display: flex; align-items: center; gap: 6px; padding-inline: 12px 7px; border-bottom: 1px solid var(--workbench-border); background: var(--panel-background); }
 .context-title { min-width: 0; display: flex; align-items: baseline; gap: 7px; margin-right: auto; }
 .context-title strong { font-size: 12px; }
-.context-title span { min-width: 0; color: var(--muted-foreground); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.context-title span { min-width: 0; display: flex; align-items: center; gap: 5px; color: var(--muted-foreground); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .context-toolbar button { min-height: 26px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--workbench-border); border-radius: 5px; background: var(--elevated-background); color: var(--muted-foreground); font: inherit; cursor: pointer; }
 .context-toolbar button:hover { color: var(--workbench-foreground); border-color: var(--faint-foreground); }
 .context-toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .context-toolbar button:disabled { opacity: .5; cursor: default; }
-.context-toolbar .progress { padding-inline: 4px; color: var(--faint-foreground); font-size: 11px; white-space: nowrap; }
-.pull-browser { flex: 1; min-height: 0; overflow: auto; background: var(--workbench-background); }
-.pull-browser > header { padding: 24px 28px 15px; border-bottom: 1px solid var(--workbench-border); }
-.pull-browser h1 { margin: 0 0 5px; font-size: 20px; letter-spacing: -.02em; }
-.pull-browser header p, .pull-empty { margin: 0; color: var(--faint-foreground); }
-.pull-browser :deep(.reviewing-list) { max-width: 760px; padding: 12px 18px; }
-.pull-empty { padding: 22px 28px; }
-.review-surface { flex: 1; display: flex; min-width: 0; min-height: 0; }
-.welcome { margin: auto; max-width: 460px; padding: 40px; text-align: center; color: var(--muted-foreground); }
-.welcome h1 { margin: 0 0 10px; color: var(--workbench-foreground); font-size: 22px; letter-spacing: -.02em; }
-.welcome p { margin: 0 0 22px; line-height: 1.55; }
-.welcome button { min-height: 32px; padding: 6px 13px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--accent-foreground); font: inherit; cursor: pointer; }
-.welcome .text-action { display: block; margin: 14px auto 0; border: 0; background: none; color: var(--accent); }
-.welcome button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.progress { padding-inline: 4px; color: var(--faint-foreground); font-size: 11px; white-space: nowrap; }
+.work-surface { flex: 1; min-width: 0; min-height: 0; display: flex; background: var(--workbench-background); }
 .workspace { flex: 1; display: flex; min-width: 0; min-height: 0; }
 .workspace.right { flex-direction: row; }
 .workspace.bottom { flex-direction: column; }
 .drawer { flex: none; }
 .workspace.bottom .drawer { border-left: none; border-top: 1px solid var(--workbench-border); }
-.tree {
-  --scrollbar-thumb: transparent;
-  --scrollbar-track: transparent;
-  flex: none;
-  border-right: 1px solid var(--workbench-border);
-  overflow: hidden auto;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  transition: scrollbar-color 120ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.tree:hover, .tree:focus-within, .tree.scrolling {
-  --scrollbar-thumb: color-mix(in srgb, var(--faint-foreground) 45%, transparent);
-  --scrollbar-track: transparent;
-}
 .diff { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
-@media (prefers-reduced-motion: reduce) { .tree { transition: none; } }
-@media (prefers-contrast: more) {
-  .tree:hover, .tree:focus-within, .tree.scrolling { --scrollbar-thumb: var(--workbench-foreground); }
-}
-@media (forced-colors: active) { .tree { scrollbar-color: auto; } }
+.empty { margin: auto; color: var(--faint-foreground); padding: 2rem; }
+.working { display: flex; align-items: center; gap: 10px; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--workbench-border); border-top-color: var(--faint-foreground); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.welcome, .empty-state { margin: auto; max-width: 460px; padding: 40px; text-align: center; color: var(--muted-foreground); }
+.welcome h1, .empty-state h1 { margin: 0 0 10px; color: var(--workbench-foreground); font-size: 22px; letter-spacing: -.02em; }
+.welcome p, .empty-state p { margin: 0 0 22px; line-height: 1.55; }
+.welcome button, .empty-state button { min-height: 32px; padding: 6px 13px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--accent-foreground); font: inherit; cursor: pointer; }
+.welcome .text-action { display: block; margin: 14px auto 0; border: 0; background: none; color: var(--accent); }
+.welcome button:focus-visible, .empty-state button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .view-sidebar { transition: none; } }
+@media (prefers-contrast: more) { .view-sidebar:hover, .view-sidebar:focus-within, .view-sidebar.scrolling { --scrollbar-thumb: var(--workbench-foreground); } }
+@media (forced-colors: active) { .view-sidebar { scrollbar-color: auto; } }
 </style>

@@ -67,12 +67,12 @@ development.
 ## Local viewer
 
 Gander's primary entry point is a local checkout selected with the native folder
-picker. The persistent repository navigator remembers it, discovers its linked
-worktrees with `git worktree list`, and lists its open pull requests. Worktree and
-pull-request contexts open as tabs, so several reviews remain within reach in one
-window.
+picker. The target switcher remembers it and discovers its linked worktrees with
+`git worktree list`. Repository/worktree selection is stable context above the
+workspace; the activity bar switches among Explorer, Current Diff, and Pull Requests
+without changing what those modes mean.
 
-A worktree tab has two peer views. Explorer shows the complete filesystem tree,
+A selected worktree has two peer views. Explorer shows the complete filesystem tree,
 including ignored files but not Git administrative metadata, and reads selected files lazily. Current Diff shows the
 live change from the default-branch merge base through the current working tree;
 untracked files are included unless ignored by Git.

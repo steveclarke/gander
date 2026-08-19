@@ -88,7 +88,7 @@ describe("store", () => {
     const store = createStore(fakeApi());
     await store.loadRepos();
     await store.openTarget({ repoId: "acme/atlas", prNumber: null });
-    expect(store.navigatorRepoId).toBe("acme/atlas");
+    expect(store.targetRepoId).toBe("acme/atlas");
     expect(store.currentRepoId).toBeNull();
     expect(store.prs).toHaveLength(1);
     expect(store.view).toBeNull();
@@ -103,7 +103,7 @@ describe("store", () => {
     await store.loadRepos();
     await store.openTarget({ repoId: "acme/new", prNumber: null });
     expect(added).toEqual(["https://github.com/acme/new"]);
-    expect(store.navigatorRepoId).toBe("acme/new");
+    expect(store.targetRepoId).toBe("acme/new");
     expect(store.error).toBeNull();
   });
 
@@ -135,7 +135,7 @@ describe("store", () => {
       listRepos: async () => [{ repoId: "acme/new", url: "https://github.com/acme/new" }],
     }));
     await store.addRepo("https://github.com/acme/new");
-    expect(store.navigatorRepoId).toBe("acme/new");
+    expect(store.targetRepoId).toBe("acme/new");
     expect(store.currentRepoId).toBeNull();
     expect(store.prs).toHaveLength(1);
   });
@@ -154,11 +154,11 @@ describe("store", () => {
     expect(store.files()).toEqual(opened.files);
     expect(store.selectedPath).toBe("working.ts");
     expect(store.progress()).toEqual({ done: 0, total: 0 });
-    expect(store.tabs).toEqual([expect.objectContaining({ type: "local", label: "feature", surface: "explorer" })]);
+    expect(store.targetWorktreePath).toBe(opened.worktree.path);
     expect(store.localFile?.content).toBe("new\n");
   });
 
-  it("keeps worktrees and pull requests open as switchable context tabs", async () => {
+  it("keeps the worktree and pull request targets while moving between their views", async () => {
     const opened = localView();
     const store = createStore(fakeApi({
       listWorktrees: async () => [opened.worktree],
@@ -167,19 +167,37 @@ describe("store", () => {
     await store.loadRepos();
     await store.selectRepo("acme/atlas");
     await store.openLocal(opened.worktree.path);
-    const localKey = store.activeTabKey!;
     store.showLocalSurface("changes");
     await store.openPr(1);
-    const prKey = store.activeTabKey!;
 
-    expect(store.tabs).toHaveLength(2);
-    expect(prKey).not.toBe(localKey);
-    await store.activateTab(localKey);
+    expect(store.targetRepoId).toBe("acme/atlas");
+    expect(store.targetWorktreePath).toBe(opened.worktree.path);
+    expect(store.selectedPrNumber).toBe(1);
+    expect(store.view?.pr.number).toBe(1);
+
+    await store.openLocal(opened.worktree.path);
     expect(store.localView?.worktree.path).toBe(opened.worktree.path);
-    expect(store.localSurface).toBe("changes");
+    expect(store.selectedPrNumber).toBe(1);
   });
 
-  it("browses another repository without disturbing the active tab or local watcher", async () => {
+  it("retains the chosen worktree when the current repository is targeted again", async () => {
+    const main = localView().worktree;
+    const feature = { ...main, path: "/tmp/feature-worktree", branch: "feature/filters" };
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [main, feature],
+      openLocal: async (_repoId, path) => localView().worktree.path === path
+        ? localView()
+        : { ...localView(), worktree: feature },
+    }));
+
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(feature.path);
+    await store.selectRepo("acme/atlas");
+
+    expect(store.targetWorktreePath).toBe(feature.path);
+  });
+
+  it("changes the global target and closes the previous repository view", async () => {
     const opened = localView();
     let closeCalls = 0;
     const store = createStore(fakeApi({
@@ -189,18 +207,17 @@ describe("store", () => {
     }));
     await store.selectRepo("acme/atlas");
     await store.openLocal(opened.worktree.path);
-    const activeKey = store.activeTabKey;
 
     await store.selectRepo("acme/other");
 
-    expect(store.navigatorRepoId).toBe("acme/other");
-    expect(store.currentRepoId).toBe("acme/atlas");
-    expect(store.localView).toEqual(opened);
-    expect(store.activeTabKey).toBe(activeKey);
-    expect(closeCalls).toBe(0);
+    expect(store.targetRepoId).toBe("acme/other");
+    expect(store.currentRepoId).toBeNull();
+    expect(store.localView).toBeNull();
+    expect(store.selectedPrNumber).toBeNull();
+    expect(closeCalls).toBe(1);
   });
 
-  it("does not let a slow repository load replace the newer navigator selection", async () => {
+  it("does not let a slow repository load replace the newer target", async () => {
     let resolveFirst!: (prs: PrListItem[]) => void;
     const first = new Promise<PrListItem[]>((resolve) => { resolveFirst = resolve; });
     const store = createStore(fakeApi({
@@ -212,7 +229,7 @@ describe("store", () => {
     resolveFirst([{ ...prView().pr, title: "First", reviewProgress: null }]);
     await slow;
 
-    expect(store.navigatorRepoId).toBe("acme/second");
+    expect(store.targetRepoId).toBe("acme/second");
     expect(store.prs.map((pr) => pr.title)).toEqual(["Second"]);
   });
 

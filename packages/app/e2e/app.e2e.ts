@@ -22,10 +22,11 @@ async function registerAndSelect(url: string, repoName: string): Promise<void> {
   }, url);
   expect(error).toBeNull();
   await browser.refresh();
-  const repo = await $(`//button[contains(@class, 'repo-row')][contains(normalize-space(.), '${repoName}')]`);
+  await $("button[aria-controls='target-picker']").click();
+  const repo = await $(`//button[contains(@class, 'picker-row')][contains(normalize-space(.), '${repoName}')]`);
   await repo.waitForDisplayed();
   await repo.click();
-  await expect(repo).toHaveElementClass(expect.stringContaining("selected"));
+  await expect($("button[aria-controls='target-picker']")).toHaveText(expect.stringContaining(repoName));
 }
 
 async function openPullRequest(title: string, twice = false): Promise<void> {
@@ -101,16 +102,16 @@ describe("Gander end to end", () => {
     expect(await browser.execute(() => document.documentElement.dataset.colorTheme)).toBe("Catppuccin Mocha");
 
     if (process.platform === "darwin") {
-      await expect($(".tabbar")).toHaveElementClass(expect.stringContaining("draggable"));
+      await expect($(".target-bar")).toHaveElementClass(expect.stringContaining("draggable"));
       expect(await browser.execute(() => {
         const region = (selector: string): string =>
           getComputedStyle(document.querySelector<HTMLElement>(selector)!).getPropertyValue("-webkit-app-region");
         return {
-          topbar: region(".tabbar"),
-          repository: region(".navigator"),
+          topbar: region(".target-bar"),
+          target: region(".target-trigger"),
           settings: region("button[aria-label='Editor settings']"),
         };
-      })).toEqual({ topbar: "drag", repository: "none", settings: "none" });
+      })).toEqual({ topbar: "drag", target: "no-drag", settings: "none" });
     }
   });
 
@@ -431,9 +432,11 @@ describe("Gander end to end", () => {
   });
 
   it("shows a live stateless local worktree without review controls", async () => {
-    const repo = await $("//button[contains(@class, 'repo-row')][contains(normalize-space(.), 'local-viewer')]");
+    await $("button[aria-controls='target-picker']").click();
+    const repo = await $("//button[contains(@class, 'picker-row')][contains(normalize-space(.), 'local-viewer')]");
     await repo.click();
-    const worktree = await $("//button[contains(@class, 'context-row')][contains(normalize-space(.), 'feature')]");
+    await $("button[aria-controls='target-picker']").click();
+    const worktree = await $("//button[contains(@class, 'worktree-row')][contains(normalize-space(.), 'feature')]");
     await worktree.waitForDisplayed();
     await worktree.click();
 
@@ -451,7 +454,7 @@ describe("Gander end to end", () => {
     await expect($(".local-progress")).toHaveText("4 changed");
     await expect($(".error-banner")).not.toBeDisplayed();
     await $("button[aria-label='Pull Requests']").click();
-    await expect($(".pull-browser h1")).toHaveText("Pull requests");
+    await expect($(".pull-sidebar h1")).toHaveText("Pull Requests");
     await $("button[aria-label='Explorer']").click();
     await treeRow("watched.ts").waitForDisplayed();
     await $("button[aria-label='Current Diff']").click();
@@ -464,10 +467,10 @@ describe("Gander end to end", () => {
     await registerAndSelect(requiredEnv("GANDER_E2E_SCROLLBAR_URL"), "scrollbar");
     await openPullRequest("Scroll a long file tree");
 
-    const tree = await $(".review-surface > .tree");
+    const tree = await $(".view-sidebar .tree.root");
     await tree.waitForDisplayed();
     const treeMetrics = async () => browser.execute(() => {
-      const panel = document.querySelector<HTMLElement>(".review-surface > .tree");
+      const panel = document.querySelector<HTMLElement>(".view-sidebar .tree.root");
       const row = panel?.querySelector<HTMLElement>(".tnode");
       if (!panel || !row) return null;
       return {
