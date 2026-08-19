@@ -42,13 +42,14 @@ onBeforeUnmount(() => clearInterval(tick));
 
 const lastFetch = computed(() => {
   const at = props.store.lastFetchAt;
-  if (at === null) return "not yet fetched";
+  const verb = props.store.localView ? "updated" : "fetched";
+  if (at === null) return props.store.localView ? "waiting for changes" : "not yet fetched";
   const seconds = Math.max(0, Math.round((now.value - Date.parse(at)) / 1000));
-  if (seconds < 45) return "fetched just now";
+  if (seconds < 45) return `${verb} just now`;
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `fetched ${minutes} min ago`;
+  if (minutes < 60) return `${verb} ${minutes} min ago`;
   const hours = Math.round(minutes / 60);
-  return `fetched ${hours} h ago`;
+  return `${verb} ${hours} h ago`;
 });
 </script>
 
@@ -64,7 +65,11 @@ const lastFetch = computed(() => {
       <PanelLeft :size="14" />
     </button>
 
+    <span v-if="store.localView" class="service local-live">
+      <span class="dot" />Local view · Live
+    </span>
     <span
+      v-else
       class="service"
       :class="{ down: store.serviceStatus.state === 'unreachable' || store.serviceStatus.state === 'incompatible', warning: store.serviceStatus.state === 'newer' }"
       :title="serviceTitle"
@@ -74,8 +79,8 @@ const lastFetch = computed(() => {
       <span class="service-label">{{ serviceLabel }}</span>
     </span>
 
-    <span v-if="store.view" class="sep">·</span>
-    <span v-if="store.view" class="fetch">{{ lastFetch }}</span>
+    <span v-if="store.view || store.localView" class="sep">·</span>
+    <span v-if="store.view || store.localView" class="fetch">{{ lastFetch }}</span>
 
     <span class="spacer" />
     <span v-if="store.busy" class="working">Working…</span>
@@ -105,6 +110,8 @@ const lastFetch = computed(() => {
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex: none; }
 .service.down { color: var(--danger); }
 .service.down .dot { background: var(--danger); }
+.local-live { color: var(--info); }
+.local-live .dot { background: var(--info); }
 .service.warning { color: var(--warning); }
 .service.warning .dot { background: var(--warning); }
 .spacer { flex: 1; }

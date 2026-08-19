@@ -63,6 +63,30 @@ describe("preload API", () => {
     expect(invoke).toHaveBeenLastCalledWith("gander:imagePreview", "acme/atlas", 7, "assets/logo.png");
   });
 
+  it("routes local views through separate read-only IPC channels", async () => {
+    const invoke = vi.fn(async () => ({}));
+    const cleanup = vi.fn();
+    const subscribe = vi.fn(() => cleanup);
+    const api = createGanderApi(invoke, subscribe);
+
+    await api.chooseLocalRepo("acme/atlas");
+    expect(invoke).toHaveBeenLastCalledWith("gander:chooseLocalRepo", "acme/atlas");
+    await api.removeRepo("acme/atlas");
+    expect(invoke).toHaveBeenLastCalledWith("gander:removeRepo", "acme/atlas");
+    await api.listWorktrees("acme/atlas");
+    expect(invoke).toHaveBeenLastCalledWith("gander:listWorktrees", "acme/atlas");
+    await api.openLocal("acme/atlas", "/tmp/local");
+    expect(invoke).toHaveBeenLastCalledWith("gander:openLocal", "acme/atlas", "/tmp/local");
+    await api.listLocalFiles("/tmp/local", "src");
+    expect(invoke).toHaveBeenLastCalledWith("gander:listLocalFiles", "/tmp/local", "src");
+    await api.localFile("/tmp/local", "src/main.ts");
+    expect(invoke).toHaveBeenLastCalledWith("gander:localFile", "/tmp/local", "src/main.ts");
+    await api.localImagePreview("logo.png");
+    expect(invoke).toHaveBeenLastCalledWith("gander:localImagePreview", "logo.png");
+    expect(api.onLocalViewChanged(vi.fn())).toBe(cleanup);
+    expect(subscribe).toHaveBeenCalledWith("gander:localViewChanged", expect.any(Function));
+  });
+
   it("routes launch targets and subscribes to later open-target events", async () => {
     const invoke = vi.fn(async () => ({ repoId: "acme/atlas", prNumber: 4 }));
     const cleanup = vi.fn();

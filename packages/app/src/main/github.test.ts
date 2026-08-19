@@ -1,47 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { listGithubRepositories, listOpenPrs, resolveGithubToken } from "./github.js";
+import { listOpenPrs, resolveGithubToken } from "./github.js";
 
 const ghPr = {
   number: 987, title: "Late-fee automation", body: "Adds calculator", draft: true,
   base: { ref: "main", sha: "aaa111" }, head: { sha: "bbb222" },
 };
-
-describe("listGithubRepositories", () => {
-  it("lists every page by recent activity and excludes archived repositories", async () => {
-    const fullPage = Array.from({ length: 100 }, (_, i) => ({
-      full_name: `acme/repo-${i}`,
-      html_url: `https://github.com/acme/repo-${i}`,
-      private: i % 2 === 0,
-      archived: i === 3,
-    }));
-    const requestedUrls: string[] = [];
-    const fakeFetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
-      requestedUrls.push(String(url));
-      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer tok");
-      return new Response(JSON.stringify(requestedUrls.length === 1 ? fullPage : [{
-        full_name: "steve/gander",
-        html_url: "https://github.com/steve/gander",
-        private: false,
-        archived: false,
-      }]), { status: 200 });
-    }) as typeof fetch;
-
-    const repos = await listGithubRepositories("tok", fakeFetch);
-
-    expect(repos).toHaveLength(100);
-    expect(repos).not.toContainEqual(expect.objectContaining({ repoId: "acme/repo-3" }));
-    expect(repos.at(-1)).toEqual({ repoId: "steve/gander", url: "https://github.com/steve/gander", private: false });
-    expect(requestedUrls).toEqual([
-      "https://api.github.com/user/repos?visibility=all&affiliation=owner%2Ccollaborator%2Corganization_member&sort=updated&direction=desc&per_page=100&page=1",
-      "https://api.github.com/user/repos?visibility=all&affiliation=owner%2Ccollaborator%2Corganization_member&sort=updated&direction=desc&per_page=100&page=2",
-    ]);
-  });
-
-  it("surfaces repository-list errors with their response body", async () => {
-    const fakeFetch = (async () => new Response("token lacks access", { status: 403 })) as typeof fetch;
-    await expect(listGithubRepositories("tok", fakeFetch)).rejects.toThrow(/403.*token lacks access/s);
-  });
-});
 
 describe("listOpenPrs", () => {
   const originalApiUrl = process.env.GANDER_GITHUB_API_URL;

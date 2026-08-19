@@ -1,36 +1,49 @@
 import { reactive } from "vue";
-import type { OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
-import type { GanderApi, GithubRepository } from "./api.js";
+import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
+import type { GanderApi } from "./api.js";
 import type { ImagePreview } from "../../api.js";
 import type { ServiceStatus } from "../../api.js";
 
 export interface Store {
   repos: RepoEntry[];
-  githubRepos: GithubRepository[];
-  githubReposBusy: boolean;
-  githubReposError: string | null;
   prs: PrListItem[];
+  worktrees: LocalWorktree[];
   currentRepoId: string | null;
+  /** Repository the workbench modes operate on, independent of whichever view is loaded. */
+  targetRepoId: string | null;
+  /** Worktree Explorer and Current Diff return to after visiting a pull request. */
+  targetWorktreePath: string | null;
+  /** Pull request the Pull Requests mode returns to after visiting a local worktree. */
+  selectedPrNumber: number | null;
   view: PrView | null;
+  localView: LocalView | null;
   selectedPath: string | null;
+  localFiles: LocalFileEntry[];
+  /** Directories whose immediate children Explorer has loaded for the selected worktree. */
+  loadedLocalDirectories: string[];
+  localFile: LocalFile | null;
+  localSurface: "explorer" | "changes";
   error: string | null;
   /** Reachability and compatibility from the service's version handshake. */
   serviceStatus: ServiceStatus;
   /** When the pull request was last fetched from origin, as an ISO string. */
   lastFetchAt: string | null;
-  /** True while a long-running main-process action (openPr, refresh, addRepo, selectRepo) is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
+  /** True while a long-running main-process action is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
   busy: boolean;
   loadRepos(): Promise<void>;
-  loadGithubRepos(): Promise<void>;
   checkService(): Promise<void>;
   dismissError(): void;
   /** Reopen the pull request that was open when the app last closed. */
   restoreLastReview(): Promise<void>;
-  addRepo(url: string): Promise<void>;
+  chooseLocalRepo(expectedRepoId?: string): Promise<boolean>;
+  removeRepo(repoId: string): Promise<void>;
   /** Open what the command line asked for: a repository, and its pull request when one was named. */
   openTarget(target: OpenTarget): Promise<void>;
   selectRepo(repoId: string): Promise<void>;
   openPr(prNumber: number): Promise<void>;
+  openLocal(path: string): Promise<void>;
+  loadLocalDirectory(directory: string): Promise<void>;
+  showLocalSurface(surface: "explorer" | "changes"): void;
   refresh(): Promise<void>;
   /** The reviewer pressing Fetch origin: same work as refresh, but it clears a stale error. */
   fetchNow(): Promise<void>;
@@ -42,6 +55,8 @@ export interface Store {
   addReviewerReply(id: number, text: string): Promise<void>;
   deleteQuestion(id: number): Promise<void>;
   select(path: string): void;
+  files(): ChangedFile[];
+  isLocal(): boolean;
   progress(): { done: number; total: number };
 }
 
@@ -59,6 +74,11 @@ export function readable(message: string): string {
 }
 
 export function createStore(api: GanderApi): Store {
+  let localFileRequest = 0;
+  let localContextGeneration = 0;
+  let targetContextRequest = 0;
+  let explorerMutation = Promise.resolve();
+
   function syncCurrentProgress(): void {
     if (!store.view) return;
     const item = store.prs.find((pr) => pr.number === store.view?.pr.number);
@@ -70,16 +90,21 @@ export function createStore(api: GanderApi): Store {
       item.reviewProgress = { done, total: store.view.files.length };
     }
   }
-
   const store: Store = reactive({
     repos: [],
-    githubRepos: [],
-    githubReposBusy: false,
-    githubReposError: null,
     prs: [],
+    worktrees: [],
     currentRepoId: null,
+    targetRepoId: null,
+    targetWorktreePath: null,
+    selectedPrNumber: null,
     view: null,
+    localView: null,
     selectedPath: null,
+    localFiles: [],
+    loadedLocalDirectories: [],
+    localFile: null,
+    localSurface: "explorer",
     error: null,
     serviceStatus: { state: "unreachable", reason: "Checking the Gander service…" },
     lastFetchAt: null,
@@ -89,17 +114,6 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         store.repos = await api.listRepos();
       });
-    },
-    async loadGithubRepos() {
-      store.githubReposBusy = true;
-      store.githubReposError = null;
-      try {
-        store.githubRepos = await api.listGithubRepos();
-      } catch (err) {
-        store.githubReposError = (err as Error).message;
-      } finally {
-        store.githubReposBusy = false;
-      }
     },
     async checkService() {
       store.serviceStatus = await api.serviceStatus();
@@ -119,33 +133,59 @@ export function createStore(api: GanderApi): Store {
       await store.openPr(last.prNumber);
       if (store.error) store.error = null;
     },
-    async addRepo(url: string) {
+    async chooseLocalRepo(expectedRepoId) {
+      let chosen = false;
       await userAction(() => withBusy(() => guard(async () => {
-        const entry = await api.addRepo(url);
+        const entry = await api.chooseLocalRepo(expectedRepoId);
+        if (!entry) return;
+        chosen = true;
         store.repos = await api.listRepos();
-        store.prs = await api.listPrs(entry.repoId);
-        store.currentRepoId = entry.repoId;
-        store.view = null;
-        store.selectedPath = null;
+        await prepareTargetRepo(entry.repoId);
+        try {
+          await loadContexts(entry.repoId);
+        } finally {
+          if (store.targetRepoId === entry.repoId) store.targetWorktreePath = preferredWorktreePath(entry.repoId);
+        }
+        store.selectedPrNumber = null;
+      })));
+      return chosen;
+    },
+    async removeRepo(repoId) {
+      await userAction(() => withBusy(() => guard(async () => {
+        await api.removeRepo(repoId);
+        if (store.targetRepoId === repoId) {
+          await clearLoadedView();
+          store.targetRepoId = null;
+          store.targetWorktreePath = null;
+          store.selectedPrNumber = null;
+          store.prs = [];
+          store.worktrees = [];
+        }
+        store.repos = await api.listRepos();
       })));
     },
     async openTarget(target: OpenTarget) {
       await userAction(() => withBusy(() => guard(async () => {
-        // Registering on the spot rather than refusing: whoever ran the command already
-        // knows which repository they mean, and an error here would cost the reviewer a
-        // detour to add it by hand.
+        const generation = target.prNumber === null ? null : ++localContextGeneration;
         if (!store.repos.some((r) => r.repoId === target.repoId)) {
-          await api.addRepo(`https://github.com/${target.repoId}`);
-          store.repos = await api.listRepos();
+          throw new Error(`${target.repoId} is not registered. Open one of its checkout folders first.`);
         }
         // The bodies of selectRepo and openPr, inlined: nesting their busy wrappers would
         // clear the busy flag halfway through this one.
-        store.prs = await api.listPrs(target.repoId);
-        store.currentRepoId = target.repoId;
-        store.view = null;
-        store.selectedPath = null;
+        await prepareTargetRepo(target.repoId);
+        try {
+          await loadContexts(target.repoId);
+        } finally {
+          if (store.targetRepoId === target.repoId) store.targetWorktreePath = preferredWorktreePath(target.repoId);
+        }
         if (target.prNumber === null) return;
-        store.view = await api.openPr(target.repoId, target.prNumber);
+        if (generation !== localContextGeneration) return;
+        const view = await api.openPr(target.repoId, target.prNumber);
+        if (generation !== localContextGeneration) return;
+        store.view = view;
+        store.currentRepoId = target.repoId;
+        store.localView = null;
+        store.selectedPrNumber = target.prNumber;
         syncCurrentProgress();
         await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
@@ -154,28 +194,93 @@ export function createStore(api: GanderApi): Store {
     },
     async selectRepo(repoId: string) {
       await userAction(() => withBusy(() => guard(async () => {
-        store.prs = await api.listPrs(repoId);
-        store.currentRepoId = repoId;
-        store.view = null;
-        store.selectedPath = null;
+        await prepareTargetRepo(repoId);
+        try {
+          await loadContexts(repoId);
+        } finally {
+          // A GitHub failure must not make a usable local checkout disappear, but a slow
+          // superseded load must not rewrite the target chosen after it either.
+          if (store.targetRepoId === repoId) store.targetWorktreePath = preferredWorktreePath(repoId);
+        }
       })));
     },
     async openPr(prNumber: number) {
       await userAction(() => withBusy(() => guard(async () => {
-        if (!store.currentRepoId) throw new Error("no repo selected");
-        store.view = await api.openPr(store.currentRepoId, prNumber);
+        const repoId = store.targetRepoId;
+        if (!repoId) throw new Error("no repo selected");
+        const generation = ++localContextGeneration;
+        const view = await api.openPr(repoId, prNumber);
+        if (generation !== localContextGeneration) return;
+        store.view = view;
+        store.currentRepoId = repoId;
+        store.localView = null;
+        store.selectedPrNumber = prNumber;
         syncCurrentProgress();
         await store.checkService();
         store.selectedPath = store.view.files[0]?.path ?? null;
         store.lastFetchAt = new Date().toISOString();
       })));
     },
+    async openLocal(path: string) {
+      await userAction(() => withBusy(() => guard(async () => {
+        const repoId = store.targetRepoId;
+        if (!repoId) throw new Error("no repo selected");
+        localFileRequest++;
+        const generation = ++localContextGeneration;
+        const localView = await api.openLocal(repoId, path);
+        if (generation !== localContextGeneration) return;
+        store.localView = localView;
+        store.currentRepoId = repoId;
+        store.targetWorktreePath = path;
+        store.view = null;
+        store.selectedPath = store.localView.files[0]?.path ?? null;
+        const localFiles = await api.listLocalFiles(path, "");
+        if (generation !== localContextGeneration) return;
+        store.localFiles = localFiles;
+        store.loadedLocalDirectories = [];
+        store.localSurface = "explorer";
+        store.selectedPath = firstLocalFilePath();
+        const localFile = store.selectedPath ? await api.localFile(path, store.selectedPath) : null;
+        if (generation !== localContextGeneration) return;
+        store.localFile = localFile;
+        store.lastFetchAt = new Date().toISOString();
+      })));
+    },
+    async loadLocalDirectory(directory: string) {
+      if (store.loadedLocalDirectories.includes(directory)) return;
+      await userAction(() => withExplorerMutation(() => guard(async () => {
+        if (!store.localView) throw new Error("no local worktree open");
+        const worktreePath = store.localView.worktree.path;
+        const generation = localContextGeneration;
+        const entries = await api.listLocalFiles(worktreePath, directory);
+        if (generation !== localContextGeneration || store.localView?.worktree.path !== worktreePath) return;
+        store.localFiles = [
+          ...store.localFiles.filter((entry) => parentDirectory(entry.path) !== directory),
+          ...entries,
+        ];
+        store.loadedLocalDirectories.push(directory);
+      })));
+    },
+    showLocalSurface(surface) {
+      if (!store.localView) return;
+      store.localSurface = surface;
+      if (surface === "changes" && !store.localView.files.some((file) => file.path === store.selectedPath)) {
+        store.selectedPath = store.localView.files[0]?.path ?? null;
+      } else if (surface === "explorer" && !store.localFiles.some((file) => file.kind === "file" && file.path === store.selectedPath)) {
+        store.selectedPath = firstLocalFilePath();
+      }
+      if (surface === "explorer" && store.selectedPath) void selectLocalFile(store.selectedPath);
+    },
     async refresh() {
       await withBusy(() => guard(async () => {
-        if (!store.currentRepoId || !store.view) return;
-        store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
-        syncCurrentProgress();
-        await store.checkService();
+        if (store.localView) {
+          applyLocalView(await api.refreshLocal(store.localView.worktree.path));
+          await refreshExplorer();
+        } else if (store.currentRepoId && store.view) {
+          store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+          syncCurrentProgress();
+          await store.checkService();
+        } else return;
         store.lastFetchAt = new Date().toISOString();
       }));
     },
@@ -201,6 +306,7 @@ export function createStore(api: GanderApi): Store {
       return api.reviewedSnapshot(store.currentRepoId, store.view.pr.number, path);
     },
     async imagePreview(path: string) {
+      if (store.localView) return api.localImagePreview(path);
       if (!store.currentRepoId || !store.view) return null;
       return api.imagePreview(store.currentRepoId, store.view.pr.number, path);
     },
@@ -224,12 +330,136 @@ export function createStore(api: GanderApi): Store {
     },
     select(path: string) {
       store.selectedPath = path;
+      if (store.localView && store.localSurface === "explorer") void selectLocalFile(path);
+    },
+    files() {
+      return store.localView?.files ?? store.view?.files ?? [];
+    },
+    isLocal() {
+      return store.localView !== null;
     },
     progress() {
       const files = store.view?.files ?? [];
       return { done: files.filter((f) => f.checked).length, total: files.length };
     },
   });
+
+  api.onLocalViewChanged((update) => {
+    if (store.localView?.worktree.path !== update.path) return;
+    if (update.view === null) {
+      store.error = update.error;
+      return;
+    }
+    applyLocalView(update.view);
+    void refreshExplorer().catch((err: Error) => { store.error = err.message; });
+    store.lastFetchAt = new Date().toISOString();
+  });
+
+  function applyLocalView(view: LocalView): void {
+    store.localView = view;
+    if (store.localSurface === "changes" && !view.files.some((file) => file.path === store.selectedPath)) {
+      store.selectedPath = view.files[0]?.path ?? null;
+    }
+  }
+
+  async function selectLocalFile(path: string): Promise<void> {
+    if (!store.localView) return;
+    const request = ++localFileRequest;
+    const worktreePath = store.localView.worktree.path;
+    store.localFile = null;
+    try {
+      const file = await api.localFile(worktreePath, path);
+      if (request === localFileRequest && store.localView?.worktree.path === worktreePath && store.selectedPath === path) {
+        store.localFile = file;
+      }
+    } catch (err) {
+      if (request !== localFileRequest) return;
+      store.error = (err as Error).message;
+      store.localFile = null;
+    }
+  }
+
+  async function refreshExplorer(): Promise<void> {
+    await withExplorerMutation(refreshExplorerNow);
+  }
+
+  async function refreshExplorerNow(): Promise<void> {
+    if (!store.localView) return;
+    const worktreePath = store.localView.worktree.path;
+    const generation = localContextGeneration;
+    const files = await api.listLocalFiles(worktreePath, "");
+    const stillExpanded: string[] = [];
+    for (const directory of [...store.loadedLocalDirectories].sort((left, right) => left.split("/").length - right.split("/").length)) {
+      if (!files.some((entry) => entry.kind === "directory" && entry.path === directory)) continue;
+      files.push(...await api.listLocalFiles(worktreePath, directory));
+      stillExpanded.push(directory);
+    }
+    if (generation !== localContextGeneration || store.localView?.worktree.path !== worktreePath) return;
+    store.localFiles = files;
+    store.loadedLocalDirectories = stillExpanded;
+    if (store.localSurface !== "explorer") return;
+    if (!store.localFiles.some((file) => file.kind === "file" && file.path === store.selectedPath)) {
+      store.selectedPath = firstLocalFilePath();
+    }
+    if (store.selectedPath) await selectLocalFile(store.selectedPath);
+    else store.localFile = null;
+  }
+
+  async function withExplorerMutation(fn: () => Promise<void>): Promise<void> {
+    const operation = explorerMutation.then(fn, fn);
+    explorerMutation = operation.catch(() => {});
+    await operation;
+  }
+
+  function firstLocalFilePath(): string | null {
+    return store.localFiles.find((entry) => entry.kind === "file")?.path ?? null;
+  }
+
+  function parentDirectory(path: string): string {
+    const separator = path.lastIndexOf("/");
+    return separator < 0 ? "" : path.slice(0, separator);
+  }
+
+  async function loadContexts(repoId: string): Promise<void> {
+    const request = ++targetContextRequest;
+    const [prs, worktrees] = await Promise.allSettled([api.listPrs(repoId), api.listWorktrees(repoId)]);
+    if (request !== targetContextRequest) return;
+    store.prs = prs.status === "fulfilled" ? prs.value : [];
+    store.worktrees = worktrees.status === "fulfilled" ? worktrees.value : [];
+    const errors = [prs, worktrees]
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => (result.reason as Error).message);
+    if (errors.length) throw new Error(errors.join("\n"));
+  }
+
+  function preferredWorktreePath(repoId: string): string | null {
+    const registered = store.repos.find((repo) => repo.repoId === repoId)?.localPath;
+    return store.worktrees.find((worktree) => worktree.path === store.targetWorktreePath)?.path
+      ?? store.worktrees.find((worktree) => worktree.path === registered)?.path
+      ?? store.worktrees[0]?.path
+      ?? null;
+  }
+
+  async function prepareTargetRepo(repoId: string): Promise<void> {
+    if (store.targetRepoId === repoId) return;
+    if (store.currentRepoId !== null || store.view !== null || store.localView !== null) await clearLoadedView();
+    store.targetRepoId = repoId;
+    store.targetWorktreePath = null;
+    store.selectedPrNumber = null;
+  }
+
+  async function clearLoadedView(): Promise<void> {
+    localContextGeneration++;
+    localFileRequest++;
+    await api.closeLocal();
+    store.currentRepoId = null;
+    store.view = null;
+    store.localView = null;
+    store.localFiles = [];
+    store.loadedLocalDirectories = [];
+    store.localFile = null;
+    store.selectedPath = null;
+  }
 
   // An error stays on screen until the reviewer dismisses it or starts something new.
   // Clearing it on any success meant the 30-second poll wiped failures before they

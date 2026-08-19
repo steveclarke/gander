@@ -136,26 +136,65 @@ export interface PrListItem extends PrSummary {
   reviewProgress: ReviewProgress | null;
 }
 
-export interface RepoEntry { repoId: string; url: string; }
+export interface RepoEntry {
+  repoId: string;
+  url: string;
+  /** A machine-local checkout used to discover worktrees. Never sent to the review service. */
+  localPath: string;
+}
 
-export interface PrFile {
+export interface ChangedFile {
   path: string;
+  /** Original path at the merge base when this file is a rename. */
+  basePath?: string;
   status: FileStatus;
   baseContent: string | null;
   headContent: string | null;
   baseHash: string | null;
   headHash: string | null;
+}
+
+export interface PrFile extends ChangedFile {
   checked: boolean;
   changedSince: boolean;
 }
 
 export interface PrView { pr: PrSummary; files: PrFile[]; questions: Question[]; }
 
+export interface LocalWorktree {
+  path: string;
+  headSha: string;
+  branch: string | null;
+  locked: boolean;
+}
+
+export interface LocalView {
+  worktree: LocalWorktree;
+  defaultBranch: string;
+  mergeBaseSha: string;
+  files: ChangedFile[];
+}
+
+/** A path in the selected worktree's complete, git-aware Explorer. */
+export interface LocalFileEntry {
+  path: string;
+  kind: "directory" | "file";
+}
+
+/** One lazily-read worktree file. Local browsing never creates review state. */
+export interface LocalFile {
+  path: string;
+  content: string | null;
+  hash: string;
+  binary: boolean;
+}
+
 /** "https://github.com/o/r(.git)" | "git@github.com:o/r(.git)" -> "o/r" */
 export function repoIdFromUrl(url: string): string {
   const m =
     url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/) ??
-    url.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/);
+    url.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/) ??
+    url.match(/^ssh:\/\/git@github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
   if (!m) throw new Error(`Not a GitHub repository URL: ${url}`);
   return `${m[1]}/${m[2]}`;
 }

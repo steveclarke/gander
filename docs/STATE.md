@@ -19,7 +19,7 @@ to a local Fastify + SQLite service.
 | `@gander/service` | Fastify + better-sqlite3 review state, bearer auth |
 | `@gander/app` | Electron main (git engine, review orchestration) + Vue renderer |
 
-66 tests pass; typecheck clean across all three packages.
+The unit suite and typecheck are clean across all three packages.
 
 Review state is content-based: files key on sha256 of blob text, so checkoffs
 survive rebases and force-pushes. A bare un-check retains the snapshot, which
@@ -64,9 +64,31 @@ A development checkout can run only its Electron app against the hosted service
 with `bin/dev --hosted`; ordinary `bin/dev` keeps its isolated local service for
 development.
 
-## Still open
+## Local viewer
 
-- Local branch/worktree viewer (stateless, no review state)
+Gander's primary entry point is a local checkout selected with the native folder
+picker. The target switcher remembers it and discovers its linked worktrees with
+`git worktree list`. Repository/worktree selection is stable context above the
+workspace; the activity bar switches among Explorer, Current Diff, and Pull Requests
+without changing what those modes mean.
+
+Every registered repository has a local checkout. Gander derives its repository ID and
+remote URL from Git; URL-only registration and command-line auto-registration are not
+supported. If the checkout moves, the target switcher can locate a replacement checkout
+for the same origin or remove the registration without touching files on disk.
+
+A selected worktree has two peer views. Explorer shows the complete filesystem tree,
+including ignored files but not Git administrative metadata, and loads each directory only
+when it is expanded before reading selected files lazily. Current Diff shows the live change
+from the default-branch merge base through the current working tree;
+untracked files are included unless ignored by Git.
+
+Local views are read-only and machine-local. They do not expose or persist checkoffs,
+snapshots, changed-since state, or questions. One bounded poller follows the selected
+worktree's files, index, HEAD, and refs and refreshes both the diff and Explorer
+when derived content changes.
+
+## Still open
 
 Packaged macOS and Linux releases are published on GitHub. Packaged builds check
 those release manifests for updates and ask before restarting to install. The
@@ -79,5 +101,6 @@ Interface work and the agent reply channel are tracked as GitHub issues.
 
 `pnpm test` runs the unit suites against real git repositories and real service
 instances. `pnpm test:e2e` drives the built Electron window through WebDriverIO —
-register a repository, open a pull request, tick a file, restart, and confirm the
-tick survived, plus the clone race that reached a person before it reached a test.
+select a locally registered repository, open a pull request, tick a file, restart,
+and confirm the tick survived, plus the clone race that reached a person before it
+reached a test.

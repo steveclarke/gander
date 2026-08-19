@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { PrSummary } from "@gander/shared";
-import type { GithubRepository } from "../api.js";
 
 type ExecFileFn = (file: string, args: readonly string[]) => Promise<{ stdout: string }>;
 
@@ -15,37 +14,11 @@ interface GhPr {
   stack?: { id: number; size: number; position: number } | null;
 }
 
-interface GhRepository {
-  full_name: string;
-  html_url: string;
-  private: boolean;
-  archived: boolean;
-}
-
 const PER_PAGE = 100;
 const DEFAULT_API_URL = "https://api.github.com";
 
 function githubHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
-}
-
-export async function listGithubRepositories(token: string, fetchImpl: typeof fetch = fetch): Promise<GithubRepository[]> {
-  const apiUrl = (process.env.GANDER_GITHUB_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, "");
-  const all: GhRepository[] = [];
-  let page = 1;
-  for (;;) {
-    const res = await fetchImpl(`${apiUrl}/user/repos?visibility=all&affiliation=owner%2Ccollaborator%2Corganization_member&sort=updated&direction=desc&per_page=${PER_PAGE}&page=${page}`, {
-      headers: githubHeaders(token),
-    });
-    if (!res.ok) throw new Error(`GitHub API ${res.status} while listing repositories: ${await res.text()}`);
-    const repos = (await res.json()) as GhRepository[];
-    all.push(...repos);
-    if (repos.length < PER_PAGE) break;
-    page += 1;
-  }
-  return all
-    .filter((repo) => !repo.archived)
-    .map((repo) => ({ repoId: repo.full_name, url: repo.html_url, private: repo.private }));
 }
 
 export async function listOpenPrs(repoId: string, token: string, fetchImpl: typeof fetch = fetch): Promise<PrSummary[]> {

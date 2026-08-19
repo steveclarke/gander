@@ -1,8 +1,9 @@
-import type { NewQuestion, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
+import type { LocalFile, LocalFileEntry, LocalView, LocalWorktree, NewQuestion, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
 import type { ConnectionCheck, ServiceStatus } from "./main/connection.js";
 import type { ImagePreview } from "./image-preview.js";
+import type { LocalViewUpdate } from "./main/local-viewer.js";
 
 export type { ImagePreview, ImageSide } from "./image-preview.js";
 
@@ -12,12 +13,6 @@ export const COLOR_THEME_ARGUMENT = "--gander-color-theme=";
 export const DEVELOPMENT_ARGUMENT = "--gander-development";
 export const WORKTREE_LABEL_ARGUMENT = "--gander-worktree-label=";
 export type GithubTokenCheck = { ok: true; login: string } | { ok: false; reason: string };
-
-export interface GithubRepository {
-  repoId: string;
-  url: string;
-  private: boolean;
-}
 
 export interface InitialWindowState {
   windowStyle: WindowStyle;
@@ -32,9 +27,10 @@ export interface GanderApi {
   /** Fixed by the main process when the window is created; renderer code cannot change it. */
   initialWindowState: InitialWindowState;
   listRepos(): Promise<RepoEntry[]>;
-  /** All non-archived repositories visible to the current GitHub credential. */
-  listGithubRepos(): Promise<GithubRepository[]>;
-  addRepo(url: string): Promise<RepoEntry>;
+  /** Prompts for a local checkout, validates its origin, and registers its repository. */
+  chooseLocalRepo(expectedRepoId?: string): Promise<RepoEntry | null>;
+  removeRepo(repoId: string): Promise<void>;
+  listWorktrees(repoId: string): Promise<LocalWorktree[]>;
   listPrs(repoId: string): Promise<PrListItem[]>;
   lastReview(): Promise<{ repoId: string; prNumber: number } | null>;
   /** What this launch was asked to open, from the command line. Null for an ordinary launch. */
@@ -55,6 +51,14 @@ export interface GanderApi {
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
+  openLocal(repoId: string, path: string): Promise<LocalView>;
+  /** Lists one directory only. Descendants are requested when the reviewer expands it. */
+  listLocalFiles(path: string, directory?: string): Promise<LocalFileEntry[]>;
+  localFile(path: string, filePath: string): Promise<LocalFile>;
+  refreshLocal(path: string): Promise<LocalView>;
+  localImagePreview(path: string): Promise<ImagePreview>;
+  closeLocal(): Promise<void>;
+  onLocalViewChanged(listener: (update: LocalViewUpdate) => void): () => void;
   addQuestion(repoId: string, prNumber: number, input: Omit<NewQuestion, "headSha">): Promise<PrView>;
   addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<PrView>;
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;

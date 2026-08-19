@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PrView } from "@gander/shared";
+import type { LocalFileEntry, LocalView, PrListItem, PrView } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 import { createStore, readable } from "./store.js";
 import { DEFAULT_APP_SETTINGS } from "../../settings.js";
@@ -13,6 +13,15 @@ const prView = (checkedPaths: string[] = []): PrView => ({
   questions: [],
 });
 
+const localView = (files: LocalView["files"] = [{
+  path: "working.ts", status: "M", baseContent: "old\n", headContent: "new\n", baseHash: "base", headHash: "head",
+}]): LocalView => ({
+  worktree: { path: "/tmp/local-worktree", branch: "feature", headSha: "abc123", locked: false },
+  defaultBranch: "main",
+  mergeBaseSha: "base-sha",
+  files,
+});
+
 function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
   return {
     initialWindowState: {
@@ -21,9 +30,10 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
       isDevelopment: false,
       worktreeLabel: null,
     },
-    listRepos: async () => [{ repoId: "acme/atlas", url: "u" }],
-    listGithubRepos: async () => [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", private: true }],
-    addRepo: async (url) => ({ repoId: "acme/new", url }),
+    listRepos: async () => [{ repoId: "acme/atlas", url: "u", localPath: "/tmp/atlas" }],
+    chooseLocalRepo: async () => null,
+    removeRepo: async () => {},
+    listWorktrees: async () => [],
     listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b", reviewProgress: null }],
     openPr: async () => prView(),
     setChecked: async (_r, _n, path, checked) => prView(checked ? [path] : []),
@@ -39,6 +49,13 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     serviceStatus: async () => ({ state: "connected", serviceVersion: "0.1.0", supportedVersion: "0.1.0" }),
     reviewedSnapshot: async () => null,
     imagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
+    openLocal: async () => { throw new Error("no local fixture"); },
+    listLocalFiles: async () => [{ path: "working.ts", kind: "file" }],
+    localFile: async (_path, filePath) => ({ path: filePath, content: "new\n", hash: "hash", binary: false }),
+    refreshLocal: async () => { throw new Error("no local fixture"); },
+    localImagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
+    closeLocal: async () => {},
+    onLocalViewChanged: () => () => {},
     addQuestion: async () => prView(),
     addReviewerReply: async () => prView(),
     deleteQuestion: async () => prView(),
@@ -70,22 +87,18 @@ describe("store", () => {
     const store = createStore(fakeApi());
     await store.loadRepos();
     await store.openTarget({ repoId: "acme/atlas", prNumber: null });
-    expect(store.currentRepoId).toBe("acme/atlas");
+    expect(store.targetRepoId).toBe("acme/atlas");
+    expect(store.currentRepoId).toBeNull();
     expect(store.prs).toHaveLength(1);
     expect(store.view).toBeNull();
   });
 
-  it("registers a repository the target names but the app has never seen", async () => {
-    const added: string[] = [];
-    const store = createStore(fakeApi({
-      addRepo: async (url) => { added.push(url); return { repoId: "acme/new", url }; },
-      listRepos: async () => (added.length === 0 ? [] : [{ repoId: "acme/new", url: added[0] as string }]),
-    }));
+  it("refuses a command-line target that has not been opened from disk", async () => {
+    const store = createStore(fakeApi({ listRepos: async () => [] }));
     await store.loadRepos();
     await store.openTarget({ repoId: "acme/new", prNumber: null });
-    expect(added).toEqual(["https://github.com/acme/new"]);
-    expect(store.currentRepoId).toBe("acme/new");
-    expect(store.error).toBeNull();
+    expect(store.targetRepoId).toBeNull();
+    expect(store.error).toBe("acme/new is not registered. Open one of its checkout folders first.");
   });
 
   it("loads repos, selects one, opens a PR, tracks progress", async () => {
@@ -103,21 +116,211 @@ describe("store", () => {
     expect(store.prs[0]?.reviewProgress).toEqual({ done: 0, total: 2 });
   });
 
-  it("loads GitHub repositories separately from registered repositories", async () => {
-    const store = createStore(fakeApi());
-    await store.loadGithubRepos();
-    expect(store.githubRepos).toEqual([{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", private: true }]);
-    expect(store.githubReposError).toBeNull();
+  it("registers and selects a repository from a chosen checkout", async () => {
+    const store = createStore(fakeApi({
+      chooseLocalRepo: async () => ({ repoId: "acme/new", url: "https://github.com/acme/new", localPath: "/tmp/new" }),
+      listRepos: async () => [{ repoId: "acme/new", url: "https://github.com/acme/new", localPath: "/tmp/new" }],
+    }));
+    await store.chooseLocalRepo();
+    expect(store.targetRepoId).toBe("acme/new");
+    expect(store.currentRepoId).toBeNull();
+    expect(store.prs).toHaveLength(1);
   });
 
-  it("registers and selects a repository in one action", async () => {
+  it("removes a repository without leaving its local view active", async () => {
+    const opened = localView();
+    let removed: string | null = null;
     const store = createStore(fakeApi({
-      addRepo: async (url) => ({ repoId: "acme/new", url }),
-      listRepos: async () => [{ repoId: "acme/new", url: "https://github.com/acme/new" }],
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+      removeRepo: async (repoId) => { removed = repoId; },
+      listRepos: async () => removed === null
+        ? [{ repoId: "acme/atlas", url: "u", localPath: "/tmp/atlas" }]
+        : [],
     }));
-    await store.addRepo("https://github.com/acme/new");
-    expect(store.currentRepoId).toBe("acme/new");
-    expect(store.prs).toHaveLength(1);
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+
+    await store.removeRepo("acme/atlas");
+
+    expect(removed).toBe("acme/atlas");
+    expect(store.repos).toEqual([]);
+    expect(store.targetRepoId).toBeNull();
+    expect(store.localView).toBeNull();
+  });
+
+  it("opens a stateless local worktree without creating pull request review state", async () => {
+    const opened = localView();
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+    }));
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+
+    expect(store.view).toBeNull();
+    expect(store.localView).toEqual(opened);
+    expect(store.files()).toEqual(opened.files);
+    expect(store.selectedPath).toBe("working.ts");
+    expect(store.progress()).toEqual({ done: 0, total: 0 });
+    expect(store.targetWorktreePath).toBe(opened.worktree.path);
+    expect(store.localFile?.content).toBe("new\n");
+  });
+
+  it("loads Explorer directories only when the reviewer expands them", async () => {
+    const opened = localView();
+    const requested: string[] = [];
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+      listLocalFiles: async (_path, directory = "") => {
+        requested.push(directory);
+        return directory === ""
+          ? [{ path: "src", kind: "directory" }, { path: "README.md", kind: "file" }]
+          : [{ path: "src/main.ts", kind: "file" }];
+      },
+    }));
+
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+
+    expect(requested).toEqual([""]);
+    expect(store.localFiles).toEqual([
+      { path: "src", kind: "directory" },
+      { path: "README.md", kind: "file" },
+    ]);
+    expect(store.selectedPath).toBe("README.md");
+
+    await store.loadLocalDirectory("src");
+    expect(requested).toEqual(["", "src"]);
+    expect(store.localFiles).toContainEqual({ path: "src/main.ts", kind: "file" });
+    expect(store.loadedLocalDirectories).toEqual(["src"]);
+  });
+
+  it("keeps the worktree and pull request targets while moving between their views", async () => {
+    const opened = localView();
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+    }));
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+    store.showLocalSurface("changes");
+    await store.openPr(1);
+
+    expect(store.targetRepoId).toBe("acme/atlas");
+    expect(store.targetWorktreePath).toBe(opened.worktree.path);
+    expect(store.selectedPrNumber).toBe(1);
+    expect(store.view?.pr.number).toBe(1);
+
+    await store.openLocal(opened.worktree.path);
+    expect(store.localView?.worktree.path).toBe(opened.worktree.path);
+    expect(store.selectedPrNumber).toBe(1);
+  });
+
+  it("retains the chosen worktree when the current repository is targeted again", async () => {
+    const main = localView().worktree;
+    const feature = { ...main, path: "/tmp/feature-worktree", branch: "feature/filters" };
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [main, feature],
+      openLocal: async (_repoId, path) => localView().worktree.path === path
+        ? localView()
+        : { ...localView(), worktree: feature },
+    }));
+
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(feature.path);
+    await store.selectRepo("acme/atlas");
+
+    expect(store.targetWorktreePath).toBe(feature.path);
+  });
+
+  it("changes the global target and closes the previous repository view", async () => {
+    const opened = localView();
+    let closeCalls = 0;
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+      closeLocal: async () => { closeCalls++; },
+    }));
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+
+    await store.selectRepo("acme/other");
+
+    expect(store.targetRepoId).toBe("acme/other");
+    expect(store.currentRepoId).toBeNull();
+    expect(store.localView).toBeNull();
+    expect(store.selectedPrNumber).toBeNull();
+    expect(closeCalls).toBe(1);
+  });
+
+  it("does not let a slow repository load replace the newer target", async () => {
+    let resolveFirst!: (prs: PrListItem[]) => void;
+    const first = new Promise<PrListItem[]>((resolve) => { resolveFirst = resolve; });
+    const store = createStore(fakeApi({
+      listPrs: async (repoId) => repoId === "acme/first" ? first : [{ ...prView().pr, number: 2, title: "Second", reviewProgress: null }],
+    }));
+
+    const slow = store.selectRepo("acme/first");
+    await store.selectRepo("acme/second");
+    resolveFirst([{ ...prView().pr, title: "First", reviewProgress: null }]);
+    await slow;
+
+    expect(store.targetRepoId).toBe("acme/second");
+    expect(store.prs.map((pr) => pr.title)).toEqual(["Second"]);
+  });
+
+  it("applies watched local changes and surfaces watcher failures", async () => {
+    let notify: Parameters<GanderApi["onLocalViewChanged"]>[0] | undefined;
+    const initial = localView();
+    const store = createStore(fakeApi({
+      openLocal: async () => initial,
+      onLocalViewChanged: (listener) => { notify = listener; return () => {}; },
+    }));
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(initial.worktree.path);
+    store.showLocalSurface("changes");
+
+    const next = localView([{ path: "new-file.ts", status: "A", baseContent: null, headContent: "new\n", baseHash: null, headHash: "next" }]);
+    notify?.({ path: initial.worktree.path, view: next, error: null });
+    expect(store.localView).toEqual(next);
+    expect(store.selectedPath).toBe("new-file.ts");
+
+    notify?.({ path: initial.worktree.path, view: null, error: "git diff failed: permission denied" });
+    expect(store.error).toContain("permission denied");
+  });
+
+  it("discards an Explorer refresh that finishes after switching worktrees", async () => {
+    const first = localView();
+    const second = { ...localView(), worktree: { ...localView().worktree, path: "/tmp/second", branch: "second" } };
+    let notify: Parameters<GanderApi["onLocalViewChanged"]>[0] | undefined;
+    let deferFirst = false;
+    let resolveOld!: (files: LocalFileEntry[]) => void;
+    const store = createStore(fakeApi({
+      openLocal: async (_repo, path) => path === first.worktree.path ? first : second,
+      listLocalFiles: async (path) => {
+        if (path === first.worktree.path && deferFirst) return new Promise((resolve) => { resolveOld = resolve; });
+        return [{ path: path === first.worktree.path ? "first.ts" : "second.ts", kind: "file" }];
+      },
+      localFile: async (_path, filePath) => ({ path: filePath, content: filePath, hash: filePath, binary: false }),
+      onLocalViewChanged: (listener) => { notify = listener; return () => {}; },
+    }));
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(first.worktree.path);
+    deferFirst = true;
+    notify?.({ path: first.worktree.path, view: first, error: null });
+    await Promise.resolve();
+    await store.openLocal(second.worktree.path);
+    resolveOld([{ path: "stale.ts", kind: "file" }]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.localView?.worktree.path).toBe(second.worktree.path);
+    expect(store.localFiles).toEqual([{ path: "second.ts", kind: "file" }]);
+    expect(store.localFile?.path).toBe("second.ts");
   });
 
   it("captures errors into store.error instead of throwing", async () => {

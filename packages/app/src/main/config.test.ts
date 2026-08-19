@@ -16,9 +16,10 @@ describe("config", () => {
     expect(() => loadConfig(cfgPath)).toThrow(/Invalid config/);
   });
   it("round-trips repos through save/load", () => {
-    saveConfig({ serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas" }] }, cfgPath);
+    saveConfig({ serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS, repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", localPath: "/tmp/atlas" }] }, cfgPath);
     const cfg = loadConfig(cfgPath);
     expect(cfg.repos[0]?.repoId).toBe("acme/atlas");
+    expect(cfg.repos[0]?.localPath).toBe("/tmp/atlas");
   });
 
   it("rejects a config without current settings", () => {
@@ -71,9 +72,25 @@ describe("config", () => {
     writeFileSync(cfgPath, JSON.stringify({
       serviceUrl: "http://h:8390", serviceToken: "t",
       settings: DEFAULT_APP_SETTINGS,
-      repos: [{ repoId: "../../etc/passwd", url: "https://github.com/acme/atlas" }],
+      repos: [{ repoId: "../../etc/passwd", url: "https://github.com/acme/atlas", localPath: "/tmp/atlas" }],
     }));
     expect(() => loadConfig(cfgPath)).toThrow(/repoId|owner\/repo/i);
+  });
+
+  it("rejects a URL-only repository registration", () => {
+    writeFileSync(cfgPath, JSON.stringify({
+      serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS,
+      repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas" }],
+    }));
+    expect(() => loadConfig(cfgPath)).toThrow(/localPath/);
+  });
+
+  it("rejects a relative local checkout path", () => {
+    writeFileSync(cfgPath, JSON.stringify({
+      serviceUrl: "http://h:8390", serviceToken: "t", settings: DEFAULT_APP_SETTINGS,
+      repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", localPath: "../atlas" }],
+    }));
+    expect(() => loadConfig(cfgPath)).toThrow(/localPath|absolute/i);
   });
 
   // chmod bits aren't meaningful on Windows.

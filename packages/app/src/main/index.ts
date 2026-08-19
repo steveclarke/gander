@@ -2,12 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "e
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { repoIdFromUrl, type OpenTarget, type RepoEntry } from "@gander/shared";
+import { type LocalView, type OpenTarget, type RepoEntry } from "@gander/shared";
 import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine } from "./git.js";
-import { checkGithubToken, listGithubRepositories, listOpenPrs, resolveGithubToken } from "./github.js";
+import { checkGithubToken, listOpenPrs, resolveGithubToken } from "./github.js";
 import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
@@ -16,9 +16,20 @@ import { buildMenuTemplate } from "./menu.js";
 import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.js";
 import { linkedWorktreeLabel } from "./development-context.js";
 import { createZoomController, type ZoomController } from "./zoom-controller.js";
+import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
 import { loadUpdateController, supportsInPlaceUpdates, type UpdateController } from "./updates.js";
+import { assertRepositoryRegistered, repositoryFromLocalPath } from "./repository-registration.js";
 
 let zoomController: ZoomController;
+const localWatchers = new Map<number, LocalViewWatcher>();
+const localViews = new Map<number, LocalView>();
+const localOpenGenerations = new Map<number, number>();
+
+function closeLocalView(senderId: number): void {
+  localWatchers.get(senderId)?.close();
+  localWatchers.delete(senderId);
+  localViews.delete(senderId);
+}
 
 async function bootstrap(): Promise<GanderConfig> {
   const cfg = loadConfig();
@@ -43,18 +54,108 @@ async function bootstrap(): Promise<GanderConfig> {
   });
 
   ipcMain.handle("gander:listRepos", async () => cfg.repos);
-  ipcMain.handle("gander:listGithubRepos", async () => listGithubRepositories(await githubToken()));
-  ipcMain.handle("gander:addRepo", async (_e, url: string): Promise<RepoEntry> => {
-    const entry = { repoId: repoIdFromUrl(url), url };
-    if (!cfg.repos.some((r) => r.repoId === entry.repoId)) { cfg.repos.push(entry); saveConfig(cfg); }
+  ipcMain.handle("gander:chooseLocalRepo", async (event, expectedRepoId?: string): Promise<RepoEntry | null> => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options: Electron.OpenDialogOptions = {
+      title: expectedRepoId === undefined ? "Open a Git repository" : `Locate a checkout for ${expectedRepoId}`,
+      properties: ["openDirectory"],
+    };
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options);
+    const selected = result.filePaths[0];
+    if (result.canceled || !selected) return null;
+    const entry = await repositoryFromLocalPath(git, selected, expectedRepoId);
+    const existing = cfg.repos.find((repo) => repo.repoId === entry.repoId);
+    if (existing) Object.assign(existing, entry);
+    else cfg.repos.push(entry);
+    saveConfig(cfg);
     return entry;
+  });
+  ipcMain.handle("gander:removeRepo", async (_event, repoId: string): Promise<void> => {
+    const index = cfg.repos.findIndex((repo) => repo.repoId === repoId);
+    if (index === -1) throw new Error(`Repo ${repoId} is not registered`);
+    cfg.repos.splice(index, 1);
+    if (cfg.lastReview?.repoId === repoId) delete cfg.lastReview;
+    saveConfig(cfg);
+  });
+  ipcMain.handle("gander:listWorktrees", async (_event, repoId: string) => {
+    const repo = cfg.repos.find((entry) => entry.repoId === repoId);
+    if (!repo) throw new Error(`Repo ${repoId} is not registered`);
+    return git.listWorktrees(repo.localPath);
+  });
+  ipcMain.handle("gander:openLocal", async (event, repoId: string, path: string) => {
+    const senderId = event.sender.id;
+    const generation = (localOpenGenerations.get(senderId) ?? 0) + 1;
+    localOpenGenerations.set(senderId, generation);
+    const repo = cfg.repos.find((entry) => entry.repoId === repoId);
+    if (!repo) throw new Error(`Repo ${repoId} is not registered`);
+    const worktrees = await git.listWorktrees(repo.localPath);
+    const selected = worktrees.find((worktree) => worktree.path === path);
+    if (!selected) throw new Error(`${path} is not a worktree of ${repoId}`);
+    const view = await git.localView(selected.path);
+    const watcher = await watchLocalView(git, selected.path, (update) => {
+      if (event.sender.isDestroyed()) {
+        closeLocalView(senderId);
+        return;
+      }
+      if (update.view) localViews.set(senderId, update.view);
+      event.sender.send("gander:localViewChanged", update);
+    }, view);
+    if (localOpenGenerations.get(senderId) !== generation) {
+      watcher.close();
+      return view;
+    }
+    closeLocalView(senderId);
+    localWatchers.set(senderId, watcher);
+    localViews.set(senderId, view);
+    event.sender.once("destroyed", () => closeLocalView(senderId));
+    return view;
+  });
+  ipcMain.handle("gander:refreshLocal", async (event, path: string) => {
+    if (localViews.get(event.sender.id)?.worktree.path !== path) {
+      throw new Error(`${path} is not the open local worktree`);
+    }
+    const view = await git.localView(path);
+    localViews.set(event.sender.id, view);
+    return view;
+  });
+  ipcMain.handle("gander:listLocalFiles", async (event, path: string, directory = "") => {
+    if (localViews.get(event.sender.id)?.worktree.path !== path) {
+      throw new Error(`${path} is not the open local worktree`);
+    }
+    return git.listLocalFiles(path, directory);
+  });
+  ipcMain.handle("gander:localFile", async (event, path: string, filePath: string) => {
+    if (localViews.get(event.sender.id)?.worktree.path !== path) {
+      throw new Error(`${path} is not the open local worktree`);
+    }
+    return git.localFile(path, filePath);
+  });
+  ipcMain.handle("gander:localImagePreview", async (event, path: string) => {
+    const view = localViews.get(event.sender.id);
+    if (!view) throw new Error("A local worktree must be open before previewing an image");
+    const file = view.files.find((candidate) => candidate.path === path);
+    if (!file) throw new Error(`${path} is not part of the local change`);
+    return git.localImage(view.worktree.path, view.mergeBaseSha, path, file.basePath);
+  });
+  ipcMain.handle("gander:closeLocal", async (event) => {
+    localOpenGenerations.set(event.sender.id, (localOpenGenerations.get(event.sender.id) ?? 0) + 1);
+    closeLocalView(event.sender.id);
   });
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => reviewer.listPrsWithProgress(repoId));
   ipcMain.handle("gander:serviceStatus", async () => service.status());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
-  ipcMain.handle("gander:openPr", async (_e, repoId: string, n: number) => {
+  ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
+    const senderId = event.sender.id;
+    const generation = (localOpenGenerations.get(senderId) ?? 0) + 1;
+    localOpenGenerations.set(senderId, generation);
     const view = await reviewer.openPr(repoId, n);
+    if (localOpenGenerations.get(senderId) !== generation) return view;
+    // Preserve the live local view when opening the PR fails. The renderer keeps showing
+    // that context, so its watcher and validated file-reading state must remain usable too.
+    closeLocalView(senderId);
     // Recorded only once the open succeeded, so a pull request that fails to open
     // is not the one the app tries again on every launch.
     cfg.lastReview = { repoId, prNumber: n };
@@ -250,6 +351,7 @@ app.whenReady().then(async () => {
   let cfg: GanderConfig;
   try {
     cfg = await bootstrap();
+    if (launchTarget !== null) assertRepositoryRegistered(cfg.repos, launchTarget.repoId);
   } catch (err) {
     dialog.showErrorBox("Gander failed to start", (err as Error).message);
     app.exit(1);
@@ -261,7 +363,13 @@ app.whenReady().then(async () => {
   updates?.checkAtStartup();
 
   try {
-    const stop = await startOpenServer({ socketPath: socketPath(), onTarget: deliver });
+    const stop = await startOpenServer({
+      socketPath: socketPath(),
+      onTarget: (target) => {
+        assertRepositoryRegistered(cfg.repos, target.repoId);
+        deliver(target);
+      },
+    });
     app.on("will-quit", stop);
   } catch (err) {
     // Losing the socket costs `bin/gander`, not the app. Reviewing by hand still works.

@@ -12,19 +12,24 @@ import type { EffectiveTreeTypography } from "../../../settings.js";
 import { languageForPath } from "../languages.js";
 import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
 import FileIcon from "./FileIcon.vue";
+import type { ChangedFile, PrFile } from "@gander/shared";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   store: Store;
   iconTheme: FileIconThemeId;
   typography?: EffectiveTreeTypography;
   nodes?: TreeNode[];
   depth?: number;
-}>();
+  files?: ChangedFile[];
+  showStatus?: boolean;
+}>(), { showStatus: true });
 
 const collapsed = reactive(new Set<string>());
 
 const depth = computed(() => props.depth ?? 0);
-const nodes = computed(() => props.nodes ?? buildTree(props.store.view?.files ?? []));
+const nodes = computed(() => props.nodes ?? buildTree(props.files ?? props.store.files()));
+const showStatus = computed(() => props.showStatus);
+const local = computed(() => props.store.isLocal());
 const rootTypographyStyle = computed(() => depth.value === 0 && props.typography
   ? { fontFamily: props.typography.fontFamily, fontSize: `${props.typography.fontSize}px` }
   : undefined);
@@ -61,7 +66,7 @@ function dirStateFor(node: TreeNode & { type: "dir" }): "all" | "some" | "none" 
 // Directory paths carry no PR identity, and `store.openPr` reassigns `view` in one step
 // (never through a null in between), so switching PRs within the same repo never unmounts
 // this component. Clear stale collapse state whenever the reviewed PR changes.
-const prIdentity = computed(() => `${props.store.currentRepoId ?? ""}#${props.store.view?.pr.number ?? ""}`);
+const prIdentity = computed(() => `${props.store.currentRepoId ?? ""}#${props.store.view?.pr.number ?? props.store.localView?.worktree.path ?? ""}`);
 watch(prIdentity, () => collapsed.clear());
 
 function toggleCollapsed(path: string) {
@@ -70,9 +75,13 @@ function toggleCollapsed(path: string) {
 }
 
 function checkDir(node: TreeNode & { type: "dir" }) {
-  const files = filesUnder(node);
+  const files = filesUnder(node).filter((file): file is PrFile => "checked" in file);
   const anyUnchecked = files.some((f) => !f.checked);
   props.store.setCheckedMany(files.map((f) => f.path), anyUnchecked);
+}
+
+function reviewFile(file: TreeNode & { type: "file" }): PrFile | null {
+  return "checked" in file.file ? file.file as PrFile : null;
 }
 
 function toggleFile(path: string, checked: boolean) {
@@ -116,6 +125,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         />
         <span v-else class="hierarchy-slot" aria-hidden="true" />
         <span
+          v-if="!local"
           class="cb"
           :class="{ on: dirStateFor(node) === 'all', part: dirStateFor(node) === 'some' }"
           role="checkbox"
@@ -127,6 +137,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
           <Minus v-if="dirStateFor(node) === 'some'" :size="12" :stroke-width="3" />
           <Check v-else :size="12" :stroke-width="3" />
         </span>
+        <span v-else class="review-slot" aria-hidden="true" />
         <FileIcon :src="folderIcon(node).src" :data-icon-id="folderIcon(node).id" />
         <span class="fname">{{ node.name }}</span>
       </div>
@@ -136,11 +147,12 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         :icon-theme="iconTheme"
         :nodes="node.children"
         :depth="depth + 1"
+        :show-status="showStatus"
       />
       <div
         v-if="node.type === 'file'"
         class="tnode"
-        :class="{ sel: node.file.path === store.selectedPath, checked: node.file.checked }"
+        :class="{ sel: node.file.path === store.selectedPath, checked: reviewFile(node)?.checked }"
         :style="{ paddingLeft: `${10 + depth * 16}px` }"
         role="button"
         tabindex="0"
@@ -149,14 +161,16 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
       >
         <span class="hierarchy-slot" aria-hidden="true" />
         <span
+          v-if="reviewFile(node)"
           class="cb"
-          :class="{ on: node.file.checked }"
+          :class="{ on: reviewFile(node)?.checked }"
           role="checkbox"
-          :aria-checked="node.file.checked"
+          :aria-checked="reviewFile(node)?.checked"
           tabindex="0"
-          @click.stop="toggleFile(node.file.path, node.file.checked)"
-          @keydown.enter.space.stop.prevent="toggleFile(node.file.path, node.file.checked)"
+          @click.stop="toggleFile(node.file.path, reviewFile(node)?.checked ?? false)"
+          @keydown.enter.space.stop.prevent="toggleFile(node.file.path, reviewFile(node)?.checked ?? false)"
         ><Check :size="12" :stroke-width="3" /></span>
+        <span v-else class="review-slot" aria-hidden="true" />
         <FileIcon :src="fileIcon(node.file.path).src" :data-icon-id="fileIcon(node.file.path).id" />
         <span class="fname">{{ fileName(node.file.path) }}</span>
         <span v-if="questionCounts.get(node.file.path)" class="qmark" :title="questionTitle(node.file.path)">
@@ -165,8 +179,8 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
                once there is more than one. -->
           <span v-if="questionCounts.get(node.file.path)! > 1" class="qcount">{{ questionCounts.get(node.file.path) }}</span>
         </span>
-        <span v-if="node.file.changedSince" class="delta-mark" title="Changed since your review" />
-        <span class="st" :class="node.file.status">{{ node.file.status }}</span>
+        <span v-if="reviewFile(node)?.changedSince" class="delta-mark" title="Changed since your review" />
+        <span v-if="showStatus" class="st" :class="node.file.status">{{ node.file.status }}</span>
       </div>
     </template>
   </div>
@@ -189,6 +203,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 .cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint-foreground); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
 .cb.on { border-color: var(--success); color: var(--success); }
 .cb.part { border-color: var(--success); color: var(--success); }
+.review-slot { width: 15px; flex: none; }
 .tnode.checked .fname { color: var(--faint-foreground); }
 .qmark { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); flex: none; }
 .qcount { font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }

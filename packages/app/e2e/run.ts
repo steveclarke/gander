@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   const raceMarkerPath = join(root, "concurrent-race-requests");
   const baseImage = readFileSync(join(import.meta.dirname, "../resources/icon.png"));
   const headImage = readFileSync(join(import.meta.dirname, "../resources/icon-dev.png"));
-  const [persistence, race, launcher, icons, scrollbar, images] = await Promise.all([
+  const [persistence, race, launcher, icons, scrollbar, images, localViewer] = await Promise.all([
     repoFixture("acme/persistence", "Persist reviewed files"),
     repoFixture("acme/race", "Open without corrupting the clone"),
     repoFixture("acme/launcher", "Open from the command line"),
@@ -77,8 +77,16 @@ async function main(): Promise<void> {
       { "assets/logo.png": headImage },
       { "assets/logo.png": baseImage },
     ),
+    repoFixture("acme/local-viewer", "Local viewer fixture", {}, { ".gitignore": "ignored.txt\n" }),
   ]);
-  const fixtures = [persistence, race, launcher, icons, scrollbar, images];
+  const fixtures = [persistence, race, launcher, icons, scrollbar, images, localViewer];
+  const localWorktreePath = join(root, "local-viewer-worktree");
+  await localViewer.fixture.git(["update-ref", "refs/remotes/origin/main", localViewer.baseSha]);
+  await localViewer.fixture.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+  await localViewer.fixture.git(["worktree", "add", localWorktreePath, "feature"]);
+  writeFileSync(join(localWorktreePath, "a.rb"), "class A\n  def local; end\nend\n");
+  writeFileSync(join(localWorktreePath, "untracked.ts"), "export const local = true;\n");
+  writeFileSync(join(localWorktreePath, "ignored.txt"), "not part of the view\n");
   const storage = openStorage(databasePath);
   const service = buildServer({ storage, token: SERVICE_TOKEN, version: SERVICE_VERSION });
   const github = Fastify({ logger: false });
@@ -86,27 +94,6 @@ async function main(): Promise<void> {
   let releaseRaceRequests: (() => void) | undefined;
   const raceRequestsReady = new Promise<void>((resolve) => { releaseRaceRequests = resolve; });
   let raceRequestCount = 0;
-
-  github.get<{ Querystring: { page?: string } }>("/user/repos", async (request, reply) => {
-    if (request.headers.authorization !== `Bearer ${GITHUB_TOKEN}`) {
-      return reply.code(401).send({ message: "wrong test token" });
-    }
-    if (request.query.page && request.query.page !== "1") return [];
-    return [
-      ...fixtures.map((fixture, index) => ({
-        full_name: fixture.repoId,
-        html_url: fixture.url,
-        private: index === 0,
-        archived: false,
-      })),
-      {
-        full_name: "acme/archived-example",
-        html_url: "https://github.com/acme/archived-example",
-        private: false,
-        archived: true,
-      },
-    ];
-  });
 
   github.get<{ Params: { owner: string; repo: string }; Querystring: { page?: string } }>(
     "/repos/:owner/:repo/pulls",
@@ -169,7 +156,11 @@ async function main(): Promise<void> {
       serviceUrl,
       serviceToken: SERVICE_TOKEN,
       settings: DEFAULT_APP_SETTINGS,
-      repos: [],
+      repos: [localViewer, ...fixtures.filter((fixture) => fixture !== localViewer)].map((fixture) => ({
+        repoId: fixture.repoId,
+        url: fixture.url,
+        localPath: fixture === localViewer ? localWorktreePath : fixture.fixture.dir,
+      })),
     }, null, 2));
 
     Object.assign(process.env, {
@@ -179,13 +170,9 @@ async function main(): Promise<void> {
       GANDER_GITHUB_API_URL: githubUrl,
       GANDER_GITHUB_TOKEN: GITHUB_TOKEN,
       GANDER_E2E_USER_DATA: userDataPath,
-      GANDER_E2E_PERSISTENCE_URL: persistence.url,
-      GANDER_E2E_RACE_URL: race.url,
       GANDER_E2E_RACE_MARKER: raceMarkerPath,
       GANDER_E2E_LAUNCHER_REPO: launcher.repoId,
-      GANDER_E2E_ICONS_URL: icons.url,
-      GANDER_E2E_SCROLLBAR_URL: scrollbar.url,
-      GANDER_E2E_IMAGES_URL: images.url,
+      GANDER_E2E_LOCAL_WORKTREE: localWorktreePath,
       // Where the app listens with no allocated socket in the environment: beside the
       // suite's own user data, so this run cannot reach a development app.
       GANDER_E2E_APP_SOCKET: join(userDataPath, "app.sock"),
@@ -209,6 +196,7 @@ async function main(): Promise<void> {
   } finally {
     await Promise.allSettled([service.close(), github.close()]);
     storage.close();
+    await localViewer.fixture.git(["worktree", "remove", "--force", localWorktreePath]);
     for (const fixture of fixtures) rmSync(fixture.fixture.dir, { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });
   }

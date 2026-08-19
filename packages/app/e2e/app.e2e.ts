@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { connect } from "node:net";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { $, $$, browser, expect } from "@wdio/globals";
@@ -14,27 +14,15 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-async function registerAndSelect(url: string, repoName: string, source: "github" | "url" = "github"): Promise<void> {
-  await $(".seg-repo").click();
-  await $("//div[@role='button'][.//span[contains(normalize-space(.), 'Add repository')]]").click();
-  if (source === "url") {
-    await $("#repository-url-tab").click();
-    const input = await $("input[placeholder='https://github.com/owner/repo']");
-    await input.setValue(url);
-    await browser.keys("Enter");
-  } else {
-    const filter = await $("#repository-filter");
-    await filter.waitForDisplayed();
-    await filter.setValue(repoName);
-    const option = await $(`//ul[@aria-label='Available repositories']//button[.//span[contains(@class, 'repo-name') and normalize-space()='${repoName}']]`);
-    await option.waitForDisplayed();
-    await option.click();
-  }
-  await expect($(".seg-repo .val")).toHaveText(expect.stringContaining(repoName));
+async function selectRepository(repoName: string): Promise<void> {
+  await $("button[aria-controls='target-picker']").click();
+  const repo = await $(`//button[contains(@class, 'picker-row')][contains(normalize-space(.), '${repoName}')]`);
+  await repo.waitForDisplayed();
+  await repo.click();
+  await expect($("button[aria-controls='target-picker']")).toHaveText(expect.stringContaining(repoName));
 }
 
 async function openPullRequest(title: string, twice = false): Promise<void> {
-  await $(".seg-review").click();
   const option = await $(`//div[@role='option'][contains(normalize-space(.), '${title}')]`);
   await option.waitForDisplayed();
   if (twice) await option.doubleClick();
@@ -84,7 +72,8 @@ async function selectIconTheme(value: "catppuccin-mocha"): Promise<void> {
 describe("Gander end to end", () => {
   it("opens the built application with the Gander title", async () => {
     await expect(browser).toHaveTitle("Gander");
-    await expect($(".empty")).toHaveText("Pick a repository, then a pull request.");
+    await expect($("button[aria-controls='target-picker']")).toHaveText(expect.stringContaining("local-viewer"));
+    await expect($("button[aria-label='Explorer']")).toBeEnabled();
 
     const nativeWindow = await browser.electron.execute((electron) => {
       const window = electron.BrowserWindow.getAllWindows()[0];
@@ -107,16 +96,16 @@ describe("Gander end to end", () => {
     expect(await browser.execute(() => document.documentElement.dataset.colorTheme)).toBe("Catppuccin Mocha");
 
     if (process.platform === "darwin") {
-      await expect($(".topbar")).toHaveElementClass(expect.stringContaining("integrated-titlebar"));
+      await expect($(".target-bar")).toHaveElementClass(expect.stringContaining("draggable"));
       expect(await browser.execute(() => {
         const region = (selector: string): string =>
           getComputedStyle(document.querySelector<HTMLElement>(selector)!).getPropertyValue("-webkit-app-region");
         return {
-          topbar: region(".topbar"),
-          repository: region(".seg-repo"),
+          topbar: region(".target-bar"),
+          target: region(".target-trigger"),
           settings: region("button[aria-label='Editor settings']"),
         };
-      })).toEqual({ topbar: "drag", repository: "no-drag", settings: "no-drag" });
+      })).toEqual({ topbar: "drag", target: "no-drag", settings: "none" });
     }
   });
 
@@ -249,8 +238,7 @@ describe("Gander end to end", () => {
   });
 
   it("registers a repository and keeps a reviewed file checked after restart", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_PERSISTENCE_URL"), "persistence");
-    await $(".seg-review").click();
+    await selectRepository("persistence");
     await expect($(".stack-group")).toBeDisplayed();
     expect(await browser.execute(() => [...document.querySelectorAll(".stack-group .stack-member")]
       .map((member) => ({
@@ -415,7 +403,7 @@ describe("Gander end to end", () => {
   });
 
   it("renders both sides of a changed image from bounded blob URLs", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_IMAGES_URL"), "images");
+    await selectRepository("images");
     await openPullRequest("Preview changed images");
     await treeRow("logo.png").click();
 
@@ -437,14 +425,46 @@ describe("Gander end to end", () => {
     await expect($("button=Actual size")).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("shows a live stateless local worktree without review controls", async () => {
+    await $("button[aria-controls='target-picker']").click();
+    const repo = await $("//button[contains(@class, 'picker-row')][contains(normalize-space(.), 'local-viewer')]");
+    await repo.click();
+    await $("button[aria-controls='target-picker']").click();
+    const worktree = await $("//button[contains(@class, 'worktree-row')][contains(normalize-space(.), 'feature')]");
+    await worktree.waitForDisplayed();
+    await worktree.click();
+
+    await expect($(".context-toolbar")).toHaveText(expect.stringContaining("feature"));
+    await expect($(".local-progress")).toHaveText("3 changed");
+    expect(await $$('[role="checkbox"]')).toHaveLength(0);
+    await expect($("button[aria-label='Add question (N)']")).not.toBeDisplayed();
+    await expect($("button[aria-label='Questions']")).not.toBeDisplayed();
+    await expect($(".filehead .check")).not.toBeDisplayed();
+    await expect($("button[aria-label='Current Diff']")).toBeDisplayed();
+    await expect(treeRow("ignored.txt")).toBeDisplayed();
+
+    writeFileSync(join(requiredEnv("GANDER_E2E_LOCAL_WORKTREE"), "watched.ts"), "export const watched = true;\n");
+    await treeRow("watched.ts").waitForDisplayed({ timeout: 5_000 });
+    await expect($(".local-progress")).toHaveText("4 changed");
+    await expect($(".error-banner")).not.toBeDisplayed();
+    await $("button[aria-label='Pull Requests']").click();
+    await expect($(".pull-sidebar h1")).toHaveText("Pull Requests");
+    await $("button[aria-label='Explorer']").click();
+    await treeRow("watched.ts").waitForDisplayed();
+    await $("button[aria-label='Current Diff']").click();
+    await expect(treeRow("ignored.txt")).not.toBeDisplayed();
+    await expect($("button[aria-label='Full file']")).toBeDisplayed();
+    await expect($("button[aria-label='Changes against main']")).toBeDisplayed();
+  });
+
   it("shows the overflowing file-tree scrollbar only while the tree is hovered", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_SCROLLBAR_URL"), "scrollbar");
+    await selectRepository("scrollbar");
     await openPullRequest("Scroll a long file tree");
 
-    const tree = await $(".review-surface > .tree");
+    const tree = await $(".view-sidebar .tree.root");
     await tree.waitForDisplayed();
     const treeMetrics = async () => browser.execute(() => {
-      const panel = document.querySelector<HTMLElement>(".review-surface > .tree");
+      const panel = document.querySelector<HTMLElement>(".view-sidebar .tree.root");
       const row = panel?.querySelector<HTMLElement>(".tnode");
       if (!panel || !row) return null;
       return {
@@ -470,7 +490,7 @@ describe("Gander end to end", () => {
   });
 
   it("opens a pull request twice quickly with one valid clone", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_RACE_URL"), "race", "url");
+    await selectRepository("race");
     await openPullRequest("Open without corrupting the clone", true);
     await expect($(".progress")).toHaveText("0/2 reviewed");
     await expect($(".error-banner")).not.toBeDisplayed();
@@ -488,13 +508,13 @@ describe("Gander end to end", () => {
     const reply = await ganderCommand(["--repo", repoId, "--pr", "1"]);
     expect(reply).toEqual({ ok: true, target: { repoId, prNumber: 1 } });
 
-    await expect($(".seg-review")).toHaveText(expect.stringContaining("Open from the command line"));
+    await expect($(".context-toolbar")).toHaveText(expect.stringContaining("Open from the command line"));
     await expect($(".progress")).toHaveText("0/2 reviewed");
     await expect($(".error-banner")).not.toBeDisplayed();
   });
 
   it("renders Catppuccin icons without disturbing file-tree interaction or status alignment", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_ICONS_URL"), "icons");
+    await selectRepository("icons");
     await openPullRequest("Render file icons");
 
     const expectedIcons: Record<string, string> = {

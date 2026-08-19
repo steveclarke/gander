@@ -1,14 +1,16 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, readSync, realpathSync, renameSync, rmSync } from "node:fs";
+import { readdir } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { FileStatus } from "@gander/shared";
+import type { ChangedFile, FileStatus, LocalFile, LocalFileEntry, LocalView, LocalWorktree } from "@gander/shared";
 import { imageMediaType, MAX_IMAGE_BYTES, type ImageSide } from "../image-preview.js";
 
 const FILE_STATUSES: readonly FileStatus[] = ["A", "M", "D", "R"];
 
 function parseFileStatus(raw: string): FileStatus {
+  if (raw === "T") return "M";
   if ((FILE_STATUSES as readonly string[]).includes(raw)) return raw as FileStatus;
   throw new Error(`unrecognized git diff status letter: ${raw}`);
 }
@@ -26,6 +28,8 @@ const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "echo" 
 const CLONE_TIMEOUT_MS = 10 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 60 * 1000;
+const MAX_LOCAL_CONTENT_BYTES = 8 * 1024 * 1024;
+const MAX_EXPLORER_ENTRIES_PER_DIRECTORY = 50_000;
 
 export interface ShowFileResult {
   /** Decoded UTF-8 content, or null if the path is absent at this revision or the blob is binary. */
@@ -51,7 +55,17 @@ export interface GitEngine {
   showFile(cloneDir: string, rev: string, path: string): Promise<ShowFileResult>;
   showImage(cloneDir: string, rev: string, path: string): Promise<ImageSide>;
   resolveRef(cloneDir: string, ref: string): Promise<string>;
+  originUrl(repoDir: string): Promise<string>;
+  worktreeRoot(repoDir: string): Promise<string>;
+  listWorktrees(repoDir: string): Promise<LocalWorktree[]>;
+  localView(worktreeDir: string): Promise<LocalView>;
+  /** Lists one directory only; recursion belongs to explicit Explorer expansion. */
+  listLocalFiles(worktreeDir: string, directory?: string): Promise<LocalFileEntry[]>;
+  localFile(worktreeDir: string, path: string): Promise<LocalFile>;
+  localImage(worktreeDir: string, mergeBaseSha: string, path: string, basePath?: string): Promise<{ base: ImageSide; head: ImageSide }>;
 }
+
+interface DiffPath { path: string; status: FileStatus; basePath: string; }
 
 async function gitPrefix(cloneDir: string, rev: string, path: string, length: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -123,6 +137,130 @@ async function gitBuffer(cwd: string, args: string[], timeoutMs = DEFAULT_TIMEOU
   } catch (err) {
     throw describeGitError(args, err, timeoutMs);
   }
+}
+
+function fileResult(buf: Buffer): ShowFileResult {
+  const hash = createHash("sha256").update(buf).digest("hex");
+  const binary = buf.includes(0) || imageMediaType(buf) !== null;
+  return binary ? { content: null, hash, binary: true } : { content: buf.toString("utf8"), hash, binary: false };
+}
+
+function safeWorkingPath(worktreeDir: string, path: string): string {
+  const root = resolve(worktreeDir);
+  const absolute = resolve(root, path);
+  const fromRoot = relative(root, absolute);
+  if (fromRoot === "" || fromRoot.startsWith("..") || isAbsolute(fromRoot)) {
+    throw new Error(`git returned a path outside the worktree: ${path}`);
+  }
+  return absolute;
+}
+
+function validateExplorerPath(worktreeDir: string, path: string): void {
+  const root = resolve(worktreeDir);
+  const absolute = safeWorkingPath(root, path);
+  const parts = relative(root, absolute).split(/[\\/]/);
+  if (parts.includes(".git")) throw new Error(`Cannot display Git metadata: ${path}`);
+
+  let parent = root;
+  for (const part of parts.slice(0, -1)) {
+    parent = join(parent, part);
+    const stat = lstatSync(parent);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(`Cannot display a file through a non-directory worktree entry: ${path}`);
+    }
+  }
+}
+
+function workingFile(worktreeDir: string, path: string): ShowFileResult {
+  const absolute = safeWorkingPath(worktreeDir, path);
+  if (!existsSync(absolute)) return { content: null, hash: null, binary: false };
+  const stat = lstatSync(absolute);
+  if (stat.isSymbolicLink()) return fileResult(Buffer.from(readlinkSync(absolute)));
+  if (stat.isDirectory()) {
+    const hash = createHash("sha256").update(`directory\0${stat.size}\0${stat.mtimeMs}\0${stat.ctimeMs}`).digest("hex");
+    return { content: null, hash, binary: true };
+  }
+  if (!stat.isFile()) throw new Error(`Cannot display special worktree entry: ${path}`);
+  const fd = openSync(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) throw new Error(`Cannot display non-file worktree entry: ${path}`);
+    // Local views have no content-addressed review state. A metadata-derived digest for an
+    // oversized file keeps the poller bounded while still invalidating when the file moves.
+    if (opened.size > MAX_LOCAL_CONTENT_BYTES) {
+      const hash = createHash("sha256").update(`oversized\0${opened.size}\0${opened.mtimeMs}\0${opened.ctimeMs}`).digest("hex");
+      return { content: null, hash, binary: true };
+    }
+    return fileResult(readFileSync(fd));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function imageSide(bytes: Buffer): ImageSide {
+  const size = bytes.length;
+  const mediaType = imageMediaType(bytes.subarray(0, Math.min(bytes.length, 32)));
+  if (size > MAX_IMAGE_BYTES) return mediaType === null
+    ? { kind: "unsupported", size }
+    : { kind: "too-large", size, limit: MAX_IMAGE_BYTES };
+  return mediaType === null ? { kind: "unsupported", size } : { kind: "image", mediaType, size, bytes };
+}
+
+function workingImage(worktreeDir: string, path: string): ImageSide {
+  const absolute = safeWorkingPath(worktreeDir, path);
+  const stat = lstatSync(absolute);
+  if (stat.isSymbolicLink()) return imageSide(Buffer.from(readlinkSync(absolute)));
+  if (!stat.isFile()) return { kind: "unsupported", size: stat.size };
+  const fd = openSync(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) return { kind: "unsupported", size: opened.size };
+    if (opened.size > MAX_IMAGE_BYTES) {
+      const prefix = Buffer.alloc(Math.min(opened.size, 32));
+      readSync(fd, prefix, 0, prefix.length, 0);
+      return imageMediaType(prefix) === null
+        ? { kind: "unsupported", size: opened.size }
+        : { kind: "too-large", size: opened.size, limit: MAX_IMAGE_BYTES };
+    }
+    return imageSide(readFileSync(fd));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function parseWorktrees(output: string): LocalWorktree[] {
+  return output.split("\0\0").filter(Boolean).flatMap((record) => {
+    const fields = record.split("\0");
+    const value = (name: string): string | undefined => fields.find((field) => field.startsWith(`${name} `))?.slice(name.length + 1);
+    const path = value("worktree");
+    const headSha = value("HEAD");
+    if (!path || !headSha || fields.includes("bare")) return [];
+    const branchRef = value("branch");
+    return [{
+      path,
+      headSha,
+      branch: branchRef?.replace(/^refs\/heads\//, "") ?? null,
+      locked: fields.some((field) => field === "locked" || field.startsWith("locked ")),
+    }];
+  });
+}
+
+function parseDiffPaths(output: string): DiffPath[] {
+  const fields = output.split("\0");
+  const files: DiffPath[] = [];
+  for (let index = 0; index < fields.length;) {
+    const rawStatus = fields[index++];
+    if (!rawStatus) continue;
+    const status = parseFileStatus(rawStatus.charAt(0));
+    const firstPath = fields[index++] ?? "";
+    if (status === "R") {
+      const path = fields[index++] ?? "";
+      files.push({ path, status, basePath: firstPath });
+    } else {
+      files.push({ path: firstPath, status, basePath: firstPath });
+    }
+  }
+  return files;
 }
 
 export function createGitEngine(clonesRoot: string): GitEngine {
@@ -205,15 +343,9 @@ export function createGitEngine(clonesRoot: string): GitEngine {
         if (/does not exist in|exists on disk, but not in/i.test(msg)) return { content: null, hash: null, binary: false };
         throw err;
       }
-      const hash = createHash("sha256").update(buf).digest("hex");
       // NUL byte in the content is the standard cheap binary heuristic (same one git itself
-      // uses internally). Decoding a binary blob as UTF-8 would mangle it into U+FFFD replacement
-      // characters that then get hashed and stored as the "reviewed snapshot" — nonsense.
-      // Some valid image encodings can avoid a NUL in small files. Treat a recognized
-      // image signature as binary too, so its bytes are never decoded or snapshotted as text.
-      const binary = buf.includes(0) || imageMediaType(buf) !== null;
-      if (binary) return { content: null, hash, binary: true };
-      return { content: buf.toString("utf8"), hash, binary: false };
+      // uses internally). Recognized image signatures count as binary too.
+      return fileResult(buf);
     },
 
     async showImage(cloneDir, rev, path) {
@@ -238,6 +370,117 @@ export function createGitEngine(clonesRoot: string): GitEngine {
 
     async resolveRef(cloneDir, ref) {
       return (await git(cloneDir, ["rev-parse", ref])).trim();
+    },
+
+    async originUrl(repoDir) {
+      return (await git(repoDir, ["remote", "get-url", "origin"])).trim();
+    },
+
+    async worktreeRoot(repoDir) {
+      return (await git(repoDir, ["rev-parse", "--show-toplevel"])).trim();
+    },
+
+    async listWorktrees(repoDir) {
+      return parseWorktrees(await git(repoDir, ["worktree", "list", "--porcelain", "-z"]));
+    },
+
+    async localView(worktreeDir) {
+      const worktrees = await this.listWorktrees(worktreeDir);
+      const selectedPath = realpathSync(worktreeDir);
+      const worktree = worktrees.find((candidate) => realpathSync(candidate.path) === selectedPath);
+      if (!worktree) throw new Error(`git worktree list did not include ${worktreeDir}`);
+
+      let defaultRef: string;
+      try {
+        defaultRef = (await git(worktreeDir, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])).trim();
+      } catch (err) {
+        throw new Error(`Cannot determine the default branch for ${worktreeDir}: ${(err as Error).message}`);
+      }
+      const defaultBranch = defaultRef.replace(/^origin\//, "");
+      let comparisonRef = defaultRef;
+      try {
+        await git(worktreeDir, ["rev-parse", "--verify", `refs/heads/${defaultBranch}`]);
+        comparisonRef = `refs/heads/${defaultBranch}`;
+      } catch (err) {
+        // A checkout can have only the remote-tracking default branch. It is still a
+        // valid base; failure of both refs is surfaced by merge-base below.
+        if (!/Needed a single revision|unknown revision|bad revision/i.test((err as Error).message)) throw err;
+      }
+      const mergeBaseSha = (await git(worktreeDir, ["merge-base", comparisonRef, "HEAD"])).trim();
+      const tracked = parseDiffPaths(await git(worktreeDir, ["diff", "--name-status", "-z", "-M", mergeBaseSha, "--"]));
+      const untracked = (await git(worktreeDir, ["ls-files", "--others", "--exclude-standard", "-z"]))
+        .split("\0").filter(Boolean);
+      const paths = [...tracked];
+      const untrackedPaths = new Set(untracked);
+      const seen = new Set(paths.map((file) => file.path));
+      for (const path of untracked) {
+        if (!seen.has(path)) paths.push({ path, status: "A", basePath: path });
+      }
+
+      const files: ChangedFile[] = [];
+      for (const entry of paths) {
+        const base = entry.status === "A"
+          ? { content: null, hash: null }
+          : await this.showFile(worktreeDir, mergeBaseSha, entry.basePath);
+        const head = workingFile(worktreeDir, entry.path);
+        const readded = entry.status === "D" && untrackedPaths.has(entry.path);
+        const status = readded ? "M" : entry.status;
+        // `git rm --cached` leaves the file as an untracked path. The local viewer is
+        // about the resulting working tree, so an identical re-add is unchanged and a
+        // modified re-add is a modification, never a deletion.
+        if (readded && base.hash !== null && base.hash === head.hash) continue;
+        files.push({
+          path: entry.path,
+          ...(entry.basePath === entry.path ? {} : { basePath: entry.basePath }),
+          status,
+          baseContent: base.content,
+          headContent: head.content,
+          baseHash: base.hash,
+          headHash: head.hash,
+        });
+      }
+      files.sort((left, right) => left.path.localeCompare(right.path));
+      return { worktree, defaultBranch, mergeBaseSha, files };
+    },
+
+    async listLocalFiles(worktreeDir, directory = "") {
+      if (directory) validateExplorerPath(worktreeDir, `${directory}/.gander-directory-probe`);
+      const absolute = directory ? join(worktreeDir, directory) : worktreeDir;
+      const entries = await readdir(absolute, { withFileTypes: true });
+      if (entries.length > MAX_EXPLORER_ENTRIES_PER_DIRECTORY) {
+        throw new Error(`Explorer stopped after ${MAX_EXPLORER_ENTRIES_PER_DIRECTORY} entries in ${directory || worktreeDir}`);
+      }
+      return entries
+        .filter((entry) => entry.name !== ".git" && (entry.isDirectory() || entry.isFile() || entry.isSymbolicLink()))
+        .map((entry): LocalFileEntry => ({
+          path: directory ? `${directory}/${entry.name}` : entry.name,
+          kind: entry.isDirectory() ? "directory" : "file",
+        }))
+        .sort((left, right) => left.kind === right.kind
+          ? left.path.localeCompare(right.path)
+          : left.kind === "directory" ? -1 : 1);
+    },
+
+    async localFile(worktreeDir, path) {
+      validateExplorerPath(worktreeDir, path);
+      const file = workingFile(worktreeDir, path);
+      if (file.hash === null) throw new Error(`${path} no longer exists in this worktree`);
+      return { path, content: file.content, hash: file.hash, binary: file.binary };
+    },
+
+    async localImage(worktreeDir, mergeBaseSha, path, basePath = path) {
+      const current = workingFile(worktreeDir, path);
+      const head: ImageSide = current.hash === null
+        ? { kind: "absent" }
+        : workingImage(worktreeDir, path);
+      let base: ImageSide;
+      try {
+        base = await this.showImage(worktreeDir, mergeBaseSha, basePath);
+      } catch (err) {
+        if (/does not exist in|exists on disk, but not in/i.test((err as Error).message)) base = { kind: "absent" };
+        else throw err;
+      }
+      return { base, head };
     },
   };
 }

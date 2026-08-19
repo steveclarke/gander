@@ -11,6 +11,7 @@ import type { QuestionTarget } from "../selection.js";
 import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
 import ImageDiff from "./ImageDiff.vue";
 import type { ImagePreview } from "../../../api.js";
+import type { PrFile } from "@gander/shared";
 
 const props = defineProps<{ store: Store; editorSettings: EditorSettings }>();
 const emit = defineEmits<{ addQuestion: [target: QuestionTarget] }>();
@@ -28,15 +29,19 @@ let imageRequest = 0;
 
 // Only offered once the file has actually moved since it was reviewed. Before that
 // the tab would render an empty diff and mean nothing.
-const canShowDelta = computed(() => current.value?.changedSince === true);
+const canShowDelta = computed(() => currentReviewFile.value?.changedSince === true);
 let editor: monaco.editor.IStandaloneDiffEditor | monaco.editor.IStandaloneCodeEditor | null = null;
 let models: monaco.editor.ITextModel[] = [];
 let lineAction: HTMLButtonElement | null = null;
 let lineActionLine: number | null = null;
 
 const current = computed(
-  () => props.store.view?.files.find((f) => f.path === props.store.selectedPath) ?? null,
+  () => props.store.files().find((f) => f.path === props.store.selectedPath) ?? null,
 );
+const currentReviewFile = computed(() => {
+  const file = current.value;
+  return file && "checked" in file ? file as PrFile : null;
+});
 
 const dirName = computed(() => {
   const parts = current.value?.path.split("/") ?? [];
@@ -45,7 +50,8 @@ const dirName = computed(() => {
 });
 const baseName = computed(() => current.value?.path.split("/").pop() ?? "");
 // The branch the pull request targets — "master" as often as "main".
-const baseRef = computed(() => props.store.view?.pr.baseRef ?? "the base branch");
+const baseRef = computed(() => props.store.localView?.defaultBranch ?? props.store.view?.pr.baseRef ?? "the base branch");
+const headLabel = computed(() => props.store.localView ? "Working tree" : "Head");
 
 // git.ts hashes a binary blob's raw bytes but withholds its content, so `content === null`
 // paired with a real hash (as opposed to a null hash, which means "absent at this revision")
@@ -69,7 +75,7 @@ function trackCursor(): void {
   const ed = headEditor();
   if (!ed) return;
   currentLine.value = ed.getPosition()?.lineNumber ?? null;
-  installLineAction(ed);
+  if (!props.store.isLocal()) installLineAction(ed);
   ed.onDidChangeCursorPosition((e) => {
     currentLine.value = e.position.lineNumber;
     showLineAction(ed, e.position.lineNumber);
@@ -292,15 +298,16 @@ onBeforeUnmount(dispose);
         </button>
       </div>
       <button
+        v-if="currentReviewFile"
         class="check"
-        :class="{ on: current.checked }"
-        @click="store.setChecked(current.path, !current.checked)"
+        :class="{ on: currentReviewFile.checked }"
+        @click="store.setChecked(current.path, !currentReviewFile.checked)"
       >
-        <Check v-if="current.checked" :size="14" :stroke-width="3" />
-        <span>{{ current.checked ? "Reviewed" : "Mark reviewed" }}</span>
+        <Check v-if="currentReviewFile.checked" :size="14" :stroke-width="3" />
+        <span>{{ currentReviewFile.checked ? "Reviewed" : "Mark reviewed" }}</span>
       </button>
     </header>
-    <div v-if="current.changedSince" class="banner">
+    <div v-if="currentReviewFile?.changedSince" class="banner">
       <TriangleAlert :size="14" />
       <span>Changed since your review — un-checked automatically. Re-review and mark again.</span>
     </div>
@@ -311,7 +318,7 @@ onBeforeUnmount(dispose);
       :preview="imagePreview"
       :filename="baseName"
       :base-label="baseRef"
-      head-label="Head"
+      :head-label="headLabel"
       :mode="view"
     />
     <div v-else-if="isBinary" class="binary-note">Binary file — diff cannot be displayed.</div>
