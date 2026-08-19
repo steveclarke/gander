@@ -8,6 +8,7 @@ import Fastify from "fastify";
 import { buildServer } from "../../service/src/server.js";
 import { openStorage } from "../../service/src/storage.js";
 import { makeFixtureRepo, type FixtureRepo } from "../src/main/fixtures.js";
+import { DEFAULT_APP_SETTINGS } from "../src/settings.js";
 
 const run = promisify(execFile);
 const SERVICE_TOKEN = "e2e-service-token";
@@ -150,7 +151,12 @@ async function main(): Promise<void> {
   try {
     const serviceUrl = await service.listen({ host: "127.0.0.1", port: 0 });
     const githubUrl = await github.listen({ host: "127.0.0.1", port: 0 });
-    writeFileSync(configPath, JSON.stringify({ serviceUrl, serviceToken: SERVICE_TOKEN, repos: [] }, null, 2));
+    writeFileSync(configPath, JSON.stringify({
+      serviceUrl,
+      serviceToken: SERVICE_TOKEN,
+      settings: DEFAULT_APP_SETTINGS,
+      repos: [],
+    }, null, 2));
 
     Object.assign(process.env, {
       GANDER_CONFIG: configPath,
