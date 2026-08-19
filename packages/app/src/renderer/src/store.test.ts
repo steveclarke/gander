@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LocalView, PrListItem, PrView } from "@gander/shared";
 import type { GanderApi } from "./api.js";
-import { createStore } from "./store.js";
+import { createStore, readable } from "./store.js";
 import { DEFAULT_APP_SETTINGS } from "../../settings.js";
 
 const prView = (checkedPaths: string[] = []): PrView => ({
@@ -470,5 +470,11 @@ describe("store", () => {
       expect(store.view?.files).toHaveLength(2);
       expect(store.serviceStatus).toEqual({ state: "unreachable", reason: "network down" });
     });
+  });
+
+  it("shows the message without Electron's IPC wrapper", () => {
+    expect(readable("Error invoking remote method 'gander:listPrs': Error: The review service at http://x does not have GET /api/reviews/a%2Fb."))
+      .toBe("The review service at http://x does not have GET /api/reviews/a%2Fb.");
+    expect(readable("plain trouble")).toBe("plain trouble");
   });
 });

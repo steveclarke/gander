@@ -31,6 +31,43 @@ const SnapshotSchema = z.object({
  */
 export type Connection = () => { url: string; token: string };
 
+/**
+ * What a failed request means, in a sentence a reader can act on.
+ *
+ * The reviewer is mid-review, not debugging: a status code, a method, a URL and a JSON
+ * body is a wall of text that says nothing about what to do. A 404 in particular is worth
+ * naming, because on a route this app knows exists it means the service is older than the
+ * app rather than anything being missing.
+ */
+async function describeFailure(res: Response, method: string, baseUrl: string, path: string): Promise<string> {
+  const body = (await res.text().catch(() => "")).trim();
+  // Fastify reports its own errors as JSON; anything else is shown as it came.
+  let detail = body;
+  let missingRoute = false;
+  try {
+    const parsed = JSON.parse(body) as { statusCode?: unknown; message?: unknown; error?: unknown };
+    if (typeof parsed.message === "string") detail = parsed.message;
+    else if (typeof parsed.error === "string") detail = parsed.error;
+    // A Fastify routing 404 means the connected service predates this app. Handlers also
+    // use 404 for missing review resources, and those must retain their own explanation.
+    missingRoute = parsed.statusCode === 404
+      && parsed.error === "Not Found"
+      && typeof parsed.message === "string"
+      && /^Route \S+:.+ not found$/.test(parsed.message);
+  } catch { /* not JSON */ }
+
+  if (res.status === 404 && missingRoute) {
+    return `The review service at ${baseUrl} does not have ${method} ${path}. It is older than this app — update the service, or point this app at one that matches.`;
+  }
+  if (res.status === 401 || res.status === 403) {
+    return `The review service at ${baseUrl} rejected this app's token. Check it in Settings → Connection.`;
+  }
+  if (res.status >= 500) {
+    return `The review service failed on ${method} ${path}${detail === "" ? "" : `: ${detail}`}. Its log will say why.`;
+  }
+  return `The review service refused ${method} ${path}${detail === "" ? "" : `: ${detail}`}.`;
+}
+
 export function createServiceClient(connection: Connection): ServiceClient {
   let checkedConnection: { url: string; status: ServiceStatus } | null = null;
   let recoveryReadRequired = false;
@@ -82,7 +119,11 @@ export function createServiceClient(connection: Connection): ServiceClient {
       && (options.reviewKey === undefined || !reviewsReadSinceRecovery.has(options.reviewKey))) {
       throw new ServiceConnectionError(STALE_SERVICE_DATA_WRITE_ERROR);
     }
-    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    // Content-Type only when something is being sent. Declaring JSON and sending nothing
+    // is a 400 from Fastify — "Body cannot be empty when content-type is set" — which is
+    // how every body-less DELETE failed.
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
     let res: Response;
     try {
       res = await fetch(`${baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -92,7 +133,7 @@ export function createServiceClient(connection: Connection): ServiceClient {
       const consequence = method === "GET" ? "" : " This change was not saved and will not be retried.";
       throw new ServiceConnectionError(`Gander service unreachable at ${baseUrl}: ${(err as Error).message}.${consequence}`);
     }
-    if (!res.ok) throw new Error(`Gander service ${res.status} on ${method} ${baseUrl}${path}: ${await res.text()}`);
+    if (!res.ok) throw new Error(await describeFailure(res, method, baseUrl, path));
     // 204 has no body — reading it as JSON would throw on a successful delete.
     if (res.status === 204) return undefined;
     return res.json();

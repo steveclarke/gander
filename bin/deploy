@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Update the review service on its host.
+#
+# The service runs from a clone rather than a published image, so deploying is a
+# pull and a rebuild. This does that, waits for the container to come back, and
+# checks that what is now running answers the contract version in the deployed
+# ref — a partial or stale deployment is the failure this is here to catch.
+#
+# The host is not written down here: this repository is public, and a deployment
+# is the operator's. Set these once, in a shell profile or a password manager:
+#
+#   GANDER_DEPLOY_HOST   ssh destination, e.g. docker.example.internal
+#   GANDER_DEPLOY_PATH   the checkout on that host (default /home/deploy/docker/gander)
+#
+# Usage: bin/deploy [--ref BRANCH_OR_TAG]
+
+cd "$(dirname "$0")/.."
+
+HOST="${GANDER_DEPLOY_HOST:?set GANDER_DEPLOY_HOST to the ssh destination running the service}"
+REMOTE_PATH="${GANDER_DEPLOY_PATH:-/home/deploy/docker/gander}"
+REF="master"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ref) REF="${2:?--ref needs a branch or tag}"; shift 2 ;;
+    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+echo "==> Deploying ${REF} to ${HOST}:${REMOTE_PATH}"
+ssh "$HOST" bash -euo pipefail -s -- "$REMOTE_PATH" "$REF" <<'REMOTE'
+REMOTE_PATH="$1"
+REF="$2"
+cd "$REMOTE_PATH"
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "Refusing to deploy from a checkout with local changes: ${REMOTE_PATH}" >&2
+  git status --short >&2
+  exit 1
+fi
+git fetch --quiet --all --tags
+git checkout --quiet "$REF"
+# A branch needs the fetched commits merged in; a tag left HEAD detached and is
+# already exactly where it belongs.
+if git symbolic-ref -q HEAD >/dev/null; then
+  git merge --quiet --ff-only "origin/${REF}"
+fi
+echo "    now at $(git log --oneline -1)"
+docker compose up -d --build
+REMOTE
+
+# Read both facts from the deployed checkout and Compose project. This keeps tag
+# deployments independent of the caller's checkout and follows a non-default
+# GANDER_PUBLISH_PORT without duplicating its configuration here.
+DEPLOY_INFO="$(ssh "$HOST" bash -euo pipefail -s -- "$REMOTE_PATH" <<'REMOTE'
+cd "$1"
+EXPECTED="$(sed -n 's/.*SERVICE_VERSION = "\([^"]*\)".*/\1/p' packages/shared/src/index.ts | head -1)"
+[[ -n "$EXPECTED" ]] || { echo "Could not read the deployed SERVICE_VERSION" >&2; exit 1; }
+PUBLISHED="$(docker compose port gander 8390 | head -1)"
+PUBLISHED_PORT="${PUBLISHED##*:}"
+[[ "$PUBLISHED_PORT" =~ ^[0-9]+$ ]] || { echo "Could not determine the published service port from ${PUBLISHED}" >&2; exit 1; }
+printf '%s\t%s\n' "$EXPECTED" "$PUBLISHED_PORT"
+REMOTE
+)"
+IFS=$'\t' read -r EXPECTED PUBLISHED_PORT <<< "$DEPLOY_INFO"
+
+echo "==> Waiting for the service"
+for _ in $(seq 1 30); do
+  # `|| true` because the whole point of the loop is that this fails for a few
+  # seconds while the container starts, and set -e would take the script down with it.
+  REPORTED="$(ssh "$HOST" curl -sf "http://127.0.0.1:${PUBLISHED_PORT}/healthz" 2>/dev/null \
+    | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' || true)"
+  [[ -n "$REPORTED" ]] && break
+  sleep 2
+done
+
+if [[ -z "${REPORTED:-}" ]]; then
+  echo "The service did not answer /healthz. Check: ssh ${HOST} 'cd ${REMOTE_PATH} && docker compose logs --tail 50'" >&2
+  exit 1
+fi
+
+if [[ "$REPORTED" != "$EXPECTED" ]]; then
+  echo "The service answers contract version ${REPORTED}, but ${REF} declares ${EXPECTED}." >&2
+  echo "The container may be stale; check its build and whether SERVICE_VERSION was bumped." >&2
+  exit 1
+fi
+
+echo "==> Serving contract version ${REPORTED}"

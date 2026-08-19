@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Re-record the contract snapshot after deliberately changing the contract.
+# It refuses unless SERVICE_VERSION moved too.
+
+cd "$(dirname "$0")/.."
+
+TSX=packages/service/node_modules/.bin/tsx
+[[ -x "$TSX" ]] || { echo "Dependencies are not installed. Run bin/setup first." >&2; exit 1; }
+
+exec "$(pwd)/$TSX" "$(pwd)/bin/contract-snapshot.ts" "$@"

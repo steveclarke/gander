@@ -82,13 +82,17 @@ describe("checkConnection", () => {
   });
 
   it("allows a newer service with an explicit warning state", async () => {
-    const url = await serve("good-token", "0.2.0");
+    // Derived rather than written down: the contract version moves whenever the contract
+    // does, and a literal here would fail the next time it did.
+    const [major] = SERVICE_VERSION.split(".");
+    const newer = `${Number(major) + 1}.0.0`;
+    const url = await serve("good-token", newer);
     await expect(checkConnection(url, "good-token")).resolves.toEqual({
       ok: true,
-      version: "0.2.0",
+      version: newer,
       compatibility: "newer",
     });
-    await expect(checkServiceStatus(url)).resolves.toMatchObject({ state: "newer", serviceVersion: "0.2.0" });
+    await expect(checkServiceStatus(url)).resolves.toMatchObject({ state: "newer", serviceVersion: newer });
   });
 
   it("rejects a version that cannot participate in the compatibility policy", () => {

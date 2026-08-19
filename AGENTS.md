@@ -17,6 +17,22 @@ maintainer's machines at `~/src/backstage/gander/specs/`. Read it before changin
 behaviour. `docs/STATE.md` says where the project stands. Interface work and the
 agent reply channel are GitHub issues.
 
+Settings are validated strictly, so a config written by an earlier version stops
+the app from starting. While the shape is still settling there are no migrations:
+`bin/fix-config` keeps the values the schema still knows, fills in the new ones,
+and drops the rest.
+
+`SERVICE_VERSION` in `@gander/shared` is the app-to-service contract version, and the
+app checks it when it connects. **Bump it in the same change that alters the
+contract** — a route added or removed, a field the app comes to rely on. Leaving it
+alone lets a stale service answer "the version you wanted", and the mismatch surfaces
+later as a 404 in the middle of a review.
+
+`packages/service/contract.json` records that contract — routes, payload schemas, MCP
+tools — and a test compares it against a running server, so a change fails until the
+version moves. After changing the contract deliberately: bump `SERVICE_VERSION`, then
+run `bin/contract-snapshot`. It refuses while the version is unchanged.
+
 **The repo is public.** No client names, private repo names, or real PR numbers
 in code, comments, commits, or issues.
 
@@ -33,6 +49,9 @@ in code, comments, commits, or issues.
 | Typecheck (all packages) | `pnpm typecheck` |
 | Electron E2E | `pnpm test:e2e` |
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
+| Repair a config the settings schema has outgrown | `bin/fix-config` |
+| Update the service on its host | `bin/deploy` |
+| Re-record the contract after changing it | `bin/contract-snapshot` |
 | Build an unsigned app | `pnpm --filter @gander/app run dist:unsigned` |
 | Isolated working copy | `bin/worktree add <name>` |
 | Check this worktree's MCP bridge | `bin/mcp check` |

@@ -1,0 +1,709 @@
+{
+  "version": "0.2.0",
+  "routes": [
+    "DELETE /api/reviews/:repoId/:prNumber/questions/:id",
+    "DELETE /mcp",
+    "GET /api/reviews/:repoId",
+    "GET /api/reviews/:repoId/:prNumber",
+    "GET /api/reviews/:repoId/:prNumber/questions",
+    "GET /api/reviews/:repoId/:prNumber/snapshot",
+    "GET /healthz",
+    "GET /mcp",
+    "OPTIONS /mcp",
+    "PATCH /mcp",
+    "POST /api/reviews/:repoId/:prNumber/questions",
+    "POST /api/reviews/:repoId/:prNumber/questions/:id/replies",
+    "POST /mcp",
+    "PUT /api/reviews/:repoId/:prNumber/context",
+    "PUT /api/reviews/:repoId/:prNumber/files",
+    "PUT /mcp",
+    "QUERY /mcp",
+    "TRACE /mcp"
+  ],
+  "schemas": {
+    "FileCheckoffSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "baseHash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headHash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checkedAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "machine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "checked",
+        "baseHash",
+        "headHash",
+        "checkedAt",
+        "machine"
+      ]
+    },
+    "FileStatusSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "string",
+      "enum": [
+        "A",
+        "M",
+        "D",
+        "R"
+      ]
+    },
+    "MarkAddressedSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "commitRef": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "commitRef",
+        "note"
+      ]
+    },
+    "NewQuestionReplySchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "NewQuestionSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "path": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "headSha": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "line",
+        "text",
+        "headSha"
+      ]
+    },
+    "OpenTargetSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "repoId": {
+          "type": "string",
+          "pattern": "^[^/]+\\/[^/]+$"
+        },
+        "prNumber": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "repoId",
+        "prNumber"
+      ]
+    },
+    "PrContextSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "headRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "headSha": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stackId": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stackSize": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stackPosition": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "headRef",
+        "title",
+        "headSha",
+        "stackId",
+        "stackSize",
+        "stackPosition"
+      ]
+    },
+    "PutFileStateSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "checked": {
+              "type": "boolean",
+              "const": true
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "baseHash": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "headHash": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "baseContent": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "headContent": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "machine": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "checked",
+            "path",
+            "baseHash",
+            "headHash",
+            "baseContent",
+            "headContent",
+            "machine"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "checked": {
+              "type": "boolean",
+              "const": false
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "checked",
+            "path"
+          ]
+        }
+      ]
+    },
+    "QuestionReplyAuthorSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "string",
+      "enum": [
+        "reviewer",
+        "agent"
+      ]
+    },
+    "QuestionReplySchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "author": {
+          "type": "string",
+          "enum": [
+            "reviewer",
+            "agent"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "author",
+        "text",
+        "createdAt"
+      ]
+    },
+    "QuestionSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "open",
+            "addressed",
+            "resolved"
+          ]
+        },
+        "headSha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "commitRef": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "replies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "author": {
+                "type": "string",
+                "enum": [
+                  "reviewer",
+                  "agent"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "createdAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "author",
+              "text",
+              "createdAt"
+            ]
+          }
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "line",
+        "text",
+        "state",
+        "headSha",
+        "commitRef",
+        "note",
+        "createdAt",
+        "replies"
+      ]
+    },
+    "QuestionStateSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "string",
+      "enum": [
+        "open",
+        "addressed",
+        "resolved"
+      ]
+    },
+    "ReviewStateSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "repoId": {
+          "type": "string",
+          "pattern": "^[^/]+\\/[^/]+$"
+        },
+        "prNumber": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "checked": {
+                "type": "boolean"
+              },
+              "baseHash": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "headHash": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "checkedAt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "machine": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "checked",
+              "baseHash",
+              "headHash",
+              "checkedAt",
+              "machine"
+            ]
+          }
+        }
+      },
+      "required": [
+        "repoId",
+        "prNumber",
+        "files"
+      ]
+    }
+  },
+  "mcpTools": [
+    {
+      "name": "get_review_questions",
+      "description": "Questions the reviewer has left on a pull request, with the file and line each one is about. Derive repo and branch from the working directory. Returns open questions by default — those are the ones still needing work. The response always counts open, addressed, and resolved questions so hidden states are visible. The response names the branch, title, and stack position of the pull request the questions belong to: check it matches the checkout being worked in, because a stacked pull request's sibling is a different branch with different questions.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "Repository as \"owner/name\", e.g. \"acme/atlas\"."
+          },
+          "branch": {
+            "description": "The working branch. Use this when the pull request number is unknown.",
+            "type": "string"
+          },
+          "prNumber": {
+            "description": "Pull request number, if known.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "includeAddressed": {
+            "description": "Also return questions already marked addressed. Defaults to false.",
+            "type": "boolean"
+          },
+          "includeResolved": {
+            "description": "Also return questions the reviewer has resolved. Defaults to false.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "repo"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "mark_question_addressed",
+      "description": "Record that a question has been acted on. Use it only once the work is actually done and committed. This does not resolve the question — the reviewer resolves it by re-reviewing the file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Question id from get_review_questions."
+          },
+          "commitRef": {
+            "description": "Commit that addressed it.",
+            "type": "string"
+          },
+          "note": {
+            "description": "One line on what changed.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "reply_to_question",
+      "description": "Add an agent reply to a review question. Use this for clarification, reasoning, or a response that should remain with the review. Replying does not address or resolve the question and does not change its lifecycle state.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Question id from get_review_questions."
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The reply to add to the question thread."
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ]
+}

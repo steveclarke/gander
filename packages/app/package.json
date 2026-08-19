@@ -1,6 +1,6 @@
 {
   "name": "@gander/app",
-  "version": "0.1.4",
+  "version": "0.1.8",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "electron-vite build",
     "test:e2e": "pnpm build && tsx e2e/run.ts",
     "typecheck": "vue-tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
-    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
     "dist:linux": "electron-vite build && electron-builder --linux",
     "dist:unsigned": "electron-vite build && electron-builder --mac --dir -c.mac.identity=null -c.mac.notarize=false"
   },
