@@ -193,14 +193,14 @@ onBeforeUnmount(flushSave);
 .setting label, .setting-label { display: block; color: var(--workbench-foreground); font-size: 13px; font-weight: 650; margin-bottom: 2px; }
 .setting > input, .size-row input {
   width: 100%; min-width: 0; margin-top: 8px; padding: 8px 10px;
-  border: 1px solid var(--workbench-border); border-radius: 6px;
+  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
   outline: none; background: var(--input-background); color: var(--workbench-foreground); font: 13px/1.4 var(--mono);
 }
 .setting input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
 .setting input:disabled { opacity: .65; }
 .size-row { display: flex; align-items: center; gap: 8px; width: 130px; color: var(--faint-foreground); }
 .preview-setting { margin-top: 28px; }
-.preview { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; margin-top: 8px; padding: 12px 14px; border: 1px solid var(--workbench-border); border-radius: 6px; background: var(--input-background); color: var(--workbench-foreground); white-space: nowrap; }
+.preview { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; margin-top: 8px; padding: 12px 14px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--input-background); color: var(--workbench-foreground); white-space: nowrap; }
 .preview span:nth-child(2) { padding-left: 16px; }
 .preview span:nth-child(3) { padding-left: 32px; }
 .error { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }

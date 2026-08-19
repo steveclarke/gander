@@ -51,7 +51,7 @@ watch(() => props.open, (open) => {
      the window controls. */
   inset: 0; margin: auto;
   min-width: 340px; max-width: 460px; padding: 18px 20px 16px;
-  border: 1px solid var(--workbench-border); border-radius: 8px;
+  border: 1px solid var(--workbench-border); border-radius: var(--radius-lg);
   background: var(--panel-background); color: var(--workbench-foreground);
   box-shadow: 0 16px 40px rgb(0 0 0 / .45);
 }
@@ -60,7 +60,7 @@ h2 { font-size: 14px; line-height: 1.35; }
 .detail { margin-top: 7px; color: var(--faint-foreground); font-size: 12px; line-height: 1.5; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 button {
-  height: 28px; padding: 0 13px; border-radius: 5px; border: 1px solid var(--workbench-border);
+  height: 28px; padding: 0 13px; border-radius: var(--radius-md); border: 1px solid var(--workbench-border);
   background: var(--input-background); color: var(--workbench-foreground);
   font: inherit; font-size: 12px; cursor: pointer;
 }

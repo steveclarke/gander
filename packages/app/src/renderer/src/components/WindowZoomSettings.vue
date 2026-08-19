@@ -110,7 +110,7 @@ onBeforeUnmount(flushSave);
 .level-row { display: flex; align-items: center; gap: 9px; width: 150px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .level-row input {
   width: 100%; min-width: 0; margin-top: 8px; padding: 8px 10px;
-  border: 1px solid var(--workbench-border); border-radius: 6px;
+  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
   outline: none; background: var(--input-background); color: var(--workbench-foreground); font: 13px/1.4 var(--mono);
 }
 .level-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }

@@ -37,7 +37,7 @@ onBeforeUnmount(dispose);
 
 <style scoped>
 .pane { height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-header { height: 36px; box-sizing: border-box; display: flex; align-items: center; padding-inline: 14px; border-bottom: 1px solid var(--workbench-border); background: var(--panel-background); font: 12.5px var(--mono); }
+header { height: 35px; box-sizing: border-box; display: flex; align-items: center; padding-inline: 14px; border-bottom: 1px solid var(--workbench-border); background: var(--panel-background); font: 12.5px var(--mono); }
 .directory { color: var(--faint-foreground); }
 .editor { flex: 1; min-height: 0; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--faint-foreground); }

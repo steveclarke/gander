@@ -101,11 +101,11 @@ async function reset(): Promise<void> {
 .setting code { color: var(--muted-foreground); font: 11.5px var(--mono); }
 .setting select {
   width: min(420px, 100%); margin-top: 8px; padding: 8px 34px 8px 10px;
-  border: 1px solid var(--workbench-border); border-radius: 6px;
+  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
   outline: none; background: var(--input-background); color: var(--workbench-foreground); font: inherit; font-size: 13px;
 }
 .setting select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
 .source { margin-top: 7px; }
-.swatches { display: flex; width: min(420px, 100%); height: 36px; overflow: hidden; border: 1px solid var(--workbench-border); border-radius: 6px; }
+.swatches { display: flex; width: min(420px, 100%); height: 36px; overflow: hidden; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); }
 .swatches span { flex: 1; min-width: 2px; }
 </style>
