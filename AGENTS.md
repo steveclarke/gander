@@ -22,6 +22,12 @@ the app from starting. While the shape is still settling there are no migrations
 `bin/fix-config` keeps the values the schema still knows, fills in the new ones,
 and drops the rest.
 
+`SERVICE_VERSION` in `@gander/shared` is the app-to-service contract version, and the
+app checks it when it connects. **Bump it in the same change that alters the
+contract** — a route added or removed, a field the app comes to rely on. Leaving it
+alone lets a stale service answer "the version you wanted", and the mismatch surfaces
+later as a 404 in the middle of a review.
+
 **The repo is public.** No client names, private repo names, or real PR numbers
 in code, comments, commits, or issues.
 
