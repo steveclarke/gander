@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Bring a Gander config file up to the current settings schema.
+#
+# Settings are validated strictly: a key the schema no longer knows, or one it
+# now expects, stops the app from starting. While the shape is still settling
+# this repairs a config in place rather than the app carrying migrations for
+# versions nobody but its author ran.
+#
+# Keys the schema still knows keep their values. Missing ones get defaults.
+# Anything it no longer knows is dropped.
+#
+# Usage: bin/fix-config [path]   (default: ~/.config/gander/config.json)
+
+cd "$(dirname "$0")/.."
+
+# The app's own tsx, run directly rather than through pnpm: pnpm checks the workspace
+# before running anything, and a checkout whose node_modules are stale stops on that
+# instead of repairing the config.
+TSX=packages/app/node_modules/.bin/tsx
+[[ -x "$TSX" ]] || { echo "Dependencies are not installed. Run bin/setup first." >&2; exit 1; }
+
+exec "$(pwd)/$TSX" "$(pwd)/bin/fix-config.ts" "$@"

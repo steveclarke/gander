@@ -14,7 +14,14 @@ function parsePrNumber(raw: string, reply: FastifyReply): number | undefined {
   return n;
 }
 
-export function buildServer(opts: { storage: Storage; token: string; version: string; replyWaiters?: ReviewerReplyWaiters }): FastifyInstance {
+export function buildServer(opts: {
+  storage: Storage;
+  token: string;
+  version: string;
+  replyWaiters?: ReviewerReplyWaiters;
+  /** Called for each route as it is registered. The contract snapshot reads the route table this way. */
+  onRoute?: (method: string, path: string) => void;
+}): FastifyInstance {
   // Held reply waits must not make shutdown wait for their timeout. Destroying
   // active sockets triggers the same cleanup path as a disconnected MCP client.
   const app = Fastify({ logger: false, forceCloseConnections: true });
@@ -25,6 +32,16 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
     replyWaiters.close();
     await mcpHandler.close();
   });
+
+  // Added before any route, because the hook only sees registrations that follow it.
+  if (opts.onRoute) {
+    const report = opts.onRoute;
+    app.addHook("onRoute", (route) => {
+      const methods = Array.isArray(route.method) ? route.method : [route.method];
+      // HEAD is generated for every GET; it is not a separate promise to anyone.
+      for (const method of methods) if (method !== "HEAD") report(method, route.path);
+    });
+  }
 
   app.get("/healthz", async () => ({ ok: true, version: opts.version }));
 

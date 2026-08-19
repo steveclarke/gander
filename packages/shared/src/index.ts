@@ -1,7 +1,19 @@
 import { z } from "zod";
 
 /** The service API version this workspace implements and the desktop app understands. */
-export const SERVICE_VERSION = "0.1.0";
+/**
+ * The version of the wire contract between the app and the service, checked when the app
+ * connects.
+ *
+ * **Bump this in the same change that alters the contract** — a route added or removed, a
+ * field a response gains that the app relies on, a payload shape the service starts
+ * requiring. It is the only thing that lets a running app tell a service that is behind it
+ * from one that is level with it. Leaving it alone means a stale service answers "the
+ * version you wanted", and the mismatch surfaces later as a 404 in the middle of a review.
+ *
+ * Not the app's release version: releases happen far more often than the contract moves.
+ */
+export const SERVICE_VERSION = "0.3.0";
 
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;

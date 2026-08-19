@@ -9,7 +9,7 @@ import { AppSettingsSchema, DEFAULT_APP_SETTINGS, type AppSettings } from "../se
 // an arbitrary string into both a filesystem path (clone directory name) and a GitHub API URL.
 const RepoIdSchema = z.string().regex(/^[^/]+\/[^/]+$/, "must look like owner/repo");
 
-const ConfigSchema = z
+export const ConfigSchema = z
   .object({
     // Empty until the reviewer enters a connection. An installed app has no dev stack to
     // generate one, so it has to start unconfigured, show its settings, and be told —

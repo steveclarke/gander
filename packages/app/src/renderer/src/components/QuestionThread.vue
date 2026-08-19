@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import type { Question } from "@gander/shared";
+import ConfirmDialog from "./ConfirmDialog.vue";
 import {
   Check,
   CheckCheck,
@@ -24,6 +25,18 @@ const emit = defineEmits<{
   delete: [questionId: number];
 }>();
 const draft = defineModel<string>({ default: "" });
+
+// Deleting a question is the only thing here that cannot be taken back: the text, the
+// line it was captured against, and any reasoning an agent replied with all go together.
+const confirmingDelete = shallowRef(false);
+
+const deleteDetail = computed(() => {
+  const replies = props.question.replies.length;
+  const thread = replies === 0
+    ? "The question"
+    : `The question and ${replies === 1 ? "its reply" : `its ${replies} replies`}`;
+  return `${thread} will be removed from the review. This cannot be undone.`;
+});
 
 // A keyed thread instance survives service refreshes, so a reviewer's disclosure
 // choice remains stable even when a reply replaces the Question object.
@@ -145,12 +158,21 @@ function formatTimestamp(value: string): string {
           class="delete"
           type="button"
           :aria-label="`Delete question ${question.id}`"
-          @click="emit('delete', question.id)"
+          @click="confirmingDelete = true"
         >
           <Trash2 :size="13" aria-hidden="true" />
           Delete
         </button>
       </div>
+
+      <ConfirmDialog
+        :open="confirmingDelete"
+        :title="`Delete this question?`"
+        :detail="deleteDetail"
+        confirm-label="Delete"
+        @cancel="confirmingDelete = false"
+        @confirm="confirmingDelete = false; emit('delete', question.id)"
+      />
     </section>
   </li>
 </template>

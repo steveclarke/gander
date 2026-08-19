@@ -45,6 +45,19 @@ export interface Store {
   progress(): { done: number; total: number };
 }
 
+/**
+ * The message without Electron's plumbing in front of it.
+ *
+ * An error thrown in the main process arrives wrapped: "Error invoking remote method
+ * 'gander:listPrs': Error: ...". That tells the reviewer which IPC channel failed, in a
+ * banner whose only job is to say what went wrong.
+ */
+export function readable(message: string): string {
+  return message
+    .replace(/^Error invoking remote method '[^']*':\s*/, "")
+    .replace(/^(?:Error|TypeError):\s*/, "");
+}
+
 export function createStore(api: GanderApi): Store {
   function syncCurrentProgress(): void {
     if (!store.view) return;
@@ -225,7 +238,7 @@ export function createStore(api: GanderApi): Store {
     try {
       await fn();
     } catch (err) {
-      store.error = (err as Error).message;
+      store.error = readable((err as Error).message);
       // Failed service writes already surface above; update the persistent status too.
       // This is only a health read, never a retry of the authored-state mutation.
       await store.checkService();
