@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "bin/repair-electron",
     "test": "vitest run",
     "test:e2e": "pnpm --filter @gander/app test:e2e",
     "typecheck": "pnpm -r run typecheck"

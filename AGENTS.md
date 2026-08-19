@@ -73,9 +73,12 @@ another worktree's port, token, config, database, or process.
 **Electron install trap:** Electron 33's extract-zip silently truncates under
 Node 24, leaving a `node_modules/electron/dist` of a few hundred KB while the
 install script exits 0. E2E then fails with `chromedriver ENOENT` or
-`DevToolsActivePort file doesn't exist`. `bin/setup` detects this and re-runs
-only the Electron download scripts under Node 22 via mise — rerun `bin/setup`
-rather than debugging the binaries.
+`DevToolsActivePort file doesn't exist`. The root `postinstall` hook runs
+`bin/repair-electron`, which detects this and re-runs only the Electron download
+scripts under Node 22 via mise, so every `pnpm install` repairs itself. If the
+binaries are broken anyway, run `bin/repair-electron` rather than debugging
+them. Both the script and the hook come out when Electron is upgraded past the
+broken extract-zip.
 
 ## Architecture
 
