@@ -16,7 +16,7 @@ fi
 
 case "${1:-serve}" in
   serve)
-    exec pnpm --silent exec tsx packages/app/src/main/agent-bridge-main.ts
+    exec pnpm --silent --filter @gander/app exec tsx packages/app/src/main/agent-bridge-main.ts
     ;;
   codex)
     shift
@@ -71,7 +71,7 @@ case "${1:-serve}" in
       "$@"
     ;;
   hook-session)
-    exec pnpm --silent exec tsx packages/app/src/main/agent-session-hook.ts
+    exec pnpm --silent --filter @gander/app exec tsx packages/app/src/main/agent-session-hook.ts
     ;;
   *)
     echo "Usage: bin/gander-agent [serve|codex|claude] [agent arguments...]" >&2

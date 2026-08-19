@@ -19,7 +19,7 @@ describe("Codex session hook", () => {
     const outputPath = join(directory, "session-id");
     const result = spawnSync(
       "pnpm",
-      ["--silent", "exec", "tsx", resolve("packages/app/src/main/agent-session-hook.ts")],
+      ["--silent", "--filter", "@gander/app", "exec", "tsx", resolve("packages/app/src/main/agent-session-hook.ts")],
       {
         cwd: resolve("."),
         env: { ...process.env, GANDER_CODEX_SESSION_FILE: outputPath },
@@ -38,7 +38,7 @@ describe("Codex session hook", () => {
 
     const childResult = spawnSync(
       "pnpm",
-      ["--silent", "exec", "tsx", resolve("packages/app/src/main/agent-session-hook.ts")],
+      ["--silent", "--filter", "@gander/app", "exec", "tsx", resolve("packages/app/src/main/agent-session-hook.ts")],
       {
         cwd: resolve("."),
         env: { ...process.env, GANDER_CODEX_SESSION_FILE: outputPath },

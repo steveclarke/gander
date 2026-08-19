@@ -31,7 +31,7 @@ async function connectBridge(extraEnv: Record<string, string> = {}): Promise<Cli
   const bridgeClient = new Client({ name: "bridge-test-client", version: "1.0.0" });
   const transport = new StdioClientTransport({
     command: "pnpm",
-    args: ["--silent", "exec", "tsx", resolve("packages/app/src/main/agent-bridge-main.ts")],
+    args: ["--silent", "--filter", "@gander/app", "exec", "tsx", resolve("packages/app/src/main/agent-bridge-main.ts")],
     cwd: resolve("."),
     env: childEnvironment(extraEnv),
     stderr: "pipe",
