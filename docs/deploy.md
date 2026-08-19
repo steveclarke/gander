@@ -38,7 +38,7 @@ It is the only state; back up the volume and you have backed up every review.
 To update by hand: `git pull && docker compose up -d --build`.
 
 `bin/deploy` does the same over ssh, then waits for the container and checks that
-what came back answers the contract version the checkout expects — a service left
+what came back answers the contract version the deployed ref declares — a service left
 behind the app is the failure worth catching at deploy time rather than mid-review:
 
 ```bash

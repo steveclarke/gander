@@ -2,6 +2,7 @@ import { chmodSync, copyFileSync, existsSync, readFileSync, writeFileSync } from
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { AppSettingsSchema, DEFAULT_APP_SETTINGS } from "../packages/app/src/settings.js";
+import { ConfigSchema } from "../packages/app/src/main/config.js";
 
 const path = process.argv[2] ?? join(homedir(), ".config", "gander", "config.json");
 if (!existsSync(path)) {
@@ -51,7 +52,17 @@ const after: Json = {
   repos: Array.isArray(before.repos) ? before.repos : [],
 };
 
-const changed = JSON.stringify(before) !== JSON.stringify(after);
+const repaired = ConfigSchema.safeParse(after);
+if (!repaired.success) {
+  console.error(`Could not repair ${path}:`);
+  for (const issue of repaired.error.issues) {
+    console.error(`  ${issue.path.join(".") || "config"}: ${issue.message}`);
+  }
+  console.error("Fix those values by hand. The original file has not been changed.");
+  process.exit(1);
+}
+
+const changed = JSON.stringify(before) !== JSON.stringify(repaired.data);
 if (!changed) {
   console.log(`${path} already matches the current schema.`);
   process.exit(0);
@@ -59,9 +70,9 @@ if (!changed) {
 
 copyFileSync(path, `${path}.bak`);
 chmodSync(`${path}.bak`, 0o600);
-writeFileSync(path, `${JSON.stringify(after, null, 2)}\n`, { mode: 0o600 });
+writeFileSync(path, `${JSON.stringify(repaired.data, null, 2)}\n`, { mode: 0o600 });
 chmodSync(path, 0o600);
 
-const dropped = Object.keys(before).filter((k) => !(k in after));
+const dropped = Object.keys(before).filter((k) => !(k in repaired.data));
 console.log(`Repaired ${path} (previous kept as ${path}.bak)`);
 if (dropped.length > 0) console.log(`  dropped: ${dropped.join(", ")}`);

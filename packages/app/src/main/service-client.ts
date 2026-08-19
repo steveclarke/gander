@@ -43,13 +43,20 @@ async function describeFailure(res: Response, method: string, baseUrl: string, p
   const body = (await res.text().catch(() => "")).trim();
   // Fastify reports its own errors as JSON; anything else is shown as it came.
   let detail = body;
+  let missingRoute = false;
   try {
-    const parsed = JSON.parse(body) as { message?: unknown; error?: unknown };
+    const parsed = JSON.parse(body) as { statusCode?: unknown; message?: unknown; error?: unknown };
     if (typeof parsed.message === "string") detail = parsed.message;
     else if (typeof parsed.error === "string") detail = parsed.error;
+    // A Fastify routing 404 means the connected service predates this app. Handlers also
+    // use 404 for missing review resources, and those must retain their own explanation.
+    missingRoute = parsed.statusCode === 404
+      && parsed.error === "Not Found"
+      && typeof parsed.message === "string"
+      && /^Route \S+:.+ not found$/.test(parsed.message);
   } catch { /* not JSON */ }
 
-  if (res.status === 404) {
+  if (res.status === 404 && missingRoute) {
     return `The review service at ${baseUrl} does not have ${method} ${path}. It is older than this app — update the service, or point this app at one that matches.`;
   }
   if (res.status === 401 || res.status === 403) {
