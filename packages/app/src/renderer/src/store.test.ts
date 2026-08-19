@@ -51,6 +51,8 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     reviewedSnapshot: async () => null,
     imagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
     openLocal: async () => { throw new Error("no local fixture"); },
+    listLocalFiles: async () => [{ path: "working.ts" }],
+    localFile: async (_path, filePath) => ({ path: filePath, content: "new\n", hash: "hash", binary: false }),
     refreshLocal: async () => { throw new Error("no local fixture"); },
     localImagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
     closeLocal: async () => {},
@@ -86,7 +88,8 @@ describe("store", () => {
     const store = createStore(fakeApi());
     await store.loadRepos();
     await store.openTarget({ repoId: "acme/atlas", prNumber: null });
-    expect(store.currentRepoId).toBe("acme/atlas");
+    expect(store.navigatorRepoId).toBe("acme/atlas");
+    expect(store.currentRepoId).toBeNull();
     expect(store.prs).toHaveLength(1);
     expect(store.view).toBeNull();
   });
@@ -100,7 +103,7 @@ describe("store", () => {
     await store.loadRepos();
     await store.openTarget({ repoId: "acme/new", prNumber: null });
     expect(added).toEqual(["https://github.com/acme/new"]);
-    expect(store.currentRepoId).toBe("acme/new");
+    expect(store.navigatorRepoId).toBe("acme/new");
     expect(store.error).toBeNull();
   });
 
@@ -129,7 +132,8 @@ describe("store", () => {
       listRepos: async () => [{ repoId: "acme/new", url: "https://github.com/acme/new" }],
     }));
     await store.addRepo("https://github.com/acme/new");
-    expect(store.currentRepoId).toBe("acme/new");
+    expect(store.navigatorRepoId).toBe("acme/new");
+    expect(store.currentRepoId).toBeNull();
     expect(store.prs).toHaveLength(1);
   });
 
@@ -147,6 +151,66 @@ describe("store", () => {
     expect(store.files()).toEqual(opened.files);
     expect(store.selectedPath).toBe("working.ts");
     expect(store.progress()).toEqual({ done: 0, total: 0 });
+    expect(store.tabs).toEqual([expect.objectContaining({ type: "local", label: "feature", surface: "explorer" })]);
+    expect(store.localFile?.content).toBe("new\n");
+  });
+
+  it("keeps worktrees and pull requests open as switchable context tabs", async () => {
+    const opened = localView();
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+    }));
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+    const localKey = store.activeTabKey!;
+    store.showLocalSurface("changes");
+    await store.openPr(1);
+    const prKey = store.activeTabKey!;
+
+    expect(store.tabs).toHaveLength(2);
+    expect(prKey).not.toBe(localKey);
+    await store.activateTab(localKey);
+    expect(store.localView?.worktree.path).toBe(opened.worktree.path);
+    expect(store.localSurface).toBe("changes");
+  });
+
+  it("browses another repository without disturbing the active tab or local watcher", async () => {
+    const opened = localView();
+    let closeCalls = 0;
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+      closeLocal: async () => { closeCalls++; },
+    }));
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+    const activeKey = store.activeTabKey;
+
+    await store.selectRepo("acme/other");
+
+    expect(store.navigatorRepoId).toBe("acme/other");
+    expect(store.currentRepoId).toBe("acme/atlas");
+    expect(store.localView).toEqual(opened);
+    expect(store.activeTabKey).toBe(activeKey);
+    expect(closeCalls).toBe(0);
+  });
+
+  it("does not let a slow repository load replace the newer navigator selection", async () => {
+    let resolveFirst!: (prs: PrView["pr"][]) => void;
+    const first = new Promise<PrView["pr"][]>((resolve) => { resolveFirst = resolve; });
+    const store = createStore(fakeApi({
+      listPrs: async (repoId) => repoId === "acme/first" ? first : [{ ...prView().pr, number: 2, title: "Second" }],
+    }));
+
+    const slow = store.selectRepo("acme/first");
+    await store.selectRepo("acme/second");
+    resolveFirst([{ ...prView().pr, title: "First" }]);
+    await slow;
+
+    expect(store.navigatorRepoId).toBe("acme/second");
+    expect(store.prs.map((pr) => pr.title)).toEqual(["Second"]);
   });
 
   it("applies watched local changes and surfaces watcher failures", async () => {
@@ -158,6 +222,7 @@ describe("store", () => {
     }));
     await store.selectRepo("acme/atlas");
     await store.openLocal(initial.worktree.path);
+    store.showLocalSurface("changes");
 
     const next = localView([{ path: "new-file.ts", status: "A", baseContent: null, headContent: "new\n", baseHash: null, headHash: "next" }]);
     notify?.({ path: initial.worktree.path, view: next, error: null });
@@ -166,6 +231,36 @@ describe("store", () => {
 
     notify?.({ path: initial.worktree.path, view: null, error: "git diff failed: permission denied" });
     expect(store.error).toContain("permission denied");
+  });
+
+  it("discards an Explorer refresh that finishes after switching worktrees", async () => {
+    const first = localView();
+    const second = { ...localView(), worktree: { ...localView().worktree, path: "/tmp/second", branch: "second" } };
+    let notify: Parameters<GanderApi["onLocalViewChanged"]>[0] | undefined;
+    let deferFirst = false;
+    let resolveOld!: (files: Array<{ path: string }>) => void;
+    const store = createStore(fakeApi({
+      openLocal: async (_repo, path) => path === first.worktree.path ? first : second,
+      listLocalFiles: async (path) => {
+        if (path === first.worktree.path && deferFirst) return new Promise((resolve) => { resolveOld = resolve; });
+        return [{ path: path === first.worktree.path ? "first.ts" : "second.ts" }];
+      },
+      localFile: async (_path, filePath) => ({ path: filePath, content: filePath, hash: filePath, binary: false }),
+      onLocalViewChanged: (listener) => { notify = listener; return () => {}; },
+    }));
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(first.worktree.path);
+    deferFirst = true;
+    notify?.({ path: first.worktree.path, view: first, error: null });
+    await Promise.resolve();
+    await store.openLocal(second.worktree.path);
+    resolveOld([{ path: "stale.ts" }]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.localView?.worktree.path).toBe(second.worktree.path);
+    expect(store.localFiles).toEqual([{ path: "second.ts" }]);
+    expect(store.localFile?.path).toBe("second.ts");
   });
 
   it("captures errors into store.error instead of throwing", async () => {

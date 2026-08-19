@@ -4,7 +4,7 @@ import type { PrSummary } from "@gander/shared";
 import { Layers3 } from "lucide-vue-next";
 import StackPosition from "./StackPosition.vue";
 
-const props = defineProps<{ prs: PrSummary[] }>();
+const props = defineProps<{ prs: PrSummary[]; selectedPrNumber?: number | null }>();
 const emit = defineEmits<{ select: [prNumber: number] }>();
 
 type ReviewGroup =
@@ -60,6 +60,7 @@ function select(prNumber: number): void {
           :key="pr.number"
           class="sw-item stack-member"
           role="option"
+          :aria-selected="pr.number === selectedPrNumber"
           tabindex="0"
           @click="select(pr.number)"
           @keydown.enter.space.prevent="select(pr.number)"
@@ -79,6 +80,7 @@ function select(prNumber: number): void {
         v-else
         class="sw-item standalone-item"
         role="option"
+        :aria-selected="group.pr.number === selectedPrNumber"
         tabindex="0"
         @click="select(group.pr.number)"
         @keydown.enter.space.prevent="select(group.pr.number)"

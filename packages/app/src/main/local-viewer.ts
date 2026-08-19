@@ -1,4 +1,4 @@
-import type { LocalView } from "@gander/shared";
+import type { LocalFileEntry, LocalView } from "@gander/shared";
 import type { GitEngine } from "./git.js";
 
 export type LocalViewUpdate =
@@ -11,13 +11,14 @@ export interface LocalViewWatcher {
 
 const POLL_MS = 500;
 
-function identity(view: LocalView): string {
+function identity(view: LocalView, explorerFiles: LocalFileEntry[]): string {
   return JSON.stringify({
     headSha: view.worktree.headSha,
     branch: view.worktree.branch,
     defaultBranch: view.defaultBranch,
     mergeBaseSha: view.mergeBaseSha,
     files: view.files.map((file) => [file.path, file.status, file.baseHash, file.headHash]),
+    explorerFiles: explorerFiles.map((file) => file.path),
   });
 }
 
@@ -33,7 +34,13 @@ export async function watchLocalView(
   onUpdate: (update: LocalViewUpdate) => void,
   initialView?: LocalView,
 ): Promise<LocalViewWatcher> {
-  let previous = identity(initialView ?? await git.localView(worktreePath));
+  const [firstView, firstExplorerFiles] = await Promise.all([
+    initialView ?? git.localView(worktreePath),
+    git.listLocalFiles(worktreePath),
+  ]);
+  let previous = identity(firstView, firstExplorerFiles);
+  let explorerFiles = firstExplorerFiles;
+  let explorerTick = 0;
   let previousError: string | null = null;
   let closed = false;
   let computing = false;
@@ -43,7 +50,11 @@ export async function watchLocalView(
     computing = true;
     try {
       const view = await git.localView(worktreePath);
-      const next = identity(view);
+      // Walking a complete filesystem tree every 500ms is bounded but unnecessarily
+      // expensive. Diff/ref state stays responsive; ignored-only additions can lag by at
+      // most two seconds before the Explorer refreshes.
+      if (++explorerTick % 4 === 0) explorerFiles = await git.listLocalFiles(worktreePath);
+      const next = identity(view, explorerFiles);
       if (next !== previous || previousError !== null) {
         previous = next;
         previousError = null;

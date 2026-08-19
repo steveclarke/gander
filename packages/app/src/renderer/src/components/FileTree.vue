@@ -12,20 +12,23 @@ import type { EffectiveTreeTypography } from "../../../settings.js";
 import { languageForPath } from "../languages.js";
 import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
 import FileIcon from "./FileIcon.vue";
-import type { PrFile } from "@gander/shared";
+import type { ChangedFile, PrFile } from "@gander/shared";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   store: Store;
   iconTheme: FileIconThemeId;
   typography?: EffectiveTreeTypography;
   nodes?: TreeNode[];
   depth?: number;
-}>();
+  files?: ChangedFile[];
+  showStatus?: boolean;
+}>(), { showStatus: true });
 
 const collapsed = reactive(new Set<string>());
 
 const depth = computed(() => props.depth ?? 0);
-const nodes = computed(() => props.nodes ?? buildTree(props.store.files()));
+const nodes = computed(() => props.nodes ?? buildTree(props.files ?? props.store.files()));
+const showStatus = computed(() => props.showStatus);
 const local = computed(() => props.store.isLocal());
 const rootTypographyStyle = computed(() => depth.value === 0 && props.typography
   ? { fontFamily: props.typography.fontFamily, fontSize: `${props.typography.fontSize}px` }
@@ -137,6 +140,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         :icon-theme="iconTheme"
         :nodes="node.children"
         :depth="depth + 1"
+        :show-status="showStatus"
       />
       <div
         v-if="node.type === 'file'"
@@ -169,7 +173,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
           :title="`${questionCounts.get(node.file.path)} question(s) on this file`"
         />
         <span v-if="reviewFile(node)?.changedSince" class="delta-mark" title="Changed since your review" />
-        <span class="st" :class="node.file.status">{{ node.file.status }}</span>
+        <span v-if="showStatus" class="st" :class="node.file.status">{{ node.file.status }}</span>
       </div>
     </template>
   </div>

@@ -14,27 +14,21 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-async function registerAndSelect(url: string, repoName: string, source: "github" | "url" = "github"): Promise<void> {
-  await $(".seg-repo").click();
-  await $("//div[@role='button'][.//span[contains(normalize-space(.), 'Add repository')]]").click();
-  if (source === "url") {
-    await $("#repository-url-tab").click();
-    const input = await $("input[placeholder='https://github.com/owner/repo']");
-    await input.setValue(url);
-    await browser.keys("Enter");
-  } else {
-    const filter = await $("#repository-filter");
-    await filter.waitForDisplayed();
-    await filter.setValue(repoName);
-    const option = await $(`//ul[@aria-label='Available repositories']//button[.//span[contains(@class, 'repo-name') and normalize-space()='${repoName}']]`);
-    await option.waitForDisplayed();
-    await option.click();
-  }
-  await expect($(".seg-repo .val")).toHaveText(expect.stringContaining(repoName));
+async function registerAndSelect(url: string, repoName: string): Promise<void> {
+  const error = await browser.executeAsync((repoUrl, done) => {
+    void (window as unknown as { gander: { addRepo(url: string): Promise<unknown> } }).gander.addRepo(repoUrl)
+      .then(() => done(null))
+      .catch((reason: unknown) => done(String(reason)));
+  }, url);
+  expect(error).toBeNull();
+  await browser.refresh();
+  const repo = await $(`//button[contains(@class, 'repo-row')][contains(normalize-space(.), '${repoName}')]`);
+  await repo.waitForDisplayed();
+  await repo.click();
+  await expect(repo).toHaveElementClass(expect.stringContaining("selected"));
 }
 
 async function openPullRequest(title: string, twice = false): Promise<void> {
-  await $(".seg-review").click();
   const option = await $(`//div[@role='option'][contains(normalize-space(.), '${title}')]`);
   await option.waitForDisplayed();
   if (twice) await option.doubleClick();
@@ -84,7 +78,7 @@ async function selectIconTheme(value: "catppuccin-mocha"): Promise<void> {
 describe("Gander end to end", () => {
   it("opens the built application with the Gander title", async () => {
     await expect(browser).toHaveTitle("Gander");
-    await expect($(".empty")).toHaveText("Pick a repository, then a pull request.");
+    await expect($(".welcome h1")).toHaveText("Open a repository from disk");
 
     const nativeWindow = await browser.electron.execute((electron) => {
       const window = electron.BrowserWindow.getAllWindows()[0];
@@ -107,16 +101,16 @@ describe("Gander end to end", () => {
     expect(await browser.execute(() => document.documentElement.dataset.colorTheme)).toBe("Catppuccin Mocha");
 
     if (process.platform === "darwin") {
-      await expect($(".topbar")).toHaveElementClass(expect.stringContaining("integrated-titlebar"));
+      await expect($(".tabbar")).toHaveElementClass(expect.stringContaining("draggable"));
       expect(await browser.execute(() => {
         const region = (selector: string): string =>
           getComputedStyle(document.querySelector<HTMLElement>(selector)!).getPropertyValue("-webkit-app-region");
         return {
-          topbar: region(".topbar"),
-          repository: region(".seg-repo"),
+          topbar: region(".tabbar"),
+          repository: region(".navigator"),
           settings: region("button[aria-label='Editor settings']"),
         };
-      })).toEqual({ topbar: "drag", repository: "no-drag", settings: "no-drag" });
+      })).toEqual({ topbar: "drag", repository: "none", settings: "none" });
     }
   });
 
@@ -250,7 +244,6 @@ describe("Gander end to end", () => {
 
   it("registers a repository and keeps a reviewed file checked after restart", async () => {
     await registerAndSelect(requiredEnv("GANDER_E2E_PERSISTENCE_URL"), "persistence");
-    await $(".seg-review").click();
     await expect($(".stack-group")).toBeDisplayed();
     expect(await browser.execute(() => [...document.querySelectorAll(".stack-group .stack-member")]
       .map((member) => ({
@@ -434,28 +427,33 @@ describe("Gander end to end", () => {
   });
 
   it("shows a live stateless local worktree without review controls", async () => {
-    await $(".seg-repo").click();
-    await $("//div[contains(@class, 'sw-item')][.//span[contains(@class, 'nm') and normalize-space()='local-viewer']]").click();
-    await $(".seg-review").click();
-    const worktree = await $("//div[contains(@class, 'local-worktree')][contains(normalize-space(.), 'feature')]");
+    const repo = await $("//button[contains(@class, 'repo-row')][contains(normalize-space(.), 'local-viewer')]");
+    await repo.click();
+    const worktree = await $("//button[contains(@class, 'context-row')][contains(normalize-space(.), 'feature')]");
     await worktree.waitForDisplayed();
     await worktree.click();
 
-    await expect($(".seg-review")).toHaveText(expect.stringContaining("Local"));
-    await expect($(".seg-review")).toHaveText(expect.stringContaining("feature"));
+    await expect($(".context-toolbar")).toHaveText(expect.stringContaining("feature"));
     await expect($(".local-progress")).toHaveText("3 changed");
     expect(await $$('[role="checkbox"]')).toHaveLength(0);
     await expect($("button[aria-label='Add question (N)']")).not.toBeDisplayed();
     await expect($("button[aria-label='Questions']")).not.toBeDisplayed();
     await expect($(".filehead .check")).not.toBeDisplayed();
-    await expect($("button[aria-label='Full file']")).toBeDisplayed();
-    await expect($("button[aria-label='Changes against main']")).toBeDisplayed();
-    await expect(treeRow("ignored.txt")).not.toBeDisplayed();
+    await expect($("button[aria-label='Current Diff']")).toBeDisplayed();
+    await expect(treeRow("ignored.txt")).toBeDisplayed();
 
     writeFileSync(join(requiredEnv("GANDER_E2E_LOCAL_WORKTREE"), "watched.ts"), "export const watched = true;\n");
     await treeRow("watched.ts").waitForDisplayed({ timeout: 5_000 });
     await expect($(".local-progress")).toHaveText("4 changed");
     await expect($(".error-banner")).not.toBeDisplayed();
+    await $("button[aria-label='Pull Requests']").click();
+    await expect($(".pull-browser h1")).toHaveText("Pull requests");
+    await $("button[aria-label='Explorer']").click();
+    await treeRow("watched.ts").waitForDisplayed();
+    await $("button[aria-label='Current Diff']").click();
+    await expect(treeRow("ignored.txt")).not.toBeDisplayed();
+    await expect($("button[aria-label='Full file']")).toBeDisplayed();
+    await expect($("button[aria-label='Changes against main']")).toBeDisplayed();
   });
 
   it("shows the overflowing file-tree scrollbar only while the tree is hovered", async () => {
@@ -491,7 +489,7 @@ describe("Gander end to end", () => {
   });
 
   it("opens a pull request twice quickly with one valid clone", async () => {
-    await registerAndSelect(requiredEnv("GANDER_E2E_RACE_URL"), "race", "url");
+    await registerAndSelect(requiredEnv("GANDER_E2E_RACE_URL"), "race");
     await openPullRequest("Open without corrupting the clone", true);
     await expect($(".progress")).toHaveText("0/2 reviewed");
     await expect($(".error-banner")).not.toBeDisplayed();
@@ -509,7 +507,7 @@ describe("Gander end to end", () => {
     const reply = await ganderCommand(["--repo", repoId, "--pr", "1"]);
     expect(reply).toEqual({ ok: true, target: { repoId, prNumber: 1 } });
 
-    await expect($(".seg-review")).toHaveText(expect.stringContaining("Open from the command line"));
+    await expect($(".context-toolbar")).toHaveText(expect.stringContaining("Open from the command line"));
     await expect($(".progress")).toHaveText("0/2 reviewed");
     await expect($(".error-banner")).not.toBeDisplayed();
   });

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -196,6 +196,30 @@ describe("git engine", () => {
         headContent: "class A\n  def local; end\nend\n",
       });
       expect(view.files.some((file) => file.path === "ignored.txt")).toBe(false);
+
+      rmSync(join(linked, "b.rb"));
+      const explorer = await engine.listLocalFiles(linked);
+      expect(explorer.map((file) => file.path)).toEqual([
+        ".gitignore",
+        "a.rb",
+        "ignored.txt",
+        "unchanged.txt",
+        "untracked.ts",
+      ]);
+      expect(await engine.localFile(linked, "untracked.ts")).toMatchObject({
+        path: "untracked.ts",
+        content: "export const local = true;\n",
+        binary: false,
+      });
+      expect(await engine.localFile(linked, "ignored.txt")).toMatchObject({ content: "not reviewable\n" });
+      await expect(engine.localFile(linked, ".git/config")).rejects.toThrow("Cannot display Git metadata");
+
+      const external = join(clonesRoot, "outside.png");
+      writeFileSync(external, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      symlinkSync(external, join(linked, "outside-link.png"));
+      const withLink = await engine.localView(linked);
+      expect(withLink.files.find((file) => file.path === "outside-link.png")?.headContent).toBe(external);
+      expect((await engine.localImage(linked, withLink.mergeBaseSha, "outside-link.png")).head.kind).toBe("unsupported");
     } finally {
       await fixture.git(["worktree", "remove", "--force", linked]);
     }
@@ -222,6 +246,28 @@ describe("git engine", () => {
     } finally {
       await fixture.git(["worktree", "remove", "--force", linked]);
       await fixture.git(["branch", "-D", "rename-local"]);
+    }
+  });
+
+  it("shows a real file-to-symlink type change as a modification without following it", async () => {
+    const mainSha = await fixture.git(["rev-parse", "refs/heads/main"]);
+    await fixture.git(["update-ref", "refs/remotes/origin/main", mainSha]);
+    await fixture.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+    const linked = mkdtempSync(join(tmpdir(), "gander-type-worktree-"));
+    rmSync(linked, { recursive: true });
+    await fixture.git(["worktree", "add", "-b", "type-local", linked, "main"]);
+    rmSync(join(linked, "unchanged.txt"));
+    symlinkSync("a.rb", join(linked, "unchanged.txt"));
+
+    try {
+      expect((await engine.localView(linked)).files).toContainEqual(expect.objectContaining({
+        path: "unchanged.txt",
+        status: "M",
+        headContent: "a.rb",
+      }));
+    } finally {
+      await fixture.git(["worktree", "remove", "--force", linked]);
+      await fixture.git(["branch", "-D", "type-local"]);
     }
   });
 });

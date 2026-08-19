@@ -20,6 +20,7 @@ import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
 let zoomController: ZoomController;
 const localWatchers = new Map<number, LocalViewWatcher>();
 const localViews = new Map<number, LocalView>();
+const localOpenGenerations = new Map<number, number>();
 
 function closeLocalView(senderId: number): void {
   localWatchers.get(senderId)?.close();
@@ -82,13 +83,15 @@ async function bootstrap(): Promise<GanderConfig> {
     return repo.localPath ? git.listWorktrees(repo.localPath) : [];
   });
   ipcMain.handle("gander:openLocal", async (event, repoId: string, path: string) => {
+    const senderId = event.sender.id;
+    const generation = (localOpenGenerations.get(senderId) ?? 0) + 1;
+    localOpenGenerations.set(senderId, generation);
     const repo = cfg.repos.find((entry) => entry.repoId === repoId);
     if (!repo?.localPath) throw new Error(`Repo ${repoId} has no registered local checkout`);
     const worktrees = await git.listWorktrees(repo.localPath);
     const selected = worktrees.find((worktree) => worktree.path === path);
     if (!selected) throw new Error(`${path} is not a worktree of ${repoId}`);
     const view = await git.localView(selected.path);
-    const senderId = event.sender.id;
     const watcher = await watchLocalView(git, selected.path, (update) => {
       if (event.sender.isDestroyed()) {
         closeLocalView(senderId);
@@ -97,6 +100,10 @@ async function bootstrap(): Promise<GanderConfig> {
       if (update.view) localViews.set(senderId, update.view);
       event.sender.send("gander:localViewChanged", update);
     }, view);
+    if (localOpenGenerations.get(senderId) !== generation) {
+      watcher.close();
+      return view;
+    }
     closeLocalView(senderId);
     localWatchers.set(senderId, watcher);
     localViews.set(senderId, view);
@@ -111,6 +118,18 @@ async function bootstrap(): Promise<GanderConfig> {
     localViews.set(event.sender.id, view);
     return view;
   });
+  ipcMain.handle("gander:listLocalFiles", async (event, path: string) => {
+    if (localViews.get(event.sender.id)?.worktree.path !== path) {
+      throw new Error(`${path} is not the open local worktree`);
+    }
+    return git.listLocalFiles(path);
+  });
+  ipcMain.handle("gander:localFile", async (event, path: string, filePath: string) => {
+    if (localViews.get(event.sender.id)?.worktree.path !== path) {
+      throw new Error(`${path} is not the open local worktree`);
+    }
+    return git.localFile(path, filePath);
+  });
   ipcMain.handle("gander:localImagePreview", async (event, path: string) => {
     const view = localViews.get(event.sender.id);
     if (!view) throw new Error("A local worktree must be open before previewing an image");
@@ -118,14 +137,23 @@ async function bootstrap(): Promise<GanderConfig> {
     if (!file) throw new Error(`${path} is not part of the local change`);
     return git.localImage(view.worktree.path, view.mergeBaseSha, path, file.basePath);
   });
-  ipcMain.handle("gander:closeLocal", async (event) => closeLocalView(event.sender.id));
+  ipcMain.handle("gander:closeLocal", async (event) => {
+    localOpenGenerations.set(event.sender.id, (localOpenGenerations.get(event.sender.id) ?? 0) + 1);
+    closeLocalView(event.sender.id);
+  });
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => listOpenPrs(repoId, await githubToken()));
   ipcMain.handle("gander:serviceHealthy", async () => service.healthy());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
-    closeLocalView(event.sender.id);
+    const senderId = event.sender.id;
+    const generation = (localOpenGenerations.get(senderId) ?? 0) + 1;
+    localOpenGenerations.set(senderId, generation);
     const view = await reviewer.openPr(repoId, n);
+    if (localOpenGenerations.get(senderId) !== generation) return view;
+    // Preserve the live local view when opening the PR fails. The renderer keeps showing
+    // that context, so its watcher and validated file-reading state must remain usable too.
+    closeLocalView(senderId);
     // Recorded only once the open succeeded, so a pull request that fails to open
     // is not the one the app tries again on every launch.
     cfg.lastReview = { repoId, prNumber: n };

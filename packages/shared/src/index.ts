@@ -152,6 +152,19 @@ export interface LocalView {
   files: ChangedFile[];
 }
 
+/** A path in the selected worktree's complete, git-aware Explorer. */
+export interface LocalFileEntry {
+  path: string;
+}
+
+/** One lazily-read worktree file. Local browsing never creates review state. */
+export interface LocalFile {
+  path: string;
+  content: string | null;
+  hash: string;
+  binary: boolean;
+}
+
 /** "https://github.com/o/r(.git)" | "git@github.com:o/r(.git)" -> "o/r" */
 export function repoIdFromUrl(url: string): string {
   const m =

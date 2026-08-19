@@ -1,14 +1,16 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync } from "node:fs";
+import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, readSync, realpathSync, renameSync, rmSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { ChangedFile, FileStatus, LocalView, LocalWorktree } from "@gander/shared";
+import type { ChangedFile, FileStatus, LocalFile, LocalFileEntry, LocalView, LocalWorktree } from "@gander/shared";
 import { imageMediaType, MAX_IMAGE_BYTES, type ImageSide } from "../image-preview.js";
 
 const FILE_STATUSES: readonly FileStatus[] = ["A", "M", "D", "R"];
 
 function parseFileStatus(raw: string): FileStatus {
+  if (raw === "T") return "M";
   if ((FILE_STATUSES as readonly string[]).includes(raw)) return raw as FileStatus;
   throw new Error(`unrecognized git diff status letter: ${raw}`);
 }
@@ -26,6 +28,8 @@ const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "echo" 
 const CLONE_TIMEOUT_MS = 10 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 60 * 1000;
+const MAX_LOCAL_CONTENT_BYTES = 8 * 1024 * 1024;
+const MAX_EXPLORER_FILES = 100_000;
 
 export interface ShowFileResult {
   /** Decoded UTF-8 content, or null if the path is absent at this revision or the blob is binary. */
@@ -53,6 +57,8 @@ export interface GitEngine {
   worktreeRoot(repoDir: string): Promise<string>;
   listWorktrees(repoDir: string): Promise<LocalWorktree[]>;
   localView(worktreeDir: string): Promise<LocalView>;
+  listLocalFiles(worktreeDir: string): Promise<LocalFileEntry[]>;
+  localFile(worktreeDir: string, path: string): Promise<LocalFile>;
   localImage(worktreeDir: string, mergeBaseSha: string, path: string, basePath?: string): Promise<{ base: ImageSide; head: ImageSide }>;
 }
 
@@ -146,15 +152,46 @@ function safeWorkingPath(worktreeDir: string, path: string): string {
   return absolute;
 }
 
+function validateExplorerPath(worktreeDir: string, path: string): void {
+  const root = resolve(worktreeDir);
+  const absolute = safeWorkingPath(root, path);
+  const parts = relative(root, absolute).split(/[\\/]/);
+  if (parts.includes(".git")) throw new Error(`Cannot display Git metadata: ${path}`);
+
+  let parent = root;
+  for (const part of parts.slice(0, -1)) {
+    parent = join(parent, part);
+    const stat = lstatSync(parent);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(`Cannot display a file through a non-directory worktree entry: ${path}`);
+    }
+  }
+}
+
 function workingFile(worktreeDir: string, path: string): ShowFileResult {
   const absolute = safeWorkingPath(worktreeDir, path);
   if (!existsSync(absolute)) return { content: null, hash: null, binary: false };
   const stat = lstatSync(absolute);
-  if (!stat.isFile() && !stat.isSymbolicLink()) {
-    throw new Error(`Cannot display non-file worktree entry: ${path}`);
+  if (stat.isSymbolicLink()) return fileResult(Buffer.from(readlinkSync(absolute)));
+  if (stat.isDirectory()) {
+    const hash = createHash("sha256").update(`directory\0${stat.size}\0${stat.mtimeMs}\0${stat.ctimeMs}`).digest("hex");
+    return { content: null, hash, binary: true };
   }
-  const bytes = stat.isSymbolicLink() ? Buffer.from(readlinkSync(absolute)) : readFileSync(absolute);
-  return fileResult(bytes);
+  if (!stat.isFile()) throw new Error(`Cannot display special worktree entry: ${path}`);
+  const fd = openSync(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) throw new Error(`Cannot display non-file worktree entry: ${path}`);
+    // Local views have no content-addressed review state. A metadata-derived digest for an
+    // oversized file keeps the poller bounded while still invalidating when the file moves.
+    if (opened.size > MAX_LOCAL_CONTENT_BYTES) {
+      const hash = createHash("sha256").update(`oversized\0${opened.size}\0${opened.mtimeMs}\0${opened.ctimeMs}`).digest("hex");
+      return { content: null, hash, binary: true };
+    }
+    return fileResult(readFileSync(fd));
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function imageSide(bytes: Buffer): ImageSide {
@@ -164,6 +201,28 @@ function imageSide(bytes: Buffer): ImageSide {
     ? { kind: "unsupported", size }
     : { kind: "too-large", size, limit: MAX_IMAGE_BYTES };
   return mediaType === null ? { kind: "unsupported", size } : { kind: "image", mediaType, size, bytes };
+}
+
+function workingImage(worktreeDir: string, path: string): ImageSide {
+  const absolute = safeWorkingPath(worktreeDir, path);
+  const stat = lstatSync(absolute);
+  if (stat.isSymbolicLink()) return imageSide(Buffer.from(readlinkSync(absolute)));
+  if (!stat.isFile()) return { kind: "unsupported", size: stat.size };
+  const fd = openSync(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) return { kind: "unsupported", size: opened.size };
+    if (opened.size > MAX_IMAGE_BYTES) {
+      const prefix = Buffer.alloc(Math.min(opened.size, 32));
+      readSync(fd, prefix, 0, prefix.length, 0);
+      return imageMediaType(prefix) === null
+        ? { kind: "unsupported", size: opened.size }
+        : { kind: "too-large", size: opened.size, limit: MAX_IMAGE_BYTES };
+    }
+    return imageSide(readFileSync(fd));
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function parseWorktrees(output: string): LocalWorktree[] {
@@ -374,11 +433,37 @@ export function createGitEngine(clonesRoot: string): GitEngine {
       return { worktree, defaultBranch, mergeBaseSha, files };
     },
 
+    async listLocalFiles(worktreeDir) {
+      const files: LocalFileEntry[] = [];
+      const walk = async (directory: string, prefix: string): Promise<void> => {
+        const entries = await readdir(directory, { withFileTypes: true });
+        entries.sort((left, right) => left.name.localeCompare(right.name));
+        for (const entry of entries) {
+          if (entry.name === ".git") continue;
+          const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) await walk(join(directory, entry.name), path);
+          else if (entry.isFile() || entry.isSymbolicLink()) files.push({ path });
+          if (files.length > MAX_EXPLORER_FILES) {
+            throw new Error(`Explorer stopped after ${MAX_EXPLORER_FILES} files in ${worktreeDir}`);
+          }
+        }
+      };
+      await walk(worktreeDir, "");
+      return files;
+    },
+
+    async localFile(worktreeDir, path) {
+      validateExplorerPath(worktreeDir, path);
+      const file = workingFile(worktreeDir, path);
+      if (file.hash === null) throw new Error(`${path} no longer exists in this worktree`);
+      return { path, content: file.content, hash: file.hash, binary: file.binary };
+    },
+
     async localImage(worktreeDir, mergeBaseSha, path, basePath = path) {
       const current = workingFile(worktreeDir, path);
       const head: ImageSide = current.hash === null
         ? { kind: "absent" }
-        : imageSide(readFileSync(safeWorkingPath(worktreeDir, path)));
+        : workingImage(worktreeDir, path);
       let base: ImageSide;
       try {
         base = await this.showImage(worktreeDir, mergeBaseSha, basePath);

@@ -1,4 +1,4 @@
-import type { LocalView, LocalWorktree, NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { LocalFile, LocalFileEntry, LocalView, LocalWorktree, NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
 import type { ConnectionCheck } from "./main/connection.js";
@@ -60,6 +60,8 @@ export interface GanderApi {
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
   openLocal(repoId: string, path: string): Promise<LocalView>;
+  listLocalFiles(path: string): Promise<LocalFileEntry[]>;
+  localFile(path: string, filePath: string): Promise<LocalFile>;
   refreshLocal(path: string): Promise<LocalView>;
   localImagePreview(path: string): Promise<ImagePreview>;
   closeLocal(): Promise<void>;

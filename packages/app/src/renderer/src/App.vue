@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
-import TopBar from "./components/TopBar.vue";
 import FileTree from "./components/FileTree.vue";
 import DiffPane from "./components/DiffPane.vue";
 import QuestionCapture from "./components/QuestionCapture.vue";
@@ -11,7 +10,14 @@ import StatusBar from "./components/StatusBar.vue";
 import Splitter from "./components/Splitter.vue";
 import SettingsPane from "./components/SettingsPane.vue";
 import { questionsDock, questionsHeight, questionsWidth, treeWidth } from "./layout.js";
-import { X } from "lucide-vue-next";
+import { MessageSquare, Plus, RefreshCw, X } from "lucide-vue-next";
+import ActivityRail from "./components/ActivityRail.vue";
+import RepositoryNavigator from "./components/RepositoryNavigator.vue";
+import ContextTabs from "./components/ContextTabs.vue";
+import FullFilePane from "./components/FullFilePane.vue";
+import StackPosition from "./components/StackPosition.vue";
+import ReviewingList from "./components/ReviewingList.vue";
+import type { ChangedFile } from "@gander/shared";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
 import { effectiveTreeTypography } from "../../settings.js";
 import { currentLine } from "./selection.js";
@@ -48,7 +54,7 @@ const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const treeScrolling = shallowRef(false);
 let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
-const activeSurface = shallowRef<"review" | "settings">("review");
+const activeSurface = shallowRef<"review" | "pulls" | "settings">("review");
 const zoomLevel = shallowRef(DEFAULT_ZOOM_LEVEL);
 const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
 // Which section the settings surface opens on. The prompt about a missing service leads
@@ -77,13 +83,6 @@ function closeSettings(): void {
   void refreshConnectionState();
 }
 
-function toggleSettings(): void {
-  activeSurface.value = activeSurface.value === "settings" ? "review" : "settings";
-  // Read back on the way out as well as on the save: the review surface must never
-  // claim there is no service while the status bar says it is connected.
-  if (activeSurface.value === "review") void refreshConnectionState();
-}
-
 async function changeZoom(level: number): Promise<void> {
   zoomLevel.value = clampZoomLevel(level);
   zoomLevel.value = await api.setZoomLevel(level);
@@ -100,6 +99,42 @@ const questionsSize = computed({
 });
 const questionCount = computed(() => store.view?.questions.length ?? 0);
 const hasView = computed(() => store.view !== null || store.localView !== null);
+const activeRail = computed<"explorer" | "changes" | "pulls" | "settings">(() => {
+  if (activeSurface.value === "settings") return "settings";
+  if (activeSurface.value === "pulls") return "pulls";
+  if (store.localView) return store.localSurface;
+  return "pulls";
+});
+const explorerFiles = computed<ChangedFile[]>(() => store.localFiles.map((file) => ({
+  path: file.path,
+  status: "M",
+  baseContent: null,
+  headContent: null,
+  baseHash: null,
+  headHash: null,
+})));
+
+async function openFolder(): Promise<void> {
+  if (!await store.chooseLocalRepo()) return;
+  const first = store.worktrees[0];
+  if (first) await store.openLocal(first.path);
+}
+
+function selectRail(value: "explorer" | "changes" | "pulls" | "settings"): void {
+  if (value === "settings") { openSettings(); return; }
+  if (value === "pulls") { activeSurface.value = "pulls"; return; }
+  activeSurface.value = "review";
+  if (value === "explorer" || value === "changes") store.showLocalSurface(value);
+}
+
+async function openPrFromBrowser(prNumber: number): Promise<void> {
+  await store.openPr(prNumber);
+  if (!store.error) activeSurface.value = "review";
+}
+
+watch(() => store.activeTabKey, (key, previous) => {
+  if (key !== previous && key !== null && activeSurface.value !== "settings") activeSurface.value = "review";
+});
 
 watch(() => store.localView, (local) => {
   if (!local) return;
@@ -184,42 +219,74 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <!--
+    THESIS: Gander is one durable, local-first review workbench across every repository.
+    OWN-WORLD: A dense native desktop shell, grounded in the existing dark Gander palette and Monaco surfaces.
+    STORY: Open a repository once, pick any discovered worktree or pull request, keep useful contexts open as tabs.
+    FIRST VIEWPORT: Repository library at left, open contexts across the top, current tree and code always visible.
+    FORM: Persistent rail + repository navigator + context tabs + one focused reading surface.
+    FINISH: It should feel like VS Code rebuilt around moving between reviews, not editing code.
+  -->
   <div class="app">
-    <TopBar
-      :store="store"
-      :questions="questionCount"
-      :settings-active="activeSurface === 'settings'"
+    <ContextTabs
+      :tabs="store.tabs"
+      :active-key="store.activeTabKey"
       :integrated-title-bar="integratedTitleBar"
-      @toggle-questions="drawerOpen = !drawerOpen"
-      @toggle-settings="toggleSettings"
-      @add-question="openQuestion()"
+      @activate="store.activateTab"
+      @close="store.closeTab"
     />
     <div v-if="store.error" class="error-banner">
       <span>{{ store.error }}</span>
       <button aria-label="Dismiss" title="Dismiss" @click="store.dismissError()"><X :size="14" /></button>
     </div>
     <main class="body">
-      <SettingsPane
-        v-if="activeSurface === 'settings'"
-        :store="editorSettings"
-        :initial-category="settingsCategory"
-        @connected="onConnected"
-        @close="closeSettings"
-      />
-      <div v-show="activeSurface === 'review'" class="review-surface">
+      <ActivityRail :active="activeRail" :local-open="store.localView !== null" @select="selectRail" />
+      <RepositoryNavigator :store="store" @open-folder="openFolder" />
+      <div class="content">
+        <SettingsPane
+          v-if="activeSurface === 'settings'"
+          :store="editorSettings"
+          :initial-category="settingsCategory"
+          @connected="onConnected"
+          @close="closeSettings"
+        />
+        <section v-else-if="activeSurface === 'pulls'" class="pull-browser">
+          <header>
+            <h1>Pull requests</h1>
+            <p v-if="store.navigatorRepoId">{{ store.navigatorRepoId }}</p>
+          </header>
+          <ReviewingList v-if="store.navigatorRepoId && store.prs.length" :prs="store.prs" :selected-pr-number="store.currentRepoId === store.navigatorRepoId ? store.view?.pr.number ?? null : null" @select="openPrFromBrowser" />
+          <p v-else-if="store.navigatorRepoId" class="pull-empty">No open pull requests.</p>
+          <p v-else class="pull-empty">Select a repository to see its pull requests.</p>
+        </section>
+      <div v-if="activeSurface === 'review' && hasView" class="context-toolbar">
+        <div class="context-title">
+          <strong>{{ store.currentRepoId?.split('/').at(-1) }}</strong>
+          <span v-if="store.localView">{{ store.localView.worktree.branch ?? store.localView.worktree.headSha.slice(0, 8) }}</span>
+          <span v-else-if="store.view"><StackPosition v-if="store.view.pr.stack" class="header-stack-position" :position="store.view.pr.stack.position" :size="store.view.pr.stack.size" /> #{{ store.view.pr.number }} {{ store.view.pr.title }}</span>
+        </div>
+        <button v-if="store.view" aria-label="Add question (N)" title="Add question (N)" @click="openQuestion()"><Plus :size="14" /> Question</button>
+        <button v-if="store.view" aria-label="Questions" :title="`Questions (${questionCount})`" @click="drawerOpen = !drawerOpen"><MessageSquare :size="15" /><span v-if="questionCount">{{ questionCount }}</span></button>
+        <button :disabled="store.busy" :aria-label="store.localView ? 'Refresh local changes' : 'Fetch origin'" :title="store.localView ? 'Refresh local changes' : 'Fetch origin'" @click="store.fetchNow()"><RefreshCw :size="15" :class="{ spin: store.busy }" /></button>
+        <span v-if="store.view" class="progress">{{ store.progress().done }}/{{ store.progress().total }} reviewed</span>
+        <span v-else-if="store.localView" class="progress local-progress">{{ store.localView.files.length }} changed</span>
+      </div>
+      <div v-if="activeSurface === 'review'" class="review-surface">
         <p v-if="store.busy && !hasView" class="empty working">
           <span class="spinner" />Opening changes…
         </p>
-        <p v-else-if="unconfigured && !store.localView" class="empty">
-          No review service yet.
-          <button class="link" type="button" @click="openSettings('connection')">Set its URL and token</button>
-          for pull request reviews, or add a local checkout to browse without it.
-        </p>
-        <p v-else-if="!hasView" class="empty">Pick a repository, then a pull request or local worktree.</p>
+        <div v-else-if="!hasView" class="welcome">
+          <h1>Open a repository from disk</h1>
+          <p>Gander will find its worktrees and pull requests, then keep them within reach in this window.</p>
+          <button type="button" @click="openFolder">Open repository folder…</button>
+          <button v-if="unconfigured" class="text-action" type="button" @click="openSettings('connection')">Connect a review service for pull requests</button>
+        </div>
         <template v-else>
           <FileTree
             v-if="treeVisible"
             :store="store"
+            :files="store.localView && store.localSurface === 'explorer' ? explorerFiles : undefined"
+            :show-status="!(store.localView && store.localSurface === 'explorer')"
             :icon-theme="editorSettings.settings.workbench.iconTheme"
             :typography="treeTypography"
             class="tree"
@@ -237,7 +304,14 @@ onBeforeUnmount(() => {
           <!-- Docked right, questions sit beside the diff; docked bottom, under both the
                diff and the tree, which is what gives the diff the full window width. -->
           <div class="workspace" :class="questionsDock">
+            <FullFilePane
+              v-if="store.localView && store.localSurface === 'explorer'"
+              :file="store.localFile"
+              :editor-settings="editorSettings.settings.editor"
+              class="diff"
+            />
             <DiffPane
+              v-else
               :store="store"
               :editor-settings="editorSettings.settings.editor"
               class="diff"
@@ -266,6 +340,7 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </div>
+      </div>
     </main>
     <StatusBar
       :store="store"
@@ -282,7 +357,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.app { display: grid; grid-template-rows: 50px 1fr auto; height: 100vh; }
+.app { display: grid; grid-template-rows: 38px 1fr auto; height: 100vh; }
 .error-banner { display: flex; align-items: center; gap: 10px; background: var(--danger-background); color: var(--danger); padding: 8px 14px; font-size: 12px; border-bottom: 1px solid var(--workbench-border); }
 .error-banner span { flex: 1; }
 .error-banner button { background: none; border: none; color: inherit; cursor: pointer; display: flex; flex: none; }
@@ -299,7 +374,29 @@ onBeforeUnmount(() => {
 /* Flex rather than grid: panel sizes are dragged, so they are inline styles on the panels
    themselves and the container only has to decide direction. */
 .body { display: flex; min-height: 0; }
+.content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.context-toolbar { height: 35px; flex: none; display: flex; align-items: center; gap: 6px; padding-inline: 12px 7px; border-bottom: 1px solid var(--workbench-border); background: var(--panel-background); }
+.context-title { min-width: 0; display: flex; align-items: baseline; gap: 7px; margin-right: auto; }
+.context-title strong { font-size: 12px; }
+.context-title span { min-width: 0; color: var(--muted-foreground); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.context-toolbar button { min-height: 26px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--workbench-border); border-radius: 5px; background: var(--elevated-background); color: var(--muted-foreground); font: inherit; cursor: pointer; }
+.context-toolbar button:hover { color: var(--workbench-foreground); border-color: var(--faint-foreground); }
+.context-toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.context-toolbar button:disabled { opacity: .5; cursor: default; }
+.context-toolbar .progress { padding-inline: 4px; color: var(--faint-foreground); font-size: 11px; white-space: nowrap; }
+.pull-browser { flex: 1; min-height: 0; overflow: auto; background: var(--workbench-background); }
+.pull-browser > header { padding: 24px 28px 15px; border-bottom: 1px solid var(--workbench-border); }
+.pull-browser h1 { margin: 0 0 5px; font-size: 20px; letter-spacing: -.02em; }
+.pull-browser header p, .pull-empty { margin: 0; color: var(--faint-foreground); }
+.pull-browser :deep(.reviewing-list) { max-width: 760px; padding: 12px 18px; }
+.pull-empty { padding: 22px 28px; }
 .review-surface { flex: 1; display: flex; min-width: 0; min-height: 0; }
+.welcome { margin: auto; max-width: 460px; padding: 40px; text-align: center; color: var(--muted-foreground); }
+.welcome h1 { margin: 0 0 10px; color: var(--workbench-foreground); font-size: 22px; letter-spacing: -.02em; }
+.welcome p { margin: 0 0 22px; line-height: 1.55; }
+.welcome button { min-height: 32px; padding: 6px 13px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--accent-foreground); font: inherit; cursor: pointer; }
+.welcome .text-action { display: block; margin: 14px auto 0; border: 0; background: none; color: var(--accent); }
+.welcome button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .workspace { flex: 1; display: flex; min-width: 0; min-height: 0; }
 .workspace.right { flex-direction: row; }
 .workspace.bottom { flex-direction: column; }

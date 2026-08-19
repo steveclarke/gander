@@ -78,6 +78,8 @@ export function createGanderApi(
     reviewedSnapshot: (repoId, prNumber, path) => call("reviewedSnapshot", repoId, prNumber, path),
     imagePreview: (repoId, prNumber, path) => call("imagePreview", repoId, prNumber, path),
     openLocal: (repoId, path) => call("openLocal", repoId, path),
+    listLocalFiles: (path) => call("listLocalFiles", path),
+    localFile: (path, filePath) => call("localFile", path, filePath),
     refreshLocal: (path) => call("refreshLocal", path),
     localImagePreview: (path) => call("localImagePreview", path),
     closeLocal: () => call("closeLocal"),

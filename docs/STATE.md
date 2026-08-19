@@ -19,7 +19,7 @@ to a local Fastify + SQLite service.
 | `@gander/service` | Fastify + better-sqlite3 review state, bearer auth |
 | `@gander/app` | Electron main (git engine, review orchestration) + Vue renderer |
 
-66 tests pass; typecheck clean across all three packages.
+The unit suite and typecheck are clean across all three packages.
 
 Review state is content-based: files key on sha256 of blob text, so checkoffs
 survive rebases and force-pushes. A bare un-check retains the snapshot, which
@@ -59,15 +59,21 @@ development.
 
 ## Local viewer
 
-Registered repositories can also point at a local checkout. Gander discovers its
-linked worktrees with `git worktree list` and shows each worktree's live change from
-the merge-base with the default branch through the current working tree. Untracked
-files are included unless ignored by Git.
+Gander's primary entry point is a local checkout selected with the native folder
+picker. The persistent repository navigator remembers it, discovers its linked
+worktrees with `git worktree list`, and lists its open pull requests. Worktree and
+pull-request contexts open as tabs, so several reviews remain within reach in one
+window.
+
+A worktree tab has two peer views. Explorer shows the complete filesystem tree,
+including ignored files but not Git administrative metadata, and reads selected files lazily. Current Diff shows the
+live change from the default-branch merge base through the current working tree;
+untracked files are included unless ignored by Git.
 
 Local views are read-only and machine-local. They do not expose or persist checkoffs,
 snapshots, changed-since state, or questions. One bounded poller follows the selected
-worktree's files, index, HEAD, and refs and refreshes the view when derived content
-changes.
+worktree's files, index, HEAD, and refs and refreshes both the diff and Explorer
+when derived content changes.
 
 ## Still open
 

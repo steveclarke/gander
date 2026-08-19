@@ -73,6 +73,10 @@ describe("preload API", () => {
     expect(invoke).toHaveBeenLastCalledWith("gander:listWorktrees", "acme/atlas");
     await api.openLocal("acme/atlas", "/tmp/local");
     expect(invoke).toHaveBeenLastCalledWith("gander:openLocal", "acme/atlas", "/tmp/local");
+    await api.listLocalFiles("/tmp/local");
+    expect(invoke).toHaveBeenLastCalledWith("gander:listLocalFiles", "/tmp/local");
+    await api.localFile("/tmp/local", "src/main.ts");
+    expect(invoke).toHaveBeenLastCalledWith("gander:localFile", "/tmp/local", "src/main.ts");
     await api.localImagePreview("logo.png");
     expect(invoke).toHaveBeenLastCalledWith("gander:localImagePreview", "logo.png");
     expect(api.onLocalViewChanged(vi.fn())).toBe(cleanup);
