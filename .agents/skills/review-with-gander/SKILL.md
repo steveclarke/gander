@@ -39,10 +39,12 @@ bin/mcp call get_review_questions repo=OWNER/REPO prNumber=NUMBER
 ```
 
 For a live review conversation, launch the agent through
-`bin/gander-agent codex` or `bin/gander-agent claude`. Its local bridge waits
-without model turns and wakes the agent when a reviewer replies. Do not
-register this worktree's endpoint globally. Both commands read its endpoint
-and bearer token from `.env`.
+`bin/gander-agent codex` or `bin/gander-agent claude` so the Gander tools are
+available in the session. To wait for the next reviewer reply without polling,
+call `get_review_questions` again with the returned `replyCursor` as
+`afterReplyCursor`; the call holds up to `waitSeconds` and returns when a
+reply lands. Do not register this worktree's endpoint globally. Both commands
+read its endpoint and bearer token from `.env`.
 
 ## Address a question
 

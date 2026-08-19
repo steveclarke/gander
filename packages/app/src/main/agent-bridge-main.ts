@@ -14,9 +14,6 @@ const handle = serveStdio(async () => {
     serviceUrl,
     token,
     version: "0.1.4",
-    codexSessionFile: process.env.GANDER_CODEX_SESSION_FILE,
-    codexSocket: process.env.GANDER_CODEX_SOCKET,
-    onError: (error) => console.error(`Gander agent bridge: ${error.message}`),
   });
   bridges.push(bridge);
   bridge.server.server.onclose = () => void bridge.close();

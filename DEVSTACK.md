@@ -186,10 +186,9 @@ The Inspector package is an exact development dependency, while
 `GANDER_MCP_INSPECTOR_PACKAGE` can select another package version through
 `pnpm dlx` for deliberate compatibility testing.
 
-## Running an agent with live reviewer replies
+## Running an agent with Gander's tools
 
-Use the checkout-local launcher when the agent should wake automatically after
-a reviewer replies:
+Use the checkout-local launcher to start an agent with Gander's MCP tools:
 
 ```bash
 bin/gander-agent codex
@@ -197,19 +196,17 @@ bin/gander-agent claude
 ```
 
 Pass ordinary agent arguments after the name. The launcher reads this
-worktree's `.env`, adds Gander only for that agent process, and starts a small
-stdio bridge automatically. It does not install global configuration or add a
-third managed service. The bridge keeps one held reply wait armed after the
-model turn ends. Claude receives its native channel notification. For Codex,
-the launcher starts a private app server, points the normal terminal UI at it,
-and sends the reviewer reply into that same live thread. Both temporary Codex
-resources stop when the terminal session exits.
+worktree's `.env`, adds Gander only for that agent process, and lets the agent
+start a small stdio bridge automatically. It does not install global
+configuration or add a third managed service.
 
-The public Streamable HTTP endpoint remains modern-only MCP `2026-07-28`. The
+The public Streamable HTTP endpoint is modern-only MCP `2026-07-28`. The
 local bridge accepts the stdio handshake used by the current Codex and Claude
 releases and translates it to that modern upstream connection; this is not a
 legacy public endpoint or fallback. Its exposed contract remains exactly the
-same three tools.
+same three tools. Nothing pushes turns into a running agent session; an agent
+waits for reviewer replies with the `get_review_questions` long-poll arguments
+described below.
 
 For one-shot diagnostics instead of a live agent session, use `bin/mcp` as
 documented above. Three tools appear through either path:

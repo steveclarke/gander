@@ -50,9 +50,6 @@ importers:
       vue:
         specifier: ^3.5.0
         version: 3.5.41(typescript@5.9.3)
-      ws:
-        specifier: 8.21.3
-        version: 8.21.3
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -63,9 +60,6 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
-      '@types/ws':
-        specifier: 8.18.1
-        version: 8.18.1
       '@vitejs/plugin-vue':
         specifier: ^5.2.0
         version: 5.2.4(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.41(typescript@5.9.3))

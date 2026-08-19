@@ -20,46 +20,11 @@ case "${1:-serve}" in
     ;;
   codex)
     shift
-    codex_runtime="$(mktemp -d "${TMPDIR:-/tmp}/gander-codex.XXXXXX")"
-    GANDER_CODEX_SESSION_FILE="$codex_runtime/session"
-    GANDER_CODEX_SOCKET="$codex_runtime/app-server.sock"
-    export GANDER_CODEX_SESSION_FILE GANDER_CODEX_SOCKET
-    : > "$GANDER_CODEX_SESSION_FILE"
-    chmod 600 "$GANDER_CODEX_SESSION_FILE"
     bridge_toml="${bridge_command//\\/\\\\}"
     bridge_toml="${bridge_toml//\"/\\\"}"
-    hook_command="$bridge_command hook-session"
-    hook_command="${hook_command//\\/\\\\}"
-    hook_command="${hook_command//\"/\\\"}"
-    codex app-server \
-      --listen "unix://$GANDER_CODEX_SOCKET" \
+    exec codex \
       -c "mcp_servers.gander.command=\"$bridge_toml\"" \
-      -c 'mcp_servers.gander.env_vars=["GANDER_CODEX_SESSION_FILE","GANDER_CODEX_SOCKET"]' \
       -c mcp_servers.gander.startup_timeout_sec=30 \
-      -c "hooks.SessionStart=[{ matcher = \"startup|resume|clear|compact\", hooks = [{ type = \"command\", command = \"$hook_command\", timeout = 5 }] }]" &
-    codex_server_pid=$!
-    cleanup_codex() {
-      kill "$codex_server_pid" 2>/dev/null || true
-      wait "$codex_server_pid" 2>/dev/null || true
-      rm -f "$GANDER_CODEX_SESSION_FILE" "$GANDER_CODEX_SOCKET"
-      rmdir "$codex_runtime" 2>/dev/null || true
-    }
-    trap cleanup_codex EXIT INT TERM
-    for _ in {1..200}; do
-      [[ -S "$GANDER_CODEX_SOCKET" ]] && break
-      kill -0 "$codex_server_pid" 2>/dev/null || {
-        wait "$codex_server_pid"
-        exit $?
-      }
-      sleep 0.05
-    done
-    [[ -S "$GANDER_CODEX_SOCKET" ]] || {
-      echo "Codex app server did not create its local socket" >&2
-      exit 1
-    }
-    codex \
-      --remote "unix://$GANDER_CODEX_SOCKET" \
-      --dangerously-bypass-hook-trust \
       "$@"
     ;;
   claude)
@@ -67,11 +32,7 @@ case "${1:-serve}" in
     mcp_config="{\"mcpServers\":{\"gander\":{\"command\":\"$bridge_command\"}}}"
     exec claude \
       --mcp-config "$mcp_config" \
-      --dangerously-load-development-channels server:gander \
       "$@"
-    ;;
-  hook-session)
-    exec pnpm --silent --filter @gander/app exec tsx src/main/agent-session-hook.ts
     ;;
   *)
     echo "Usage: bin/gander-agent [serve|codex|claude] [agent arguments...]" >&2
