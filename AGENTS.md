@@ -138,7 +138,9 @@ Real dependencies, never mocks: real throwaway git repositories
 (`main/fixtures.ts`), real SQLite files in temp dirs, real Fastify instances,
 real MCP clients. The E2E suite builds the app and drives the Electron window
 through WebDriverIO against an isolated service and a local GitHub fake — it
-needs no GitHub credentials and does not touch the dev stack.
+needs no GitHub credentials and does not touch the dev stack. `test/setup-git-env.ts`
+points git at an empty global and system config, so a developer's own git
+settings cannot change what the suite sees.
 
 Bugs that reached a person get a test that fails without the fix; prove it by
 reverting the fix.
