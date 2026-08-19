@@ -34,7 +34,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     view,
     selectedPath: view.files[0]!.path,
     error: null,
-    serviceReachable: true,
+    serviceStatus: { state: "connected", serviceVersion: "0.1.0", supportedVersion: "0.1.0" },
     lastFetchAt: null,
     busy: false,
     async loadRepos() {},

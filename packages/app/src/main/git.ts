@@ -44,6 +44,8 @@ export interface ShowFileResult {
 export interface GitEngine {
   ensureClone(repoId: string, url: string): Promise<string>;
   fetchPr(cloneDir: string, prNumber: number, baseRef: string): Promise<void>;
+  /** Fetch several pull request heads and their base branches in one network operation. */
+  fetchPrs(cloneDir: string, prs: Array<{ number: number; baseRef: string }>): Promise<void>;
   mergeBase(cloneDir: string, a: string, b: string): Promise<string>;
   diffFiles(cloneDir: string, base: string, head: string): Promise<Array<{ path: string; status: FileStatus }>>;
   showFile(cloneDir: string, rev: string, path: string): Promise<ShowFileResult>;
@@ -147,6 +149,15 @@ export function createGitEngine(clonesRoot: string): GitEngine {
     return dir;
   }
 
+  async function fetchPrs(cloneDir: string, prs: Array<{ number: number; baseRef: string }>): Promise<void> {
+    const bases = [...new Set(prs.map((pr) => pr.baseRef))];
+    await git(cloneDir, [
+      "fetch", "--force", "origin",
+      ...prs.map((pr) => `+refs/pull/${pr.number}/head:refs/gander/pr/${pr.number}`),
+      ...bases.map((baseRef) => `+refs/heads/${baseRef}:refs/gander/base/${baseRef}`),
+    ], FETCH_TIMEOUT_MS);
+  }
+
   return {
     async ensureClone(repoId, url) {
       const dir = join(clonesRoot, repoId.replace("/", "__") + ".git");
@@ -161,12 +172,10 @@ export function createGitEngine(clonesRoot: string): GitEngine {
     },
 
     async fetchPr(cloneDir, prNumber, baseRef) {
-      await git(cloneDir, [
-        "fetch", "--force", "origin",
-        `+refs/pull/${prNumber}/head:refs/gander/pr/${prNumber}`,
-        `+refs/heads/${baseRef}:refs/gander/base/${baseRef}`,
-      ], FETCH_TIMEOUT_MS);
+      await fetchPrs(cloneDir, [{ number: prNumber, baseRef }]);
     },
+
+    fetchPrs,
 
     async mergeBase(cloneDir, a, b) {
       return (await git(cloneDir, ["merge-base", a, b])).trim();

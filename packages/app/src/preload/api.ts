@@ -67,7 +67,7 @@ export function createGanderApi(
     lastReview: () => call("lastReview"),
     initialTarget: () => call("initialTarget"),
     onOpenTarget: (listener) => subscribe("gander:openTarget", (target: OpenTarget) => listener(target)),
-    serviceHealthy: () => call("serviceHealthy"),
+    serviceStatus: () => call("serviceStatus"),
     openPr: (repoId, prNumber) => call("openPr", repoId, prNumber),
     setChecked: (repoId, prNumber, path, checked) => call("setChecked", repoId, prNumber, path, checked),
     setCheckedMany: (repoId, prNumber, paths, checked) => call("setCheckedMany", repoId, prNumber, paths, checked),

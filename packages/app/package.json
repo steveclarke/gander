@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@gander/shared": "workspace:*",
+    "electron-updater": "^6.8.9",
     "lucide-vue-next": "^1.0.0",
     "monaco-editor": "^0.52.0",
     "vue": "^3.5.0",

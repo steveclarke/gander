@@ -1,6 +1,6 @@
-import type { FileCheckoff, NewQuestion, PrFile, PrSummary, PrView } from "@gander/shared";
+import type { FileCheckoff, NewQuestion, PrFile, PrListItem, PrSummary, PrView, ReviewState } from "@gander/shared";
 import type { GitEngine } from "./git.js";
-import type { ServiceClient } from "./service-client.js";
+import { ServiceConnectionError, STALE_SERVICE_DATA_WRITE_ERROR, type ServiceClient } from "./service-client.js";
 import type { ImagePreview, ImageSide } from "../image-preview.js";
 
 export interface ReviewerDeps {
@@ -11,6 +11,7 @@ export interface ReviewerDeps {
   machine: string;
 }
 export interface Reviewer {
+  listPrsWithProgress(repoId: string): Promise<PrListItem[]>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
@@ -23,11 +24,35 @@ export interface Reviewer {
   imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
 }
 
-interface CacheEntry { view: PrView; headSha: string; clone: string; mergeBase: string; }
+interface CacheEntry {
+  view: PrView;
+  headSha: string;
+  clone: string;
+  mergeBase: string;
+  /** False after a service failure until an authoritative read replaces service-owned state. */
+  serviceStateFresh: boolean;
+}
 
 export function createReviewer(deps: ReviewerDeps): Reviewer {
   const cache = new Map<string, CacheEntry>();
   const key = (repoId: string, prNumber: number): string => `${repoId}#${prNumber}`;
+
+  async function useCachedViewOnConnectionFailure(
+    repoId: string,
+    prNumber: number,
+    load: () => Promise<PrView>,
+  ): Promise<PrView> {
+    try {
+      return await load();
+    } catch (err) {
+      const cached = cache.get(key(repoId, prNumber));
+      if (err instanceof ServiceConnectionError && cached) {
+        cached.serviceStateFresh = false;
+        return cached.view;
+      }
+      throw err;
+    }
+  }
 
   /** Re-derives checked/changedSince for the already-fetched `files` against the latest service state, without re-reading any blobs. */
   function applyServiceState(files: PrFile[], state: { files: FileCheckoff[] }): PrFile[] {
@@ -48,9 +73,9 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     });
   }
 
-  async function computeFiles(repoId: string, prNumber: number, clone: string, mergeBase: string, head: string): Promise<PrFile[]> {
+  async function computeFiles(repoId: string, prNumber: number, clone: string, mergeBase: string, head: string, knownState?: ReviewState): Promise<PrFile[]> {
     const changed = await deps.git.diffFiles(clone, mergeBase, head);
-    const state = await deps.service.getReview(repoId, prNumber);
+    const state = knownState ?? await deps.service.getReview(repoId, prNumber);
 
     const raw: PrFile[] = [];
     for (const { path, status } of changed) {
@@ -95,7 +120,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     await Promise.all([write(pr), ...siblings.map(write)]);
   }
 
-  async function openPr(repoId: string, prNumber: number): Promise<PrView> {
+  async function loadPr(repoId: string, prNumber: number): Promise<PrView> {
     const all = await deps.listPrs(repoId);
     const pr = all.find((p) => p.number === prNumber);
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
@@ -113,11 +138,15 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
     const questions = await deps.service.listQuestions(repoId, prNumber);
     const view: PrView = { pr, files, questions };
-    cache.set(key(repoId, prNumber), { view, headSha: head, clone, mergeBase });
+    cache.set(key(repoId, prNumber), { view, headSha: head, clone, mergeBase, serviceStateFresh: true });
     return view;
   }
 
-  async function refreshPr(repoId: string, prNumber: number): Promise<PrView> {
+  async function openPr(repoId: string, prNumber: number): Promise<PrView> {
+    return useCachedViewOnConnectionFailure(repoId, prNumber, () => loadPr(repoId, prNumber));
+  }
+
+  async function loadRefresh(repoId: string, prNumber: number): Promise<PrView> {
     const all = await deps.listPrs(repoId);
     const pr = all.find((p) => p.number === prNumber);
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
@@ -138,7 +167,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       const files = applyServiceState(cached.view.files, state);
       const questions = await deps.service.listQuestions(repoId, prNumber);
       const view: PrView = { pr, files, questions };
-      cache.set(key(repoId, prNumber), { ...cached, view });
+      cache.set(key(repoId, prNumber), { ...cached, view, serviceStateFresh: true });
       return view;
     }
 
@@ -148,46 +177,94 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
     const questions = await deps.service.listQuestions(repoId, prNumber);
     const view: PrView = { pr, files, questions };
-    cache.set(key(repoId, prNumber), { view, headSha: head, clone, mergeBase });
+    cache.set(key(repoId, prNumber), { view, headSha: head, clone, mergeBase, serviceStateFresh: true });
     return view;
+  }
+
+  async function refreshPr(repoId: string, prNumber: number): Promise<PrView> {
+    return useCachedViewOnConnectionFailure(repoId, prNumber, () => loadRefresh(repoId, prNumber));
   }
 
   async function applyChecked(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView> {
     const entry = cache.get(key(repoId, prNumber));
     if (!entry) throw new Error(`PR #${prNumber} on ${repoId} must be opened before checking files`);
+    if (!entry.serviceStateFresh) {
+      throw new ServiceConnectionError(STALE_SERVICE_DATA_WRITE_ERROR);
+    }
     const { view } = entry;
     for (const path of paths) {
       const file = view.files.find((f) => f.path === path);
       if (!file) throw new Error(`${path} is not part of PR #${prNumber}`);
       if (checked) {
-        await deps.service.putFileState(repoId, prNumber, {
+        await writeServiceState(entry, () => deps.service.putFileState(repoId, prNumber, {
           checked: true, path,
           baseHash: file.baseHash, headHash: file.headHash,
           baseContent: file.baseContent, headContent: file.headContent,
           machine: deps.machine,
-        });
+        }));
         file.checked = true;
         file.changedSince = false;
       } else {
-        await deps.service.putFileState(repoId, prNumber, { checked: false, path });
+        await writeServiceState(entry, () => deps.service.putFileState(repoId, prNumber, { checked: false, path }));
         file.checked = false;
       }
     }
     return view;
   }
 
-  function requireOpen(repoId: string, prNumber: number): PrView {
+  function requireWritable(repoId: string, prNumber: number): CacheEntry {
     const entry = cache.get(key(repoId, prNumber));
     if (!entry) throw new Error(`PR #${prNumber} on ${repoId} must be opened first`);
-    return entry.view;
+    if (!entry.serviceStateFresh) {
+      throw new ServiceConnectionError(STALE_SERVICE_DATA_WRITE_ERROR);
+    }
+    return entry;
+  }
+
+  async function writeServiceState<T>(entry: CacheEntry, write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (err) {
+      if (err instanceof ServiceConnectionError) entry.serviceStateFresh = false;
+      throw err;
+    }
   }
 
   return {
+    async listPrsWithProgress(repoId) {
+      const [prs, reviews] = await Promise.all([
+        deps.listPrs(repoId),
+        deps.service.listReviews(repoId),
+      ]);
+      const states = new Map(reviews.map((review) => [review.prNumber, review]));
+      const started = prs.filter((pr) => states.get(pr.number)?.files.some(
+        (file) => file.baseHash !== null || file.headHash !== null,
+      ));
+      const progress = new Map<number, { done: number; total: number }>();
+
+      if (started.length > 0) {
+        const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
+        // Pull request rows are a repository-level view. Fetch all reviewed heads in one
+        // operation instead of opening each pull request (and fetching it) in series.
+        await deps.git.fetchPrs(clone, started.map(({ number, baseRef }) => ({ number, baseRef })));
+        await Promise.all(started.map(async (pr) => {
+          const head = await deps.git.resolveRef(clone, `refs/gander/pr/${pr.number}`);
+          const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
+          const mergeBase = await deps.git.mergeBase(clone, base, head);
+          const files = await computeFiles(repoId, pr.number, clone, mergeBase, head, states.get(pr.number));
+          progress.set(pr.number, { done: files.filter((file) => file.checked).length, total: files.length });
+        }));
+      }
+
+      return prs.map((pr) => ({ ...pr, reviewProgress: progress.get(pr.number) ?? null }));
+    },
     openPr,
     refreshPr,
     async addQuestion(repoId, prNumber, input) {
-      const view = requireOpen(repoId, prNumber);
-      view.questions = [...view.questions, await deps.service.addQuestion(repoId, prNumber, { ...input, headSha: view.pr.headSha })];
+      const entry = requireWritable(repoId, prNumber);
+      const { view } = entry;
+      const question = await writeServiceState(entry, () => deps.service.addQuestion(repoId, prNumber, { ...input, headSha: view.pr.headSha }));
+      view.questions = [...view.questions, question];
       return view;
     },
     async reviewedSnapshot(repoId, prNumber, path) {
@@ -208,16 +285,18 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       return { base, head };
     },
     async addReviewerReply(repoId, prNumber, id, text) {
-      const view = requireOpen(repoId, prNumber);
+      const entry = requireWritable(repoId, prNumber);
+      const { view } = entry;
       const question = view.questions.find((q) => q.id === id);
       if (!question) throw new Error(`Question ${id} is not part of PR #${prNumber}`);
-      const reply = await deps.service.addReviewerReply(repoId, prNumber, id, text);
+      const reply = await writeServiceState(entry, () => deps.service.addReviewerReply(repoId, prNumber, id, text));
       question.replies = [...question.replies, reply];
       return view;
     },
     async deleteQuestion(repoId, prNumber, id) {
-      const view = requireOpen(repoId, prNumber);
-      await deps.service.deleteQuestion(repoId, prNumber, id);
+      const entry = requireWritable(repoId, prNumber);
+      const { view } = entry;
+      await writeServiceState(entry, () => deps.service.deleteQuestion(repoId, prNumber, id));
       view.questions = view.questions.filter((q) => q.id !== id);
       return view;
     },
