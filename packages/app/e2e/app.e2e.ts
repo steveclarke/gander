@@ -253,9 +253,13 @@ describe("Gander end to end", () => {
     await $(".seg-review").click();
     await expect($(".stack-group")).toBeDisplayed();
     expect(await browser.execute(() => [...document.querySelectorAll(".stack-group .stack-member")]
-      .map((member) => member.textContent?.replace(/\s+/g, " ").trim()))).toEqual([
-        "1/2 #2 Prepare review state",
-        "2/2 #1 Persist reviewed files",
+      .map((member) => ({
+        position: member.querySelector(".member-stack-position")?.textContent,
+        number: member.querySelector(".num")?.textContent,
+        title: member.querySelector(".nm")?.textContent,
+      })))).toEqual([
+        { position: "1/2", number: "#2", title: "Prepare review state" },
+        { position: "2/2", number: "#1", title: "Persist reviewed files" },
       ]);
     await expect($(".standalone-item")).toHaveText(expect.stringContaining("Independent cleanup"));
     await $(`//div[@role='option'][contains(normalize-space(.), 'Persist reviewed files')]`).click();
