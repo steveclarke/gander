@@ -13,7 +13,7 @@ import { z } from "zod";
  *
  * Not the app's release version: releases happen far more often than the contract moves.
  */
-export const SERVICE_VERSION = "0.2.0";
+export const SERVICE_VERSION = "0.3.0";
 
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
@@ -49,52 +49,52 @@ export const PutFileStateSchema = z.discriminatedUnion("checked", [
 ]);
 export type PutFileState = z.infer<typeof PutFileStateSchema>;
 
-export const QuestionStateSchema = z.enum(["open", "addressed", "resolved"]);
-export type QuestionState = z.infer<typeof QuestionStateSchema>;
+export const NoteStateSchema = z.enum(["open", "addressed", "resolved"]);
+export type NoteState = z.infer<typeof NoteStateSchema>;
 
-export const QuestionReplyAuthorSchema = z.enum(["reviewer", "agent"]);
-export type QuestionReplyAuthor = z.infer<typeof QuestionReplyAuthorSchema>;
+export const NoteReplyAuthorSchema = z.enum(["reviewer", "agent"]);
+export type NoteReplyAuthor = z.infer<typeof NoteReplyAuthorSchema>;
 
-export const QuestionReplySchema = z.object({
+export const NoteReplySchema = z.object({
   id: z.number().int().positive(),
-  author: QuestionReplyAuthorSchema,
+  author: NoteReplyAuthorSchema,
   text: z.string().min(1),
   createdAt: z.string(),
 });
-export type QuestionReply = z.infer<typeof QuestionReplySchema>;
+export type NoteReply = z.infer<typeof NoteReplySchema>;
 
-export const NewQuestionReplySchema = z.object({
+export const NewNoteReplySchema = z.object({
   text: z.string().trim().min(1),
 });
-export type NewQuestionReply = z.infer<typeof NewQuestionReplySchema>;
+export type NewNoteReply = z.infer<typeof NewNoteReplySchema>;
 
-export const QuestionSchema = z.object({
+export const NoteSchema = z.object({
   id: z.number().int().positive(),
   /** null for a note about the pull request as a whole rather than one file. */
   path: z.string().nullable(),
   /** 1-based line in the head revision, stamped when a line was selected at capture. */
   line: z.number().int().positive().nullable(),
   text: z.string().min(1),
-  state: QuestionStateSchema,
-  /** Head the branch was at when the question was captured. */
+  state: NoteStateSchema,
+  /** Head the branch was at when the note was captured. */
   headSha: z.string().nullable(),
-  /** Commit an agent named when it marked the question addressed. */
+  /** Commit an agent named when it marked the note addressed. */
   commitRef: z.string().nullable(),
-  /** One-line note an agent left when it marked the question addressed. */
-  note: z.string().nullable(),
+  /** One-line summary an agent left when it marked the note addressed. */
+  summary: z.string().nullable(),
   createdAt: z.string(),
-  replies: z.array(QuestionReplySchema),
+  replies: z.array(NoteReplySchema),
 });
-export type Question = z.infer<typeof QuestionSchema>;
+export type Note = z.infer<typeof NoteSchema>;
 
-export const NewQuestionSchema = z.object({
+export const NewNoteSchema = z.object({
   path: z.string().min(1).nullable(),
   line: z.number().int().positive().nullable(),
   text: z.string().min(1),
   /** Head the branch was at when this was captured, so a moved line can be spotted later. */
   headSha: z.string().min(1).nullable(),
 });
-export type NewQuestion = z.infer<typeof NewQuestionSchema>;
+export type NewNote = z.infer<typeof NewNoteSchema>;
 
 /** What the service remembers about a pull request, so agents can be told which one they are on. */
 export const PrContextSchema = z.object({
@@ -110,7 +110,7 @@ export type PrContext = z.infer<typeof PrContextSchema>;
 
 export const MarkAddressedSchema = z.object({
   commitRef: z.string().min(1).nullable(),
-  note: z.string().min(1).nullable(),
+  summary: z.string().min(1).nullable(),
 });
 export type MarkAddressed = z.infer<typeof MarkAddressedSchema>;
 
@@ -159,7 +159,7 @@ export interface PrFile extends ChangedFile {
   changedSince: boolean;
 }
 
-export interface PrView { pr: PrSummary; files: PrFile[]; questions: Question[]; }
+export interface PrView { pr: PrSummary; files: PrFile[]; notes: Note[]; }
 
 export interface LocalWorktree {
   path: string;

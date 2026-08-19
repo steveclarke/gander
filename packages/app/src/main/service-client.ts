@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FileCheckoffSchema, QuestionReplySchema, QuestionSchema, ReviewStateSchema, type FileCheckoff, type NewQuestion, type PrContext, type PutFileState, type Question, type QuestionReply, type ReviewState } from "@gander/shared";
+import { FileCheckoffSchema, NoteReplySchema, NoteSchema, ReviewStateSchema, type FileCheckoff, type NewNote, type PrContext, type PutFileState, type Note, type NoteReply, type ReviewState } from "@gander/shared";
 import { checkServiceStatus, type ServiceStatus } from "./connection.js";
 
 export class ServiceConnectionError extends Error {}
@@ -9,10 +9,10 @@ export interface ServiceClient {
   getReview(repoId: string, prNumber: number): Promise<ReviewState>;
   listReviews(repoId: string): Promise<ReviewState[]>;
   putFileState(repoId: string, prNumber: number, input: PutFileState): Promise<FileCheckoff>;
-  listQuestions(repoId: string, prNumber: number): Promise<Question[]>;
-  addQuestion(repoId: string, prNumber: number, input: NewQuestion): Promise<Question>;
-  addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<QuestionReply>;
-  deleteQuestion(repoId: string, prNumber: number, id: number): Promise<void>;
+  listNotes(repoId: string, prNumber: number): Promise<Note[]>;
+  addNote(repoId: string, prNumber: number, input: NewNote): Promise<Note>;
+  addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<NoteReply>;
+  deleteNote(repoId: string, prNumber: number, id: number): Promise<void>;
   setPrContext(repoId: string, prNumber: number, context: PrContext): Promise<void>;
   getSnapshot(repoId: string, prNumber: number, path: string): Promise<{ baseContent: string | null; headContent: string | null }>;
   /** Reachability and API compatibility. Never throws — connection failure is a status. */
@@ -166,20 +166,20 @@ export function createServiceClient(connection: Connection): ServiceClient {
       const path = `${reviewPath(repoId, prNumber)}/files`;
       return validate(FileCheckoffSchema, path, await req("PUT", path, input, { reviewKey: reviewKey(repoId, prNumber) }));
     },
-    listQuestions: async (repoId, prNumber) => {
-      const path = `${reviewPath(repoId, prNumber)}/questions`;
-      return validate(QuestionSchema.array(), path, await req("GET", path));
+    listNotes: async (repoId, prNumber) => {
+      const path = `${reviewPath(repoId, prNumber)}/notes`;
+      return validate(NoteSchema.array(), path, await req("GET", path));
     },
-    addQuestion: async (repoId, prNumber, input) => {
-      const path = `${reviewPath(repoId, prNumber)}/questions`;
-      return validate(QuestionSchema, path, await req("POST", path, input, { reviewKey: reviewKey(repoId, prNumber) }));
+    addNote: async (repoId, prNumber, input) => {
+      const path = `${reviewPath(repoId, prNumber)}/notes`;
+      return validate(NoteSchema, path, await req("POST", path, input, { reviewKey: reviewKey(repoId, prNumber) }));
     },
     addReviewerReply: async (repoId, prNumber, id, text) => {
-      const path = `${reviewPath(repoId, prNumber)}/questions/${id}/replies`;
-      return validate(QuestionReplySchema, path, await req("POST", path, { text }, { reviewKey: reviewKey(repoId, prNumber) }));
+      const path = `${reviewPath(repoId, prNumber)}/notes/${id}/replies`;
+      return validate(NoteReplySchema, path, await req("POST", path, { text }, { reviewKey: reviewKey(repoId, prNumber) }));
     },
-    deleteQuestion: async (repoId, prNumber, id) => {
-      await req("DELETE", `${reviewPath(repoId, prNumber)}/questions/${id}`, undefined, { reviewKey: reviewKey(repoId, prNumber) });
+    deleteNote: async (repoId, prNumber, id) => {
+      await req("DELETE", `${reviewPath(repoId, prNumber)}/notes/${id}`, undefined, { reviewKey: reviewKey(repoId, prNumber) });
     },
     status: serviceStatus,
     getSnapshot: async (repoId, prNumber, path) => {

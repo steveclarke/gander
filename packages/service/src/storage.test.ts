@@ -104,34 +104,34 @@ describe("storage", () => {
     expect(storage.getSnapshot("acme/atlas", 7, "never-touched.png")).toBeNull();
   });
 
-  describe("questions", () => {
-    it("stores a question against a file and reads it back as open", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null });
+  describe("notes", () => {
+    it("stores a note against a file and reads it back as open", () => {
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null });
       expect(q).toMatchObject({ path: "a.rb", line: 12, text: "Why the retry here?", state: "open" });
-      expect(storage.listQuestions("acme/atlas", 7)).toEqual([q]);
+      expect(storage.listNotes("acme/atlas", 7)).toEqual([q]);
     });
 
     it("keeps a pull-request-level note, which has no file", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: null, line: null, text: "Squash before merge", headSha: null });
+      const q = storage.addNote("acme/atlas", 7, { path: null, line: null, text: "Squash before merge", headSha: null });
       expect(q.path).toBeNull();
-      expect(storage.listQuestions("acme/atlas", 7)).toHaveLength(1);
+      expect(storage.listNotes("acme/atlas", 7)).toHaveLength(1);
     });
 
-    it("scopes questions to one review", () => {
-      storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "on seven", headSha: null });
-      storage.addQuestion("acme/atlas", 8, { path: "a.rb", line: null, text: "on eight", headSha: null });
-      expect(storage.listQuestions("acme/atlas", 7).map((q) => q.text)).toEqual(["on seven"]);
-      expect(storage.listQuestions("acme/atlas", 8).map((q) => q.text)).toEqual(["on eight"]);
+    it("scopes notes to one review", () => {
+      storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "on seven", headSha: null });
+      storage.addNote("acme/atlas", 8, { path: "a.rb", line: null, text: "on eight", headSha: null });
+      expect(storage.listNotes("acme/atlas", 7).map((q) => q.text)).toEqual(["on seven"]);
+      expect(storage.listNotes("acme/atlas", 8).map((q) => q.text)).toEqual(["on eight"]);
     });
 
-    it("an agent marks a question addressed with a commit and note", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?", headSha: null });
-      const marked = storage.markQuestionAddressed(q.id, { commitRef: "abc1234", note: "Dropped the retry" });
-      expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", note: "Dropped the retry" });
+    it("an agent marks a note addressed with a commit and note", () => {
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?", headSha: null });
+      const marked = storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" });
+      expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", summary: "Dropped the retry" });
     });
 
-    it("appends reviewer and agent replies without changing the question state", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: 4, text: "Why?", headSha: null });
+    it("appends reviewer and agent replies without changing the note state", () => {
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 4, text: "Why?", headSha: null });
 
       expect(storage.addReviewerReply("acme/atlas", 7, q.id, { text: "Because this runs twice." })).toMatchObject({
         author: "reviewer", text: "Because this runs twice.",
@@ -140,7 +140,7 @@ describe("storage", () => {
         author: "agent", text: "That constraint belongs in the model.",
       });
 
-      expect(storage.listQuestions("acme/atlas", 7)[0]).toMatchObject({
+      expect(storage.listNotes("acme/atlas", 7)[0]).toMatchObject({
         state: "open",
         replies: [
           { author: "reviewer", text: "Because this runs twice." },
@@ -148,57 +148,57 @@ describe("storage", () => {
         ],
       });
 
-      storage.markQuestionAddressed(q.id, { commitRef: null, note: null });
+      storage.markNoteAddressed(q.id, { commitRef: null, summary: null });
       storage.addAgentReply(q.id, { text: "One more detail." });
-      expect(storage.listQuestions("acme/atlas", 7)[0]?.state).toBe("addressed");
+      expect(storage.listNotes("acme/atlas", 7)[0]?.state).toBe("addressed");
 
       storage.putFileState("acme/atlas", 7, {
         checked: true, path: "a.rb", baseHash: "b", headHash: "h",
         baseContent: "old", headContent: "new", machine: "studio",
       });
       storage.addReviewerReply("acme/atlas", 7, q.id, { text: "Closing note." });
-      expect(storage.listQuestions("acme/atlas", 7)[0]?.state).toBe("resolved");
+      expect(storage.listNotes("acme/atlas", 7)[0]?.state).toBe("resolved");
     });
 
-    it("scopes reviewer replies to the question's review", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+    it("scopes reviewer replies to the note's review", () => {
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
       expect(storage.addReviewerReply("acme/atlas", 8, q.id, { text: "Wrong review" })).toBeNull();
-      expect(storage.listQuestions("acme/atlas", 7)[0]?.replies).toEqual([]);
+      expect(storage.listNotes("acme/atlas", 7)[0]?.replies).toEqual([]);
     });
 
-    it("deletes a question's reply thread with the question", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+    it("deletes a note's reply thread with the note", () => {
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
       storage.addAgentReply(q.id, { text: "Here is why." });
-      expect(storage.deleteQuestion("acme/atlas", 7, q.id)).toBe(true);
+      expect(storage.deleteNote("acme/atlas", 7, q.id)).toBe(true);
       expect(storage.addAgentReply(q.id, { text: "Too late" })).toBeNull();
     });
 
-    it("refuses to re-address a question the reviewer already resolved", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
-      storage.markQuestionAddressed(q.id, { commitRef: "abc1234", note: "Dropped the retry" });
+    it("refuses to re-address a note the reviewer already resolved", () => {
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+      storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" });
       storage.putFileState("acme/atlas", 7, {
         checked: true, path: "a.rb", baseHash: "b", headHash: "h",
         baseContent: "o", headContent: "n", machine: "m",
       });
-      expect(storage.listQuestions("acme/atlas", 7)[0]).toMatchObject({
-        state: "resolved", commitRef: "abc1234", note: "Dropped the retry",
+      expect(storage.listNotes("acme/atlas", 7)[0]).toMatchObject({
+        state: "resolved", commitRef: "abc1234", summary: "Dropped the retry",
       });
-      expect(storage.markQuestionAddressed(q.id, { commitRef: null, note: null })).toBeNull();
+      expect(storage.markNoteAddressed(q.id, { commitRef: null, summary: null })).toBeNull();
     });
 
-    it("re-checking a file resolves its addressed questions and leaves open ones alone", () => {
-      const answered = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "answered", headSha: null });
-      const unanswered = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "still open", headSha: null });
-      const elsewhere = storage.addQuestion("acme/atlas", 7, { path: "b.rb", line: null, text: "other file", headSha: null });
-      storage.markQuestionAddressed(answered.id, { commitRef: "c1", note: null });
-      storage.markQuestionAddressed(elsewhere.id, { commitRef: "c2", note: null });
+    it("re-checking a file resolves its addressed notes and leaves open ones alone", () => {
+      const answered = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "answered", headSha: null });
+      const unanswered = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "still open", headSha: null });
+      const elsewhere = storage.addNote("acme/atlas", 7, { path: "b.rb", line: null, text: "other file", headSha: null });
+      storage.markNoteAddressed(answered.id, { commitRef: "c1", summary: null });
+      storage.markNoteAddressed(elsewhere.id, { commitRef: "c2", summary: null });
 
       storage.putFileState("acme/atlas", 7, {
         checked: true, path: "a.rb", baseHash: "b", headHash: "h",
         baseContent: "o", headContent: "n", machine: "m",
       });
 
-      const byId = new Map(storage.listQuestions("acme/atlas", 7).map((q) => [q.id, q.state]));
+      const byId = new Map(storage.listNotes("acme/atlas", 7).map((q) => [q.id, q.state]));
       expect(byId.get(answered.id)).toBe("resolved");
       expect(byId.get(unanswered.id)).toBe("open");
       // A different file's checkoff must not resolve anything here.
@@ -218,12 +218,12 @@ describe("storage", () => {
     });
 
     it("deletes only within its own review", () => {
-      const q = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "keep me", headSha: null });
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "keep me", headSha: null });
       // The same id offered against a different pull request must not delete it.
-      expect(storage.deleteQuestion("acme/atlas", 8, q.id)).toBe(false);
-      expect(storage.listQuestions("acme/atlas", 7)).toHaveLength(1);
-      expect(storage.deleteQuestion("acme/atlas", 7, q.id)).toBe(true);
-      expect(storage.listQuestions("acme/atlas", 7)).toEqual([]);
+      expect(storage.deleteNote("acme/atlas", 8, q.id)).toBe(false);
+      expect(storage.listNotes("acme/atlas", 7)).toHaveLength(1);
+      expect(storage.deleteNote("acme/atlas", 7, q.id)).toBe(true);
+      expect(storage.listNotes("acme/atlas", 7)).toEqual([]);
     });
   });
 });

@@ -51,9 +51,9 @@ export interface Store {
   setCheckedMany(paths: string[], checked: boolean): Promise<void>;
   reviewedSnapshot(path: string): Promise<string | null>;
   imagePreview(path: string): Promise<ImagePreview | null>;
-  addQuestion(text: string, path: string | null, line: number | null): Promise<void>;
+  addNote(text: string, path: string | null, line: number | null): Promise<void>;
   addReviewerReply(id: number, text: string): Promise<void>;
-  deleteQuestion(id: number): Promise<void>;
+  deleteNote(id: number): Promise<void>;
   select(path: string): void;
   files(): ChangedFile[];
   isLocal(): boolean;
@@ -284,16 +284,16 @@ export function createStore(api: GanderApi): Store {
       if (!store.currentRepoId || !store.view) return null;
       return api.imagePreview(store.currentRepoId, store.view.pr.number, path);
     },
-    async addQuestion(text: string, path: string | null, line: number | null) {
+    async addNote(text: string, path: string | null, line: number | null) {
       await guard(async () => {
         const { repoId, prNumber } = requireOpenPr();
-        store.view = await api.addQuestion(repoId, prNumber, { path, line, text });
+        store.view = await api.addNote(repoId, prNumber, { path, line, text });
       });
     },
-    async deleteQuestion(id: number) {
+    async deleteNote(id: number) {
       await guard(async () => {
         const { repoId, prNumber } = requireOpenPr();
-        store.view = await api.deleteQuestion(repoId, prNumber, id);
+        store.view = await api.deleteNote(repoId, prNumber, id);
       });
     },
     async addReviewerReply(id: number, text: string) {

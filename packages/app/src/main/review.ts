@@ -1,4 +1,4 @@
-import type { FileCheckoff, NewQuestion, PrFile, PrListItem, PrSummary, PrView, ReviewState } from "@gander/shared";
+import type { FileCheckoff, NewNote, PrFile, PrListItem, PrSummary, PrView, ReviewState } from "@gander/shared";
 import type { GitEngine } from "./git.js";
 import { ServiceConnectionError, STALE_SERVICE_DATA_WRITE_ERROR, type ServiceClient } from "./service-client.js";
 import type { ImagePreview, ImageSide } from "../image-preview.js";
@@ -16,9 +16,9 @@ export interface Reviewer {
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
-  addQuestion(repoId: string, prNumber: number, input: Omit<NewQuestion, "headSha">): Promise<PrView>;
+  addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha">): Promise<PrView>;
   addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<PrView>;
-  deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
+  deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
   /** The file as it stood when the reviewer last checked it — the base for the delta view. */
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
@@ -115,7 +115,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     // Every member of the stack is recorded, not just the one being opened. An agent
     // stands on one branch of a stack and asks about it; if only the reviewed pull
     // request were known, that lookup would come back empty and the agent would be left
-    // guessing pull request numbers to find the questions.
+    // guessing pull request numbers to find the notes.
     const siblings = pr.stack === null ? [] : all.filter((p) => p.stack?.id === pr.stack?.id && p.number !== pr.number);
     await Promise.all([write(pr), ...siblings.map(write)]);
   }
@@ -124,9 +124,9 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
    * Fetches the branch and records its context, up to the point where the head sha is known.
    *
    * Recorded here so an agent working in a checkout of this branch can ask the service for
-   * its questions by branch name, without the service needing GitHub credentials — and so
+   * its notes by branch name, without the service needing GitHub credentials — and so
    * the answer can name which pull request, and which member of a stack, it is. Kept current
-   * on every refresh too: it is what tells an agent that a question's line number predates
+   * on every refresh too: it is what tells an agent that a note's line number predates
    * the commits now on the branch.
    */
   async function fetchHead(repoId: string, prNumber: number): Promise<{ pr: PrSummary; clone: string; head: string }> {
@@ -146,8 +146,8 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
     const mergeBase = await deps.git.mergeBase(clone, base, head);
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
-    const questions = await deps.service.listQuestions(repoId, prNumber);
-    const view: PrView = { pr, files, questions };
+    const notes = await deps.service.listNotes(repoId, prNumber);
+    const view: PrView = { pr, files, notes };
     cache.set(key(repoId, prNumber), { view, headSha: head, clone, mergeBase, serviceStateFresh: true });
     return view;
   }
@@ -171,8 +171,8 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       // checked/changedSince against the blob content and hashes we already have cached.
       const state = await deps.service.getReview(repoId, prNumber);
       const files = applyServiceState(cached.view.files, state);
-      const questions = await deps.service.listQuestions(repoId, prNumber);
-      const view: PrView = { pr, files, questions };
+      const notes = await deps.service.listNotes(repoId, prNumber);
+      const view: PrView = { pr, files, notes };
       cache.set(key(repoId, prNumber), { ...cached, view, serviceStateFresh: true });
       return view;
     }
@@ -256,11 +256,11 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     },
     openPr,
     refreshPr,
-    async addQuestion(repoId, prNumber, input) {
+    async addNote(repoId, prNumber, input) {
       const entry = requireWritable(repoId, prNumber);
       const { view } = entry;
-      const question = await writeServiceState(entry, () => deps.service.addQuestion(repoId, prNumber, { ...input, headSha: view.pr.headSha }));
-      view.questions = [...view.questions, question];
+      const note = await writeServiceState(entry, () => deps.service.addNote(repoId, prNumber, { ...input, headSha: view.pr.headSha }));
+      view.notes = [...view.notes, note];
       return view;
     },
     async reviewedSnapshot(repoId, prNumber, path) {
@@ -283,17 +283,17 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     async addReviewerReply(repoId, prNumber, id, text) {
       const entry = requireWritable(repoId, prNumber);
       const { view } = entry;
-      const question = view.questions.find((q) => q.id === id);
-      if (!question) throw new Error(`Question ${id} is not part of PR #${prNumber}`);
+      const note = view.notes.find((q) => q.id === id);
+      if (!note) throw new Error(`Note ${id} is not part of PR #${prNumber}`);
       const reply = await writeServiceState(entry, () => deps.service.addReviewerReply(repoId, prNumber, id, text));
-      question.replies = [...question.replies, reply];
+      note.replies = [...note.replies, reply];
       return view;
     },
-    async deleteQuestion(repoId, prNumber, id) {
+    async deleteNote(repoId, prNumber, id) {
       const entry = requireWritable(repoId, prNumber);
       const { view } = entry;
-      await writeServiceState(entry, () => deps.service.deleteQuestion(repoId, prNumber, id));
-      view.questions = view.questions.filter((q) => q.id !== id);
+      await writeServiceState(entry, () => deps.service.deleteNote(repoId, prNumber, id));
+      view.notes = view.notes.filter((q) => q.id !== id);
       return view;
     },
     setChecked: (repoId, prNumber, path, checked) => applyChecked(repoId, prNumber, [path], checked),
