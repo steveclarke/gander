@@ -188,3 +188,16 @@ export const OpenTargetSchema = z.object({
   prNumber: z.number().int().positive().nullable(),
 });
 export type OpenTarget = z.infer<typeof OpenTargetSchema>;
+
+/**
+ * The sentence a connection failure produces, in one place because the renderer
+ * recognizes it by shape. When the health poll recovers, the banner clears itself
+ * only for a reason that was a reach failure — so a producer wording this
+ * differently would leave a stale banner on screen with nothing to dismiss it, and
+ * no test would fail. Build it here, and ask here whether a message is one.
+ */
+export const unreachableReason = (base: string, detail: string): string => `Could not reach ${base}: ${detail}`;
+
+/** Whether `message` is an `unreachableReason` for an http(s) service. */
+export const isUnreachableReason = (message: string): boolean =>
+  /^Could not reach https?:\/\/\S+: [^\n]+$/.test(message);
