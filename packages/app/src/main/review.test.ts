@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -210,5 +210,53 @@ describe("review pipeline", () => {
     const moved = await instrumented.refreshPr("acme/atlas", 1);
     expect(showFileCalls).toBeGreaterThan(afterOpen);
     expect(moved.files.find((f) => f.path === "a.rb")!.changedSince).toBe(true);
+  });
+
+  it("previews modified, added, and deleted images without persisting binary snapshots", async () => {
+    await server.close(); storage.close();
+    rmSync(fixture.dir, { recursive: true, force: true });
+    const basePng = readFileSync(join(import.meta.dirname, "../../resources/icon.png"));
+    const headPng = readFileSync(join(import.meta.dirname, "../../resources/icon-dev.png"));
+    fixture = await makeFixtureRepo(
+      { "modified.png": headPng, "added.png": headPng },
+      { "modified.png": basePng, "deleted.png": basePng },
+    );
+    await fixture.git(["checkout", "feature"]);
+    await fixture.git(["rm", "deleted.png"]);
+    await fixture.git(["commit", "--amend", "--no-edit"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    storage = openStorage(join(dbDir, "images.db"));
+    server = buildServer({ storage, token: "t", version: "test" });
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    port = (server.addresses()[0] as { port: number }).port;
+    reviewer = createReviewer({
+      git: createGitEngine(clonesRoot),
+      service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
+      listPrs: async () => [await currentPr(fixture)],
+      repoUrl: () => fixture.dir,
+      machine: "test-machine",
+    });
+
+    const view = await reviewer.openPr("acme/atlas", 1);
+    expect(view.files.find((file) => file.path === "modified.png")).toMatchObject({
+      status: "M", baseContent: null, headContent: null,
+    });
+    await expect(reviewer.imagePreview("acme/atlas", 1, "modified.png")).resolves.toMatchObject({
+      base: { kind: "image", mediaType: "image/png" },
+      head: { kind: "image", mediaType: "image/png" },
+    });
+    await expect(reviewer.imagePreview("acme/atlas", 1, "added.png")).resolves.toMatchObject({
+      base: { kind: "absent" }, head: { kind: "image" },
+    });
+    await expect(reviewer.imagePreview("acme/atlas", 1, "deleted.png")).resolves.toMatchObject({
+      base: { kind: "image" }, head: { kind: "absent" },
+    });
+
+    await reviewer.setChecked("acme/atlas", 1, "modified.png", true);
+    expect(storage.getSnapshot("acme/atlas", 1, "modified.png")).toMatchObject({
+      baseContent: null, headContent: null,
+    });
   });
 });

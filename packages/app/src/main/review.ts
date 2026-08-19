@@ -1,6 +1,7 @@
 import type { FileCheckoff, NewQuestion, PrFile, PrSummary, PrView } from "@gander/shared";
 import type { GitEngine } from "./git.js";
 import type { ServiceClient } from "./service-client.js";
+import type { ImagePreview, ImageSide } from "../image-preview.js";
 
 export interface ReviewerDeps {
   git: GitEngine;
@@ -19,9 +20,10 @@ export interface Reviewer {
   deleteQuestion(repoId: string, prNumber: number, id: number): Promise<PrView>;
   /** The file as it stood when the reviewer last checked it — the base for the delta view. */
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
+  imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
 }
 
-interface CacheEntry { view: PrView; headSha: string; }
+interface CacheEntry { view: PrView; headSha: string; clone: string; mergeBase: string; }
 
 export function createReviewer(deps: ReviewerDeps): Reviewer {
   const cache = new Map<string, CacheEntry>();
@@ -111,7 +113,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
     const questions = await deps.service.listQuestions(repoId, prNumber);
     const view: PrView = { pr, files, questions };
-    cache.set(key(repoId, prNumber), { view, headSha: head });
+    cache.set(key(repoId, prNumber), { view, headSha: head, clone, mergeBase });
     return view;
   }
 
@@ -136,7 +138,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       const files = applyServiceState(cached.view.files, state);
       const questions = await deps.service.listQuestions(repoId, prNumber);
       const view: PrView = { pr, files, questions };
-      cache.set(key(repoId, prNumber), { view, headSha: head });
+      cache.set(key(repoId, prNumber), { ...cached, view });
       return view;
     }
 
@@ -146,7 +148,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const files = await computeFiles(repoId, prNumber, clone, mergeBase, head);
     const questions = await deps.service.listQuestions(repoId, prNumber);
     const view: PrView = { pr, files, questions };
-    cache.set(key(repoId, prNumber), { view, headSha: head });
+    cache.set(key(repoId, prNumber), { view, headSha: head, clone, mergeBase });
     return view;
   }
 
@@ -190,6 +192,20 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     },
     async reviewedSnapshot(repoId, prNumber, path) {
       return (await deps.service.getSnapshot(repoId, prNumber, path)).headContent;
+    },
+    async imagePreview(repoId, prNumber, path) {
+      const entry = cache.get(key(repoId, prNumber));
+      if (!entry) throw new Error(`PR #${prNumber} on ${repoId} must be opened first`);
+      const file = entry.view.files.find((candidate) => candidate.path === path);
+      if (!file) throw new Error(`${path} is not part of PR #${prNumber}`);
+      const side = (hash: string | null, rev: string): Promise<ImageSide> => hash === null
+        ? Promise.resolve({ kind: "absent" })
+        : deps.git.showImage(entry.clone, rev, path);
+      const [base, head] = await Promise.all([
+        side(file.baseHash, entry.mergeBase),
+        side(file.headHash, entry.headSha),
+      ]);
+      return { base, head };
     },
     async addReviewerReply(repoId, prNumber, id, text) {
       const view = requireOpen(repoId, prNumber);

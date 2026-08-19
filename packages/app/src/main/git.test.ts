@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createGitEngine, type GitEngine } from "./git.js";
 import { makeFixtureRepo, type FixtureRepo } from "./fixtures.js";
+import { MAX_IMAGE_BYTES } from "../image-preview.js";
 
 let fixture: FixtureRepo; let clonesRoot: string; let engine: GitEngine;
 
@@ -106,6 +107,35 @@ describe("git engine", () => {
     expect(atBase.content).toBeNull();
     expect(atBase.hash).toBeNull(); // absent at base — same content-shape as binary, different hash-shape
     expect(atBase.binary).toBe(false);
+  });
+
+  it("showImage transports only signature-detected, bounded image bytes", async () => {
+    const png = readFileSync(join(import.meta.dirname, "../../resources/icon.png"));
+    await fixture.git(["checkout", "feature"]);
+    writeFileSync(join(fixture.dir, "real-image.dat"), png);
+    writeFileSync(join(fixture.dir, "ordinary.bin"), Buffer.from([0, 1, 2, 3, 4]));
+    writeFileSync(join(fixture.dir, "corrupt.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const oversized = Buffer.alloc(MAX_IMAGE_BYTES + 1);
+    png.copy(oversized, 0, 0, 16);
+    writeFileSync(join(fixture.dir, "oversized.bin"), oversized);
+    await fixture.git(["add", "-A"]);
+    await fixture.git(["commit", "-m", "add image cases"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    const clone = await engine.ensureClone("acme/atlas", fixture.dir);
+    await engine.fetchPr(clone, 1, "main");
+    const head = await engine.resolveRef(clone, "refs/gander/pr/1");
+
+    const image = await engine.showImage(clone, head, "real-image.dat");
+    expect(image).toMatchObject({ kind: "image", mediaType: "image/png", size: png.length });
+    expect(image.kind === "image" && Buffer.from(image.bytes).equals(png)).toBe(true);
+    await expect(engine.showImage(clone, head, "ordinary.bin")).resolves.toEqual({ kind: "unsupported", size: 5 });
+    await expect(engine.showImage(clone, head, "corrupt.png")).resolves.toMatchObject({ kind: "image", mediaType: "image/png" });
+    await expect(engine.showImage(clone, head, "oversized.bin")).resolves.toEqual({
+      kind: "too-large", size: MAX_IMAGE_BYTES + 1, limit: MAX_IMAGE_BYTES,
+    });
+    expect((await engine.showFile(clone, head, "corrupt.png")).binary).toBe(true);
   });
 
   it("showFile throws (does not swallow) when the revision itself is bad", async () => {

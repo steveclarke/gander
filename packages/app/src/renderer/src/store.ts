@@ -1,6 +1,7 @@
 import { reactive } from "vue";
 import type { OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi, GithubRepository } from "./api.js";
+import type { ImagePreview } from "../../api.js";
 
 export interface Store {
   repos: RepoEntry[];
@@ -35,6 +36,7 @@ export interface Store {
   setChecked(path: string, checked: boolean): Promise<void>;
   setCheckedMany(paths: string[], checked: boolean): Promise<void>;
   reviewedSnapshot(path: string): Promise<string | null>;
+  imagePreview(path: string): Promise<ImagePreview | null>;
   addQuestion(text: string, path: string | null, line: number | null): Promise<void>;
   addReviewerReply(id: number, text: string): Promise<void>;
   deleteQuestion(id: number): Promise<void>;
@@ -163,6 +165,10 @@ export function createStore(api: GanderApi): Store {
     async reviewedSnapshot(path: string) {
       if (!store.currentRepoId || !store.view) return null;
       return api.reviewedSnapshot(store.currentRepoId, store.view.pr.number, path);
+    },
+    async imagePreview(path: string) {
+      if (!store.currentRepoId || !store.view) return null;
+      return api.imagePreview(store.currentRepoId, store.view.pr.number, path);
     },
     async addQuestion(text: string, path: string | null, line: number | null) {
       await guard(async () => {

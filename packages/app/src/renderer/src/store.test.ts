@@ -38,6 +38,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     onOpenTarget: () => () => {},
     serviceHealthy: async () => true,
     reviewedSnapshot: async () => null,
+    imagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
     addQuestion: async () => prView(),
     addReviewerReply: async () => prView(),
     deleteQuestion: async () => prView(),
