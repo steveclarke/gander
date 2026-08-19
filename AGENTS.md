@@ -67,8 +67,11 @@ in code, comments, commits, or issues.
 | Isolated working copy | `bin/worktree add <name>` |
 | Check this worktree's MCP bridge | `bin/mcp check` |
 
-There is no linter or formatter, and no CI. `pnpm typecheck` and `pnpm test` are
-the gate.
+There is no linter or formatter. `pnpm typecheck` and `pnpm test` are the gate, and
+`.github/workflows/test.yml` runs both on every pull request and every push to
+master, plus the end-to-end suite on macOS and Linux. Run them locally first: the
+end-to-end job is the slow half, and a failure there is a rebuild away from being
+diagnosed on your own machine.
 
 `bin/dev` is process-compose supervising the service and the app, with ports
 allocated per-checkout by outport. Don't start packages by hand — the app reads
