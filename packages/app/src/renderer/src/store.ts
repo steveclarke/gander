@@ -173,7 +173,6 @@ export function createStore(api: GanderApi): Store {
     },
     async openTarget(target: OpenTarget) {
       await userAction(() => withBusy(() => guard(async () => {
-        const generation = target.prNumber === null ? null : ++localContextGeneration;
         // bin/gander can register a repository as it opens one, which happens in the main
         // process after this list was last read. Re-read before refusing, or the first
         // open of a checkout the app has not seen always fails.
@@ -185,8 +184,11 @@ export function createStore(api: GanderApi): Store {
         // those would clear the busy flag halfway through this one.
         await activateRepo(target.repoId);
         if (target.prNumber === null) return;
-        if (generation !== localContextGeneration) return;
-        await applyOpenedPr(target.repoId, target.prNumber, generation);
+        // Taken after activateRepo, not before: switching repositories clears the loaded
+        // view, which bumps the counter, and a generation read earlier would then look
+        // superseded by this call's own work — leaving the repository open and the pull
+        // request never opened.
+        await applyOpenedPr(target.repoId, target.prNumber, ++localContextGeneration);
       })));
     },
     async selectRepo(repoId: string) {
@@ -252,7 +254,21 @@ export function createStore(api: GanderApi): Store {
     async refresh() {
       await withBusy(() => guard(async () => {
         if (store.localView) {
-          applyLocalView(await api.refreshLocal(store.localView.worktree.path));
+          const worktreePath = store.localView.worktree.path;
+          const generation = localContextGeneration;
+          // The poll can still be in flight when the reviewer opens something else, which
+          // closes this worktree in the main process. Its refusal then means this request
+          // was superseded, not that anything failed, so it must not reach the reviewer as
+          // an error about a worktree they have already left.
+          let refreshed;
+          try {
+            refreshed = await api.refreshLocal(worktreePath);
+          } catch (err) {
+            if (superseded(generation, worktreePath)) return;
+            throw err;
+          }
+          if (superseded(generation, worktreePath)) return;
+          applyLocalView(refreshed);
           await refreshExplorer();
         } else if (store.currentRepoId && store.view) {
           store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
@@ -355,6 +371,11 @@ export function createStore(api: GanderApi): Store {
       store.error = (err as Error).message;
       store.localFile = null;
     }
+  }
+
+  /** True once the reviewer has moved on from the worktree a request was made for. */
+  function superseded(generation: number, worktreePath: string): boolean {
+    return generation !== localContextGeneration || store.localView?.worktree.path !== worktreePath;
   }
 
   async function refreshExplorer(): Promise<void> {
