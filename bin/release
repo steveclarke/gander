@@ -75,3 +75,4 @@ gh release upload "$TAG" dist/*.dmg dist/*.zip dist/*.blockmap dist/latest-mac.y
 
 echo "==> Published https://github.com/steveclarke/gander/releases/tag/${TAG}"
 echo "    The Linux AppImage follows from CI."
+echo "    After verifying the signed app, publish dist/gander.rb to steveclarke/homebrew-tap/Casks/gander.rb."

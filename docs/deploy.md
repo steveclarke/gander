@@ -125,6 +125,11 @@ the release and its install/update path have been verified manually:
 3. Install the fully qualified cask from the tap and launch it before publishing
    the tap change.
 
+The cask is the installation and discovery path; Electron's consent-based updater
+owns routine upgrades. `auto_updates true` keeps an ordinary `brew upgrade` from
+replacing an app that updates itself. The tap still advances with each verified
+release so a fresh Homebrew installation receives the current version.
+
 Do not copy signing identities, notarization credentials, tokens, or keychain
 profile names into either repository. The generated cask contains only the
 public release URL and checksum.
