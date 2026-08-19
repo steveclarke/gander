@@ -39,6 +39,7 @@ in code, comments, commits, or issues.
 | Electron E2E | `pnpm test:e2e` |
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Repair a config the settings schema has outgrown | `bin/fix-config` |
+| Update the service on its host | `bin/deploy` |
 | Build an unsigned app | `pnpm --filter @gander/app run dist:unsigned` |
 | Isolated working copy | `bin/worktree add <name>` |
 | Check this worktree's MCP bridge | `bin/mcp check` |
