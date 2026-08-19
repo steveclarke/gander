@@ -32,16 +32,17 @@ worktree.
 
 ## Read review questions
 
-Use the repository and PR resolved above:
+Use the repository and PR resolved above. For a one-shot check:
 
 ```bash
 bin/mcp call get_review_questions repo=OWNER/REPO prNumber=NUMBER
 ```
 
-Run the command after the reviewer says questions are ready, or poll at a
-reasonable interval when the reviewer explicitly asks the agent to wait. Do
-not register this endpoint globally in Claude or Codex. `bin/mcp` reads this
-worktree's endpoint and bearer token from `.env`.
+For a live review conversation, launch the agent through
+`bin/gander-agent codex` or `bin/gander-agent claude`. Its local bridge waits
+without model turns and wakes the agent when a reviewer replies. Do not
+register this worktree's endpoint globally. Both commands read its endpoint
+and bearer token from `.env`.
 
 ## Address a question
 
@@ -51,20 +52,25 @@ Treat a question as work, not as a checkbox:
 2. Make the requested change or explain why it should not change.
 3. Run the verification appropriate to the change.
 4. Commit and push the result when code changed.
-5. Mark the question addressed with a concrete note:
+5. Reply to the reviewer without changing the question state:
+
+```bash
+bin/mcp call reply_to_question id=QUESTION_ID text="RESPONSE"
+```
+
+6. When the work is complete, mark the question addressed with a concrete note:
 
 ```bash
 bin/mcp call mark_question_addressed id=QUESTION_ID commitRef=COMMIT_SHA note="WHAT CHANGED"
 ```
 
-Only the reviewer resolves a question after re-reviewing the file. The current
-MCP contract has no threaded agent reply; the `note` on
-`mark_question_addressed` is the temporary response channel.
+Only the reviewer resolves a question after re-reviewing the file. Replies do
+not address or resolve it.
 
 ## Diagnose the bridge
 
-- `bin/mcp check` verifies health, authentication, MCP negotiation, and the two
-  required tools.
+- `bin/mcp check` verifies health, authentication, MCP negotiation, and the
+  three required tools.
 - `bin/mcp tools` lists the live contract.
 - `bin/mcp tui` opens MCP Inspector's terminal UI.
 - `bin/mcp inspect` opens its web debugger on ports allocated to this worktree.

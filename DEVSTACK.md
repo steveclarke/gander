@@ -186,37 +186,33 @@ The Inspector package is an exact development dependency, while
 `GANDER_MCP_INSPECTOR_PACKAGE` can select another package version through
 `pnpm dlx` for deliberate compatibility testing.
 
-## Registering the MCP endpoint with an agent (optional)
+## Running an agent with live reviewer replies
 
-Agents working inside a Gander development worktree should use `bin/mcp` as
-documented above. It discovers this worktree's connection without changing
-global agent configuration. Direct MCP registration remains available for an
-agent working in another repository that needs to reach this Gander instance.
+Use the checkout-local launcher when the agent should wake automatically after
+a reviewer replies:
 
-Agents read the reviewer's questions from the same service, at `/mcp`, with the
-same bearer token. Port and token are allocated per checkout, so the command is
-generated rather than committed — read the live values out of `.env`:
-
-Gander requires MCP protocol `2026-07-28`; it deliberately rejects legacy
-clients. In Codex, enable the current modern-protocol feature before connecting:
-
-`Streamable HTTP` is the transport: the agent connects to Gander's existing
-service URL, and long-lived responses use SSE when needed. It does not mean an
-older protocol revision. `STDIO` is the alternative transport where the agent
-launches a local child process and communicates over its standard streams; that
-does not fit Gander's shared cross-machine service.
-
-```
-codex features enable mcp_2026_07_28
+```bash
+bin/gander-agent codex
+bin/gander-agent claude
 ```
 
-```
-source .env
-claude mcp add --transport http gander "$GANDER_SERVICE_URL/mcp" \
-  --header "Authorization: Bearer $GANDER_TOKEN"
-```
+Pass ordinary agent arguments after the name. The launcher reads this
+worktree's `.env`, adds Gander only for that agent process, and starts a small
+stdio bridge automatically. It does not install global configuration or add a
+third managed service. The bridge keeps one held reply wait armed after the
+model turn ends. Claude receives its native channel notification. For Codex,
+the launcher starts a private app server, points the normal terminal UI at it,
+and sends the reviewer reply into that same live thread. Both temporary Codex
+resources stop when the terminal session exits.
 
-Run it in the repository being reviewed, not in this one. Three tools appear:
+The public Streamable HTTP endpoint remains modern-only MCP `2026-07-28`. The
+local bridge accepts the stdio handshake used by the current Codex and Claude
+releases and translates it to that modern upstream connection; this is not a
+legacy public endpoint or fallback. Its exposed contract remains exactly the
+same three tools.
+
+For one-shot diagnostics instead of a live agent session, use `bin/mcp` as
+documented above. Three tools appear through either path:
 
 | Tool | Purpose |
 |------|---------|
