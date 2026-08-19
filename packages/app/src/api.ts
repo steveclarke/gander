@@ -1,4 +1,4 @@
-import type { NewQuestion, OpenTarget, PrSummary, PrView, RepoEntry } from "@gander/shared";
+import type { NewQuestion, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
 import type { ConnectionCheck } from "./main/connection.js";
@@ -35,7 +35,7 @@ export interface GanderApi {
   /** All non-archived repositories visible to the current GitHub credential. */
   listGithubRepos(): Promise<GithubRepository[]>;
   addRepo(url: string): Promise<RepoEntry>;
-  listPrs(repoId: string): Promise<PrSummary[]>;
+  listPrs(repoId: string): Promise<PrListItem[]>;
   lastReview(): Promise<{ repoId: string; prNumber: number } | null>;
   /** What this launch was asked to open, from the command line. Null for an ordinary launch. */
   initialTarget(): Promise<OpenTarget | null>;

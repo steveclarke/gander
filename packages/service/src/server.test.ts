@@ -45,6 +45,10 @@ describe("service API", () => {
 
     const after = await server.inject({ method: "GET", url: "/api/reviews/acme%2Fatlas/7", headers: AUTH });
     expect(after.json().files).toHaveLength(1);
+
+    const listed = await server.inject({ method: "GET", url: "/api/reviews/acme%2Fatlas", headers: AUTH });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()).toEqual([expect.objectContaining({ repoId: "acme/atlas", prNumber: 7 })]);
   });
 
   it("rejects a malformed PUT body with 400 and the zod message", async () => {

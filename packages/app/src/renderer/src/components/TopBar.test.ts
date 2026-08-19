@@ -2,11 +2,11 @@
 
 import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
-import type { PrSummary } from "@gander/shared";
+import type { PrListItem, PrSummary, ReviewProgress } from "@gander/shared";
 import type { Store } from "../store.js";
 import TopBar from "./TopBar.vue";
 
-function pr(number: number, title: string, stack: PrSummary["stack"] = null): PrSummary {
+function pr(number: number, title: string, stack: PrSummary["stack"] = null, reviewProgress: ReviewProgress | null = null): PrListItem {
   return {
     number,
     title,
@@ -17,11 +17,12 @@ function pr(number: number, title: string, stack: PrSummary["stack"] = null): Pr
     baseSha: "base",
     headSha: `head-${number}`,
     stack,
+    reviewProgress,
   };
 }
 
 function storeWithProgress(done: number, total: number, options: {
-  prs?: PrSummary[];
+  prs?: PrListItem[];
   currentPr?: PrSummary;
   openPr?: Store["openPr"];
 } = {}): Store {
@@ -103,8 +104,8 @@ describe("TopBar", () => {
       props: {
         store: storeWithProgress(0, 0, {
           prs: [
-            pr(22, "Add the renderer", { ...stack, position: 2 }),
-            pr(30, "Independent change"),
+            { ...pr(22, "Add the renderer", { ...stack, position: 2 }, { done: 1, total: 4 }), draft: true },
+            pr(30, "Independent change", null, { done: 2, total: 2 }),
             pr(21, "Add the service", { ...stack, position: 1 }),
           ],
           openPr,
@@ -121,11 +122,16 @@ describe("TopBar", () => {
     expect(wrapper.findAll(".stack-group")).toHaveLength(1);
     expect(wrapper.findAll(".stack-group .sw-item").map((item) => item.text())).toEqual([
       "1/2#21Add the service",
-      "2/2#22Add the renderer",
+      "2/2#22Add the renderer1/4 reviewed",
     ]);
     expect(wrapper.findAll(".standalone-item").map((item) => item.text())).toEqual([
-      "#30Independent change",
+      "#30Independent change Reviewed",
     ]);
+    expect(wrapper.findAll(".review-progress")).toHaveLength(2);
+    expect(wrapper.get(".standalone-item .review-progress svg").attributes("aria-hidden")).toBe("true");
+    expect(wrapper.findAll(".dot")).toHaveLength(3);
+    expect(wrapper.findAll(".dot.draft")).toHaveLength(1);
+    expect(wrapper.findAll(".dot.open")).toHaveLength(2);
 
     await wrapper.findAll(".stack-group .sw-item")[1]!.trigger("keydown", { key: "Enter" });
     expect(openPr).toHaveBeenCalledWith(22);

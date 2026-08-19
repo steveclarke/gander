@@ -1,4 +1,4 @@
-import type { FileCheckoff, NewQuestion, PrFile, PrSummary, PrView } from "@gander/shared";
+import type { FileCheckoff, NewQuestion, PrFile, PrListItem, PrSummary, PrView, ReviewState } from "@gander/shared";
 import type { GitEngine } from "./git.js";
 import type { ServiceClient } from "./service-client.js";
 import type { ImagePreview, ImageSide } from "../image-preview.js";
@@ -11,6 +11,7 @@ export interface ReviewerDeps {
   machine: string;
 }
 export interface Reviewer {
+  listPrsWithProgress(repoId: string): Promise<PrListItem[]>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
@@ -48,9 +49,9 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     });
   }
 
-  async function computeFiles(repoId: string, prNumber: number, clone: string, mergeBase: string, head: string): Promise<PrFile[]> {
+  async function computeFiles(repoId: string, prNumber: number, clone: string, mergeBase: string, head: string, knownState?: ReviewState): Promise<PrFile[]> {
     const changed = await deps.git.diffFiles(clone, mergeBase, head);
-    const state = await deps.service.getReview(repoId, prNumber);
+    const state = knownState ?? await deps.service.getReview(repoId, prNumber);
 
     const raw: PrFile[] = [];
     for (const { path, status } of changed) {
@@ -183,6 +184,33 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
   }
 
   return {
+    async listPrsWithProgress(repoId) {
+      const [prs, reviews] = await Promise.all([
+        deps.listPrs(repoId),
+        deps.service.listReviews(repoId),
+      ]);
+      const states = new Map(reviews.map((review) => [review.prNumber, review]));
+      const started = prs.filter((pr) => states.get(pr.number)?.files.some(
+        (file) => file.baseHash !== null || file.headHash !== null,
+      ));
+      const progress = new Map<number, { done: number; total: number }>();
+
+      if (started.length > 0) {
+        const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
+        // Pull request rows are a repository-level view. Fetch all reviewed heads in one
+        // operation instead of opening each pull request (and fetching it) in series.
+        await deps.git.fetchPrs(clone, started.map(({ number, baseRef }) => ({ number, baseRef })));
+        await Promise.all(started.map(async (pr) => {
+          const head = await deps.git.resolveRef(clone, `refs/gander/pr/${pr.number}`);
+          const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);
+          const mergeBase = await deps.git.mergeBase(clone, base, head);
+          const files = await computeFiles(repoId, pr.number, clone, mergeBase, head, states.get(pr.number));
+          progress.set(pr.number, { done: files.filter((file) => file.checked).length, total: files.length });
+        }));
+      }
+
+      return prs.map((pr) => ({ ...pr, reviewProgress: progress.get(pr.number) ?? null }));
+    },
     openPr,
     refreshPr,
     async addQuestion(repoId, prNumber, input) {

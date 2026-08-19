@@ -46,6 +46,50 @@ afterEach(async () => {
 const sha256 = (s: string): string => createHash("sha256").update(s).digest("hex");
 
 describe("review pipeline", () => {
+  it("derives menu progress from current file content with one batched fetch", async () => {
+    const beforeReview = await reviewer.listPrsWithProgress("acme/atlas");
+    expect(beforeReview[0]?.reviewProgress).toBeNull();
+
+    await reviewer.openPr("acme/atlas", 1);
+    await reviewer.setCheckedMany("acme/atlas", 1, ["a.rb", "b.rb"], true);
+
+    let batchFetches = 0;
+    let individualFetches = 0;
+    const baseEngine = createGitEngine(clonesRoot);
+    const countingEngine: GitEngine = {
+      ...baseEngine,
+      async fetchPr(clone, prNumber, baseRef) {
+        individualFetches += 1;
+        return baseEngine.fetchPr(clone, prNumber, baseRef);
+      },
+      async fetchPrs(clone, prs) {
+        batchFetches += 1;
+        return baseEngine.fetchPrs(clone, prs);
+      },
+    };
+    const summaries = createReviewer({
+      git: countingEngine,
+      service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
+      listPrs: async () => [await currentPr(fixture)],
+      repoUrl: () => fixture.dir,
+      machine: "test-machine",
+    });
+
+    expect((await summaries.listPrsWithProgress("acme/atlas"))[0]?.reviewProgress).toEqual({ done: 2, total: 2 });
+    expect(batchFetches).toBe(1);
+    expect(individualFetches).toBe(0);
+
+    await fixture.git(["checkout", "feature"]);
+    writeFileSync(join(fixture.dir, "a.rb"), "class A\n  def go; puts 1; end\nend\n");
+    await fixture.git(["add", "-A"]);
+    await fixture.git(["commit", "--amend", "-m", "change reviewed content"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    expect((await summaries.listPrsWithProgress("acme/atlas"))[0]?.reviewProgress).toEqual({ done: 1, total: 2 });
+    expect(storage.getReview("acme/atlas", 1).files.find((file) => file.path === "a.rb")?.checked).toBe(false);
+  });
+
   it("openPr returns the PR's files with contents and unchecked state", async () => {
     const view = await reviewer.openPr("acme/atlas", 1);
     expect(view.pr.number).toBe(1);
