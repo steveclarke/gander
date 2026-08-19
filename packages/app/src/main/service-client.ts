@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { describeNetworkError } from "./network-error.js";
 import { FileCheckoffSchema, QuestionReplySchema, QuestionSchema, ReviewStateSchema, type FileCheckoff, type NewQuestion, type PrContext, type PutFileState, type Question, type QuestionReply, type ReviewState } from "@gander/shared";
 import { checkServiceStatus, type ServiceStatus } from "./connection.js";
 
@@ -128,10 +129,11 @@ export function createServiceClient(connection: Connection): ServiceClient {
     try {
       res = await fetch(`${baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     } catch (err) {
-      checkedConnection = { url: baseUrl, status: { state: "unreachable", reason: `Could not reach ${baseUrl}: ${(err as Error).message}` } };
+      const detail = describeNetworkError(err);
+      checkedConnection = { url: baseUrl, status: { state: "unreachable", reason: `Could not reach ${baseUrl}: ${detail}` } };
       requireRecoveryReads();
       const consequence = method === "GET" ? "" : " This change was not saved and will not be retried.";
-      throw new ServiceConnectionError(`Gander service unreachable at ${baseUrl}: ${(err as Error).message}.${consequence}`);
+      throw new ServiceConnectionError(`Gander service unreachable at ${baseUrl}: ${detail}.${consequence}`);
     }
     if (!res.ok) throw new Error(await describeFailure(res, method, baseUrl, path));
     // 204 has no body — reading it as JSON would throw on a successful delete.

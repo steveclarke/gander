@@ -40,10 +40,14 @@ describe("checkConnection", () => {
     expect(await checkConnection(url, "wrong")).toEqual({ ok: false, reason: "The service rejected that token." });
   });
 
-  it("reports an address that answers nothing", async () => {
-    const result = await checkConnection("http://127.0.0.1:1", "t");
+  it("includes the system cause when the service cannot be reached", async () => {
+    const url = await serve("good-token");
+    await server!.close();
+    server = undefined;
+
+    const result = await checkConnection(url, "t");
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toContain("Could not reach");
+    if (!result.ok) expect(result.reason).toMatch(/Could not reach .+: fetch failed \(.+\)/);
   });
 
   it("reports a server that is not a Gander service", async () => {

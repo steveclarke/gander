@@ -1,4 +1,5 @@
 import { SERVICE_VERSION } from "@gander/shared";
+import { describeNetworkError } from "./network-error.js";
 
 /**
  * Checking a connection the reviewer has just typed.
@@ -61,7 +62,7 @@ export async function checkServiceStatus(url: string): Promise<ServiceStatus> {
   try {
     health = await fetch(`${base}/healthz`);
   } catch (err) {
-    return { state: "unreachable", reason: `Could not reach ${base}: ${(err as Error).message}` };
+    return { state: "unreachable", reason: `Could not reach ${base}: ${describeNetworkError(err)}` };
   }
   if (!health.ok) return { state: "unreachable", reason: `${base} answered ${health.status} on /healthz` };
 
@@ -90,7 +91,7 @@ export async function checkConnection(url: string, token: string): Promise<Conne
   try {
     probe = await fetch(`${base}${PROBE}`, { headers: { Authorization: `Bearer ${token.trim()}` } });
   } catch (err) {
-    return { ok: false, reason: `Could not reach ${base}: ${(err as Error).message}` };
+    return { ok: false, reason: `Could not reach ${base}: ${describeNetworkError(err)}` };
   }
   if (probe.status === 401) return { ok: false, reason: "The service rejected that token." };
   if (!probe.ok) return { ok: false, reason: `${base} answered ${probe.status}` };
