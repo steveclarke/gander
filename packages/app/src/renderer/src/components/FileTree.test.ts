@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick, reactive } from "vue";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PrFile, PrView } from "@gander/shared";
 import type { Store } from "../store.js";
 import FileTree from "./FileTree.vue";
+import { collapsedDirs } from "../tree-nav.js";
 
 const file = (path: string, checked = false): PrFile =>
   ({ path, status: "M", baseContent: "", headContent: "", baseHash: "b", headHash: "h", checked, changedSince: false });
@@ -94,6 +95,9 @@ function fileRow(wrapper: VueWrapper, path: string) {
 }
 
 describe("FileTree", () => {
+  // Collapse state is shared across the tree's recursive levels, so it outlives a mount.
+  beforeEach(() => collapsedDirs.clear());
+
   const treeFiles = [
     file("app/models/member.rb", false),
     file("app/services/dues/late_fee_calculator.rb", true),

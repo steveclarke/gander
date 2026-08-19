@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import type { OpenTarget } from "@gander/shared";
 import { MessageSquare, Plus, RefreshCw, X } from "lucide-vue-next";
 import { api } from "./api.js";
@@ -9,6 +9,9 @@ import { notesDock, notesHeight, notesWidth, treeWidth } from "./layout.js";
 import { effectiveTreeTypography } from "../../settings.js";
 import { currentLine } from "./selection.js";
 import type { NoteTarget } from "./selection.js";
+import type { PrFile } from "@gander/shared";
+import { bindingFor, type Command } from "./keymap.js";
+import { collapsedDirectoryAfter, collapsedDirs, directoryOf, edge, nextUnchecked, step, treeFocus } from "./tree-nav.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -18,6 +21,7 @@ import LocalSidebar from "./components/LocalSidebar.vue";
 import PullRequestSidebar from "./components/PullRequestSidebar.vue";
 import NoteCapture from "./components/NoteCapture.vue";
 import NotesDrawer from "./components/NotesDrawer.vue";
+import KeymapHelp from "./components/KeymapHelp.vue";
 import SettingsPane from "./components/SettingsPane.vue";
 import Splitter from "./components/Splitter.vue";
 import StackPosition from "./components/StackPosition.vue";
@@ -35,6 +39,8 @@ const unconfigured = ref(false);
 const noteTarget = shallowRef<NoteTarget | null>(null);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
+const helpOpen = ref(false);
+const diffPane = ref<InstanceType<typeof DiffPane> | null>(null);
 const treeScrolling = shallowRef(false);
 const zoomLevel = shallowRef(DEFAULT_ZOOM_LEVEL);
 const settingsCategory = shallowRef<"workbench" | "editor" | "connection">("workbench");
@@ -245,21 +251,116 @@ function isTyping(target: HTMLElement | null): boolean {
   return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 }
 
+// Selection is the app's cursor, so the keys that move it work wherever the reviewer is
+// looking. Nothing here is editable, so single letters are safe; isTyping guards the note
+// input and the settings fields, which are the only places a letter means itself.
+function runCommand(command: Command): boolean {
+  const files = store.files();
+  const selected = store.selectedPath;
+
+  switch (command) {
+    case "next-file":
+    case "previous-file": {
+      const next = step(files, selected, command === "next-file" ? 1 : -1);
+      if (next !== null) store.select(next);
+      return true;
+    }
+    case "first-file":
+    case "last-file": {
+      const next = edge(files, command === "first-file" ? "first" : "last");
+      if (next !== null) store.select(next);
+      return true;
+    }
+    case "collapse": {
+      // The row the cursor sits on is about to fold away, so the cursor steps out with it,
+      // onto the file above the directory rather than into a hidden row.
+      const dir = selected === null ? null : directoryOf(files, selected);
+      if (dir === null) return true;
+      const above = step(files, selected, -1);
+      collapsedDirs.add(dir);
+      const landing = above !== null && !above.startsWith(`${dir}/`) ? above : edge(files, "first");
+      if (landing !== null) store.select(landing);
+      return true;
+    }
+    case "expand": {
+      const dir = collapsedDirectoryAfter(files, selected);
+      if (dir !== null) collapsedDirs.delete(dir);
+      return true;
+    }
+    case "focus-tree": {
+      treeFocus.active = true;
+      (document.querySelector(".view-sidebar .tnode.sel") as HTMLElement | null)?.focus();
+      return true;
+    }
+    case "focus-diff": {
+      if (helpOpen.value) { helpOpen.value = false; return true; }
+      if (!treeFocus.active) return false;
+      treeFocus.active = false;
+      (document.activeElement as HTMLElement | null)?.blur();
+      return true;
+    }
+    case "toggle-checked": {
+      const file = reviewFileAt(selected);
+      if (file !== null) void store.setChecked(file.path, !file.checked);
+      return true;
+    }
+    case "check-and-advance": {
+      const file = reviewFileAt(selected);
+      if (file === null) return true;
+      const next = nextUnchecked(files, file.path);
+      if (!file.checked) void store.setChecked(file.path, true);
+      if (next !== null && next !== file.path) store.select(next);
+      return true;
+    }
+    case "next-change":
+      diffPane.value?.goToChange("next");
+      return true;
+    case "previous-change":
+      diffPane.value?.goToChange("previous");
+      return true;
+    case "delta-view":
+      diffPane.value?.showDelta();
+      return true;
+    case "capture-note":
+      openNote();
+      return true;
+    case "toggle-notes":
+      drawerOpen.value = !drawerOpen.value;
+      return true;
+    case "toggle-tree":
+      treeVisible.value = !treeVisible.value;
+      return true;
+    case "help":
+      helpOpen.value = !helpOpen.value;
+      return true;
+  }
+}
+
+// Keyboard movement can leave the cursor outside the scrolled area, where the reviewer
+// cannot see what they selected. Follow it; a mouse click is already in view.
+watch(() => store.selectedPath, async () => {
+  await nextTick();
+  document.querySelector(".view-sidebar .tnode.sel")?.scrollIntoView({ block: "nearest" });
+});
+
+function reviewFileAt(path: string | null): PrFile | null {
+  if (path === null) return null;
+  const file = store.files().find((f) => f.path === path);
+  return file !== undefined && "checked" in file ? file as PrFile : null;
+}
+
 function onKey(event: KeyboardEvent): void {
-  const target = event.target as HTMLElement | null;
-  if (isTyping(target)) return;
-  if (event.key === "b" && (event.metaKey || event.ctrlKey)) {
-    event.preventDefault();
-    event.stopPropagation();
-    treeVisible.value = !treeVisible.value;
-    return;
-  }
-  if (event.metaKey || event.ctrlKey || event.altKey) return;
-  if (event.key === "n" && store.view && activeMode.value === "pulls") {
-    event.preventDefault();
-    event.stopPropagation();
-    openNote();
-  }
+  if (isTyping(event.target as HTMLElement | null)) return;
+  const binding = bindingFor(event);
+  if (binding === null) return;
+  // Everything but the panel toggles is about a pull request under review; in the local
+  // viewer there is no checkoff, no note, and no delta to reach.
+  const reviewing = store.view !== null && activeMode.value === "pulls";
+  if (!reviewing && binding.group !== "Panels") return;
+  if (binding.treeOnly === true && !treeFocus.active) return;
+  if (!runCommand(binding.command)) return;
+  event.preventDefault();
+  event.stopPropagation();
 }
 window.addEventListener("keydown", onKey, true);
 
@@ -315,6 +416,8 @@ onBeforeUnmount(() => {
         v-if="treeVisible && activeMode !== 'settings'"
         class="view-sidebar"
         :class="{ scrolling: treeScrolling }"
+        @focusin="treeFocus.active = true"
+        @focusout="treeFocus.active = false"
         :style="{ width: `${treeWidth}px` }"
       >
         <LocalSidebar
@@ -396,7 +499,7 @@ onBeforeUnmount(() => {
               <p>Choose a pull request or stack from the sidebar to begin reviewing.</p>
             </div>
             <div v-else class="workspace" :class="notesDock">
-              <DiffPane :store="store" :editor-settings="editorSettings.settings.editor" class="diff" @add-note="openNote" />
+              <DiffPane ref="diffPane" :store="store" :editor-settings="editorSettings.settings.editor" class="diff" @add-note="openNote" />
               <template v-if="drawerOpen">
                 <Splitter v-model="notesSize" :orientation="notesDock === 'right' ? 'vertical' : 'horizontal'" :min="notesDock === 'right' ? 220 : 120" :max="700" inverted />
                 <NotesDrawer
@@ -425,6 +528,7 @@ onBeforeUnmount(() => {
       @open-zoom-settings="openSettings('workbench')"
     />
     <NoteCapture :store="store" :target="noteTarget" @close="noteTarget = null" />
+    <KeymapHelp v-if="helpOpen" @close="helpOpen = false" />
     <ConfirmDialog
       :open="repoPendingRemoval !== null"
       title="Remove repository?"

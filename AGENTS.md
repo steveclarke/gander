@@ -117,6 +117,13 @@ marker, and the snapshot becomes the base for the delta diff. An un-check
 deliberately *retains* the snapshot — absence of a snapshot means "never
 reviewed", not "unchanged".
 
+**Keyboard** is one table: `renderer/src/keymap.ts` lists every binding, and both the
+handler in `App.vue` and the `?` sheet read it, so a key cannot be added without the help
+learning about it. Tree collapse state and the visible-file order live in
+`renderer/src/tree-nav.ts` rather than inside `FileTree.vue`, which renders itself
+recursively — keyboard movement needs one answer to what is visible. Keys that change the
+tree's shape act only while the tree holds focus.
+
 **Note lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
 over MCP, with optional commit ref and summary) → `resolved` (reviewer re-checks
 the file). Resolution is always the reviewer's act; no MCP tool may resolve

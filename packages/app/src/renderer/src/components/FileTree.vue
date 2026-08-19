@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from "vue";
+import { computed, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
+import { collapsedDirs, toggleCollapsed } from "../tree-nav.js";
 import {
   fileIconFor,
   folderIconFor,
@@ -23,8 +24,6 @@ const props = withDefaults(defineProps<{
   files?: ChangedFile[];
   showStatus?: boolean;
 }>(), { showStatus: true });
-
-const collapsed = reactive(new Set<string>());
 
 const depth = computed(() => props.depth ?? 0);
 const nodes = computed(() => props.nodes ?? buildTree(props.files ?? props.store.files()));
@@ -67,12 +66,7 @@ function dirStateFor(node: TreeNode & { type: "dir" }): "all" | "some" | "none" 
 // (never through a null in between), so switching PRs within the same repo never unmounts
 // this component. Clear stale collapse state whenever the reviewed PR changes.
 const prIdentity = computed(() => `${props.store.currentRepoId ?? ""}#${props.store.view?.pr.number ?? props.store.localView?.worktree.path ?? ""}`);
-watch(prIdentity, () => collapsed.clear());
-
-function toggleCollapsed(path: string) {
-  if (collapsed.has(path)) collapsed.delete(path);
-  else collapsed.add(path);
-}
+watch(prIdentity, () => { if (depth.value === 0) collapsedDirs.clear(); });
 
 function checkDir(node: TreeNode & { type: "dir" }) {
   const files = filesUnder(node).filter((file): file is PrFile => "checked" in file);
@@ -101,7 +95,7 @@ function fileIcon(path: string) {
 }
 
 function folderIcon(node: TreeNode & { type: "dir" }) {
-  return folderIconFor(props.iconTheme, { name: node.name, expanded: !collapsed.has(node.path) });
+  return folderIconFor(props.iconTheme, { name: node.name, expanded: !collapsedDirs.has(node.path) });
 }
 </script>
 
@@ -118,7 +112,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         @keydown.enter.space.prevent="toggleCollapsed(node.path)"
       >
         <component
-          :is="collapsed.has(node.path) ? ChevronRight : ChevronDown"
+          :is="collapsedDirs.has(node.path) ? ChevronRight : ChevronDown"
           v-if="iconThemeShowsExplorerArrows(iconTheme)"
           class="hierarchy-slot chev"
           :size="14"
@@ -142,7 +136,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         <span class="fname">{{ node.name }}</span>
       </div>
       <FileTree
-        v-if="node.type === 'dir' && !collapsed.has(node.path)"
+        v-if="node.type === 'dir' && !collapsedDirs.has(node.path)"
         :store="store"
         :icon-theme="iconTheme"
         :nodes="node.children"

@@ -15,6 +15,7 @@ import type { PrFile } from "@gander/shared";
 
 const props = defineProps<{ store: Store; editorSettings: EditorSettings }>();
 const emit = defineEmits<{ addNote: [target: NoteTarget] }>();
+
 const host = ref<HTMLElement | null>(null);
 const view = ref<"diff" | "full" | "since">("diff");
 
@@ -34,6 +35,17 @@ let editor: monaco.editor.IStandaloneDiffEditor | monaco.editor.IStandaloneCodeE
 let models: monaco.editor.ITextModel[] = [];
 let lineAction: HTMLButtonElement | null = null;
 let lineActionLine: number | null = null;
+// The keymap reaches the two things only this component can do: the tab set, and Monaco's
+// own change-to-change navigation. Exposed rather than lifted, because both belong to the
+// editor instance this component owns.
+defineExpose({
+  showDelta(): void {
+    if (canShowDelta.value) view.value = view.value === "since" ? "diff" : "since";
+  },
+  goToChange(target: "next" | "previous"): void {
+    if (editor !== null && "goToDiff" in editor) editor.goToDiff(target);
+  },
+});
 
 const current = computed(
   () => props.store.files().find((f) => f.path === props.store.selectedPath) ?? null,
