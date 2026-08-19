@@ -11,7 +11,7 @@ import { currentLine } from "./selection.js";
 import type { NoteTarget } from "./selection.js";
 import type { PrFile } from "@gander/shared";
 import { bindingFor, type Command } from "./keymap.js";
-import { cursor, edge, filesAt, nextUnmarked, rowAt, step, toggleCollapsed } from "./tree-nav.js";
+import { collapsedDirs, cursor, edge, filesAt, nextUnmarked, parentOf, rowAt, step } from "./tree-nav.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -266,8 +266,18 @@ function runCommand(command: Command): boolean {
     case "last-file":
       return moveTo(edge(files, command === "first-file" ? "first" : "last"));
     case "toggle-directory": {
-      if (at !== null && rowAt(files, at)?.type === "dir") toggleCollapsed(at);
-      return true;
+      if (at === null) return true;
+      // Opening a directory is how a reviewer says "let me look in here", so the cursor
+      // goes in with it. On anything else the same key closes the directory the cursor is
+      // inside and steps out to it, which is the way back.
+      if (rowAt(files, at)?.type === "dir" && collapsedDirs.has(at)) {
+        collapsedDirs.delete(at);
+        return moveTo(step(files, at, 1));
+      }
+      const dir = rowAt(files, at)?.type === "dir" ? at : parentOf(files, at);
+      if (dir === null) return true;
+      collapsedDirs.add(dir);
+      return moveTo(dir);
     }
     case "dismiss": {
       if (!helpOpen.value) return false;

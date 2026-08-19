@@ -40,7 +40,7 @@ export const BINDINGS: Binding[] = [
   { command: "previous-file", keys: ["k", "ArrowUp"], label: "k / ↑", description: "Previous row", group: "Move" },
   { command: "first-file", keys: ["Home"], label: "Home", description: "First row", group: "Move" },
   { command: "last-file", keys: ["End"], label: "End", description: "Last row", group: "Move" },
-  { command: "toggle-directory", keys: ["o"], label: "o", description: "Open or close the directory", group: "Move" },
+  { command: "toggle-directory", keys: ["o"], label: "o", description: "Open the directory and step in, or close the one you are in", group: "Move" },
   { command: "dismiss", keys: ["Escape"], label: "Esc", description: "Close what is open on top", group: "Move" },
 
   { command: "toggle-checked", keys: ["m", " "], label: "m / Space", description: "Mark or unmark this file, or the whole directory", group: "Review" },
