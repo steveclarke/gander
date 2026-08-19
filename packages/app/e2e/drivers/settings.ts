@@ -18,6 +18,11 @@ export class SettingsDriver {
     await expect(this.page.getByRole("heading", { name: "Editor", exact: true })).toBeVisible();
   }
 
+  async openConnectionCategory(): Promise<void> {
+    await this.page.getByRole("button", { name: "Connection", exact: true }).click();
+    await expect(this.page.getByRole("heading", { name: "Connection", exact: true })).toBeVisible();
+  }
+
   async setEditorFont(family: string, size: number): Promise<void> {
     const familyInput = this.page.locator('input[name="editor.fontFamily"]');
     await familyInput.fill(family);
