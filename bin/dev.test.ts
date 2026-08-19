@@ -44,6 +44,9 @@ beforeEach(() => {
 
   writeFileSync(join(repo, ".pc_env"), [
     "GANDER_PORT=4321",
+    "GANDER_SERVICE_URL=http://127.0.0.1:4321",
+    "GANDER_TOKEN=checkout-token",
+    "GANDER_APP_SOCKET=/tmp/gander-app-gander-test.sock",
     "PC_SOCKET_PATH=/tmp/process-compose-gander-test.sock",
     "",
   ].join("\n"));
@@ -51,8 +54,9 @@ beforeEach(() => {
   writeExecutable(join(fakeBin, "process-compose"), `#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$@" > "$DEV_TEST_ARGS_FILE"
-printf 'GANDER_PORT=%s\nPC_SOCKET_PATH=%s\n' \
-  "\${GANDER_PORT:-}" "\${PC_SOCKET_PATH:-}" > "$DEV_TEST_ENV_FILE"
+printf 'GANDER_PORT=%s\nGANDER_SERVICE_URL=%s\nGANDER_TOKEN=%s\nGANDER_APP_SOCKET=%s\nPC_SOCKET_PATH=%s\n' \
+  "\${GANDER_PORT:-}" "\${GANDER_SERVICE_URL:-}" "\${GANDER_TOKEN:-}" \
+  "\${GANDER_APP_SOCKET:-}" "\${PC_SOCKET_PATH:-}" > "$DEV_TEST_ENV_FILE"
 
 case "\${DEV_TEST_MODE:-success}" in
   success)
@@ -98,6 +102,52 @@ describe.skipIf(platform === "win32")("bin/dev", () => {
     ].join("\n"));
   });
 
+  it("starts only the app against the hosted connection saved in the worktree config", () => {
+    env = {
+      ...env,
+      GANDER_SERVICE_URL: "https://caller.example.test",
+      GANDER_TOKEN: "caller-token",
+    };
+
+    const result = run("--hosted", "-D");
+
+    expect(result.status, result.output).toBe(0);
+    expect(readFileSync(argsFile, "utf8")).toBe([
+      "up",
+      "--config",
+      join(realpathSync(repo), "process-compose.yml"),
+      "--disable-dotenv",
+      "--no-deps",
+      "-D",
+      "app",
+      "",
+    ].join("\n"));
+    expect(readFileSync(envFile, "utf8")).toBe([
+      "GANDER_PORT=4321",
+      "GANDER_SERVICE_URL=",
+      "GANDER_TOKEN=",
+      "GANDER_APP_SOCKET=/tmp/gander-app-gander-test.sock",
+      "PC_SOCKET_PATH=/tmp/process-compose-gander-test.sock",
+      "",
+    ].join("\n"));
+  });
+
+  it("keeps ordinary startup on the generated worktree service connection", () => {
+    env = {
+      ...env,
+      GANDER_SERVICE_URL: "https://caller.example.test",
+      GANDER_TOKEN: "caller-token",
+    };
+
+    const result = run("-D");
+
+    expect(result.status, result.output).toBe(0);
+    expect(readFileSync(envFile, "utf8")).toContain([
+      "GANDER_SERVICE_URL=http://127.0.0.1:4321",
+      "GANDER_TOKEN=checkout-token",
+    ].join("\n"));
+  });
+
   it("loads the worktree environment and returns JSON status", () => {
     const result = run("status", "--json");
 
@@ -106,6 +156,9 @@ describe.skipIf(platform === "win32")("bin/dev", () => {
     expect(readFileSync(argsFile, "utf8")).toBe("process\nlist\n--output\njson\n");
     expect(readFileSync(envFile, "utf8")).toBe([
       "GANDER_PORT=4321",
+      "GANDER_SERVICE_URL=http://127.0.0.1:4321",
+      "GANDER_TOKEN=checkout-token",
+      "GANDER_APP_SOCKET=/tmp/gander-app-gander-test.sock",
       "PC_SOCKET_PATH=/tmp/process-compose-gander-test.sock",
       "",
     ].join("\n"));

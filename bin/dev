@@ -9,12 +9,11 @@ main() {
   load_worktree_env
 
   case "${1:-}" in
-    -D)        shift; process-compose up --config "$SCRIPT_ROOT/process-compose.yml" -D "$@" ;;
     stop)      process-compose down ;;
     status)    show_status "${2:-}" ;;
     logs)      process-compose process logs "${2:?specify a service}" ;;
     restart)   process-compose process restart "${2:?specify a service}" ;;
-    *)         process-compose up --config "$SCRIPT_ROOT/process-compose.yml" "$@" ;;
+    *)         start_dev "$@" ;;
   esac
 }
 
@@ -36,6 +35,32 @@ load_worktree_env() {
   set +a
 
   [[ -n "${PC_SOCKET_PATH:-}" ]] || fail "PC_SOCKET_PATH is missing from $PC_ENV_FILE. Run bin/setup first."
+}
+
+start_dev() {
+  local hosted=false
+  local arg
+  local -a process_args=()
+
+  for arg in "$@"; do
+    if [[ "$arg" == "--hosted" ]]; then
+      hosted=true
+    else
+      process_args+=("$arg")
+    fi
+  done
+
+  if [[ "$hosted" == false ]]; then
+    process-compose up --config "$SCRIPT_ROOT/process-compose.yml" "${process_args[@]}"
+    return
+  fi
+
+  # Hosted mode deliberately makes the repo-local config the connection source.
+  # Remove both inherited and generated values, then prevent process-compose from
+  # reading .env back in. The socket and config path remain scoped to this worktree.
+  unset GANDER_SERVICE_URL GANDER_TOKEN
+  process-compose up --config "$SCRIPT_ROOT/process-compose.yml" \
+    --disable-dotenv --no-deps "${process_args[@]}" app
 }
 
 show_status() {
