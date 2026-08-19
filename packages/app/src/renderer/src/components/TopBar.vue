@@ -4,6 +4,8 @@ import type { Store } from "../store.js";
 import { ChevronDown, FolderGit2, GitPullRequest, MessageSquare, Plus, RefreshCw, Settings } from "lucide-vue-next";
 import SwitcherDropdown from "./SwitcherDropdown.vue";
 import RepositoryPicker from "./RepositoryPicker.vue";
+import ReviewingList from "./ReviewingList.vue";
+import StackPosition from "./StackPosition.vue";
 
 const props = defineProps<{
   store: Store;
@@ -117,6 +119,12 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
         <span class="val">
           <template v-if="currentPr">
             <span class="chip" :class="{ draft: currentPr.draft }">{{ currentPr.draft ? "Draft " : "" }}#{{ currentPr.number }}</span>
+            <StackPosition
+              v-if="currentPr.stack"
+              class="header-stack-position"
+              :position="currentPr.stack.position"
+              :size="currentPr.stack.size"
+            />
             {{ currentPr.title }}
           </template>
           <template v-else>Select a pull request</template>
@@ -200,19 +208,7 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
   <SwitcherDropdown :open="reviewOpen" :left="190 + titleBarInset" :width="460" @close="closeAll">
     <div class="sw-h">OPEN PULL REQUESTS</div>
     <div v-if="store.prs.length === 0" class="sw-empty">No open pull requests</div>
-    <div
-      v-for="pr in store.prs"
-      :key="pr.number"
-      class="sw-item"
-      role="option"
-      tabindex="0"
-      @click="pickPr(pr.number)"
-      @keydown.enter.space.prevent="pickPr(pr.number)"
-    >
-      <span class="dot" :class="pr.draft ? 'draft' : 'open'" />
-      <span class="num">#{{ pr.number }}</span>
-      <span class="nm">{{ pr.title }}</span>
-    </div>
+    <ReviewingList v-else :prs="store.prs" @select="pickPr" />
   </SwitcherDropdown>
 
   <RepositoryPicker :open="repositoryPickerOpen" :store="store" @close="repositoryPickerOpen = false" />
@@ -290,9 +286,5 @@ const titleBarInset = computed(() => props.integratedTitleBar ? TITLE_BAR_INSET 
 .sw-item .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sw-item .nm.add { color: var(--accent); }
 .sw-item .meta { margin-left: auto; font: 11px var(--mono); color: var(--faint-foreground); }
-
-.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-.dot.draft { background: var(--warning); }
-.dot.open { background: var(--success); }
 
 </style>

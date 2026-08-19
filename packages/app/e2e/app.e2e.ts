@@ -250,7 +250,17 @@ describe("Gander end to end", () => {
 
   it("registers a repository and keeps a reviewed file checked after restart", async () => {
     await registerAndSelect(requiredEnv("GANDER_E2E_PERSISTENCE_URL"), "persistence");
-    await openPullRequest("Persist reviewed files");
+    await $(".seg-review").click();
+    await expect($(".stack-group")).toBeDisplayed();
+    expect(await browser.execute(() => [...document.querySelectorAll(".stack-group .stack-member")]
+      .map((member) => member.textContent?.replace(/\s+/g, " ").trim()))).toEqual([
+        "1/2 #2 Prepare review state",
+        "2/2 #1 Persist reviewed files",
+      ]);
+    await expect($(".standalone-item")).toHaveText(expect.stringContaining("Independent cleanup"));
+    await $(`//div[@role='option'][contains(normalize-space(.), 'Persist reviewed files')]`).click();
+    await expect($(".header-stack-position")).toHaveText("2/2");
+    await expect($(".header-stack-position")).toHaveAttribute("aria-label", "Stack position 2 of 2");
 
     const fileTreeTypography = async () => browser.execute(() => {
       const tree = document.querySelector<HTMLElement>(".tree.root");
