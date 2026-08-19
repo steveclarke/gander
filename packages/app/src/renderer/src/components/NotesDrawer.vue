@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import { computed, reactive, shallowRef } from "vue";
+import { computed, shallowRef } from "vue";
 import type { Note } from "@gander/shared";
 import { Copy, MessageSquare, PanelBottom, PanelRight, Plus, X } from "lucide-vue-next";
 import type { Store } from "../store.js";
 import { revealLine } from "../selection.js";
-import NoteThread from "./NoteThread.vue";
+import NoteItem from "./NoteItem.vue";
 
 const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
 const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addNote: [] }>();
 
 const notes = computed(() => props.store.view?.notes ?? []);
-const drafts = reactive<Record<number, string>>({});
-const submitting = reactive(new Set<number>());
 const copiedNoteId = shallowRef<number | null>(null);
 const copiedAll = shallowRef(false);
 
@@ -19,20 +17,6 @@ function goTo(q: { path: string | null; line: number | null }): void {
   if (q.path === null) return;
   props.store.select(q.path);
   if (q.line !== null) revealLine(q.line);
-}
-
-async function reply(noteId: number): Promise<void> {
-  const text = drafts[noteId]?.trim() ?? "";
-  if (!text || submitting.has(noteId)) return;
-  const before = notes.value.find((q) => q.id === noteId)?.replies.length ?? 0;
-  submitting.add(noteId);
-  try {
-    await props.store.addReviewerReply(noteId, text);
-    const after = notes.value.find((q) => q.id === noteId)?.replies.length ?? 0;
-    if (after > before) drafts[noteId] = "";
-  } finally {
-    submitting.delete(noteId);
-  }
 }
 
 function noteMarkdown(note: Note): string {
@@ -47,9 +31,6 @@ function noteMarkdown(note: Note): string {
   if (note.summary || note.commitRef) {
     const commit = note.commitRef ? ` (${note.commitRef})` : "";
     parts.push("", `Agent update${commit}: ${note.summary ?? "Addressed"}`);
-  }
-  for (const threadReply of note.replies) {
-    parts.push("", `${threadReply.author === "reviewer" ? "Reviewer" : "Agent"}: ${threadReply.text}`);
   }
   return parts.join("\n");
 }
@@ -83,8 +64,8 @@ async function copyAll(): Promise<void> {
       <button
         v-if="notes.length > 0"
         class="copy-all"
-        aria-label="Copy all note threads"
-        title="Copy all note threads"
+        aria-label="Copy all notes"
+        title="Copy all notes"
         @click="copyAll"
       >
         <Copy :size="13" aria-hidden="true" />
@@ -121,16 +102,13 @@ async function copyAll(): Promise<void> {
     </div>
 
     <ul v-else aria-label="Review notes">
-      <NoteThread
+      <NoteItem
         v-for="note in notes"
         :key="note.id"
-        v-model="drafts[note.id]"
         :note="note"
         :current="note.path === store.selectedPath"
-        :submitting="submitting.has(note.id)"
         :copied="copiedNoteId === note.id"
         @navigate="goTo"
-        @reply="reply"
         @copy="copyNote"
         @delete="store.deleteNote"
       />

@@ -13,7 +13,7 @@ import { z } from "zod";
  *
  * Not the app's release version: releases happen far more often than the contract moves.
  */
-export const SERVICE_VERSION = "0.3.0";
+export const SERVICE_VERSION = "0.4.0";
 
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
@@ -52,22 +52,6 @@ export type PutFileState = z.infer<typeof PutFileStateSchema>;
 export const NoteStateSchema = z.enum(["open", "addressed", "resolved"]);
 export type NoteState = z.infer<typeof NoteStateSchema>;
 
-export const NoteReplyAuthorSchema = z.enum(["reviewer", "agent"]);
-export type NoteReplyAuthor = z.infer<typeof NoteReplyAuthorSchema>;
-
-export const NoteReplySchema = z.object({
-  id: z.number().int().positive(),
-  author: NoteReplyAuthorSchema,
-  text: z.string().min(1),
-  createdAt: z.string(),
-});
-export type NoteReply = z.infer<typeof NoteReplySchema>;
-
-export const NewNoteReplySchema = z.object({
-  text: z.string().trim().min(1),
-});
-export type NewNoteReply = z.infer<typeof NewNoteReplySchema>;
-
 export const NoteSchema = z.object({
   id: z.number().int().positive(),
   /** null for a note about the pull request as a whole rather than one file. */
@@ -83,7 +67,6 @@ export const NoteSchema = z.object({
   /** One-line summary an agent left when it marked the note addressed. */
   summary: z.string().nullable(),
   createdAt: z.string(),
-  replies: z.array(NoteReplySchema),
 });
 export type Note = z.infer<typeof NoteSchema>;
 

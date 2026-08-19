@@ -170,7 +170,6 @@ async function bootstrap(): Promise<GanderConfig> {
   ipcMain.handle("gander:reviewedSnapshot", async (_e, repoId: string, n: number, path: string) => reviewer.reviewedSnapshot(repoId, n, path));
   ipcMain.handle("gander:imagePreview", async (_e, repoId: string, n: number, path: string) => reviewer.imagePreview(repoId, n, path));
   ipcMain.handle("gander:addNote", async (_e, repoId: string, n: number, input: { path: string | null; line: number | null; text: string }) => reviewer.addNote(repoId, n, input));
-  ipcMain.handle("gander:addReviewerReply", async (_e, repoId: string, n: number, id: number, text: string) => reviewer.addReviewerReply(repoId, n, id, text));
   ipcMain.handle("gander:deleteNote", async (_e, repoId: string, n: number, id: number) => reviewer.deleteNote(repoId, n, id));
   ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean) => reviewer.setCheckedMany(repoId, n, paths, checked));
   // Connection is deliberately not part of the settings document: that document is

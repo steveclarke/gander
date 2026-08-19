@@ -32,7 +32,7 @@ Gander starts from a local Git repository and turns it into a review hub: Git su
 - A known repository exposes its full file tree, all linked worktrees, and its open pull requests.
 - The file explorer shows the selected worktree's complete read-only filesystem tree, including ignored files but excluding Git administrative metadata.
 - The current-diff view shows the selected worktree's live change from the default-branch merge base through its working directory, including non-ignored untracked files.
-- Pull-request review retains checkoffs, snapshots, changed-since state, notes, and agent replies.
+- Pull-request review retains checkoffs, snapshots, changed-since state, and notes.
 - Local files and current diffs have no persisted review state, notes, or editing.
 - Repository and worktree selection is persistent context above the workspace views; Explorer, Current Diff, and Pull Requests are peer lenses over that target.
 - GitHub is the only forge in v1. Git and filesystem failures remain visible.

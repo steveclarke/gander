@@ -24,8 +24,8 @@ credential reference, a release step, the binding design.
 | `releasing.md` | The release procedure and what the signing machine provides |
 | `plans/`, `briefs/`, `mockups/` | Implementation plans, briefs, and the reference mockup |
 
-`docs/STATE.md` says where the project stands. Interface work and the agent reply
-channel are GitHub issues.
+`docs/STATE.md` says where the project stands. Interface work is tracked in GitHub
+issues.
 
 Settings are validated strictly, so a config written by an earlier version stops
 the app from starting. While the shape is still settling there are no migrations:
@@ -120,10 +120,10 @@ reviewed", not "unchanged".
 **Note lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
 over MCP, with optional commit ref and summary) → `resolved` (reviewer re-checks
 the file). Resolution is always the reviewer's act; no MCP tool may resolve
-anything. Replies form a thread without changing that lifecycle. The MCP
-contract is deliberately three tools — `get_review_notes`,
-`reply_to_note`, and `mark_note_addressed`. Agents have `git` and `gh`
-for code; this contract carries only the review conversation. Keep it small.
+anything. The MCP contract is deliberately two tools — `get_review_notes` and
+`mark_note_addressed`. Agents discuss notes with the reviewer in their active
+session; MCP carries the reviewer's notes and the durable completion state. Agents
+have `git` and `gh` for code. Keep the contract small.
 
 `GANDER_SERVICE_URL` and `GANDER_TOKEN` override the config file at *connection*
 time, not load time (`resolveServiceConnection` in `main/config.ts`) — otherwise

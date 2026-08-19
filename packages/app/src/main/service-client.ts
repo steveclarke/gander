@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { describeNetworkError } from "./network-error.js";
-import { FileCheckoffSchema, NoteReplySchema, NoteSchema, ReviewStateSchema, type FileCheckoff, type NewNote, type PrContext, type PutFileState, type Note, type NoteReply, type ReviewState } from "@gander/shared";
+import { FileCheckoffSchema, NoteSchema, ReviewStateSchema, type FileCheckoff, type NewNote, type PrContext, type PutFileState, type Note, type ReviewState } from "@gander/shared";
 import { checkServiceStatus, type ServiceStatus } from "./connection.js";
 
 export class ServiceConnectionError extends Error {}
@@ -12,7 +12,6 @@ export interface ServiceClient {
   putFileState(repoId: string, prNumber: number, input: PutFileState): Promise<FileCheckoff>;
   listNotes(repoId: string, prNumber: number): Promise<Note[]>;
   addNote(repoId: string, prNumber: number, input: NewNote): Promise<Note>;
-  addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<NoteReply>;
   deleteNote(repoId: string, prNumber: number, id: number): Promise<void>;
   setPrContext(repoId: string, prNumber: number, context: PrContext): Promise<void>;
   getSnapshot(repoId: string, prNumber: number, path: string): Promise<{ baseContent: string | null; headContent: string | null }>;
@@ -175,10 +174,6 @@ export function createServiceClient(connection: Connection): ServiceClient {
     addNote: async (repoId, prNumber, input) => {
       const path = `${reviewPath(repoId, prNumber)}/notes`;
       return validate(NoteSchema, path, await req("POST", path, input, { reviewKey: reviewKey(repoId, prNumber) }));
-    },
-    addReviewerReply: async (repoId, prNumber, id, text) => {
-      const path = `${reviewPath(repoId, prNumber)}/notes/${id}/replies`;
-      return validate(NoteReplySchema, path, await req("POST", path, { text }, { reviewKey: reviewKey(repoId, prNumber) }));
     },
     deleteNote: async (repoId, prNumber, id) => {
       await req("DELETE", `${reviewPath(repoId, prNumber)}/notes/${id}`, undefined, { reviewKey: reviewKey(repoId, prNumber) });

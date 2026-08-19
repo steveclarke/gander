@@ -1,5 +1,5 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "routes": [
     "DELETE /api/reviews/:repoId/:prNumber/notes/:id",
     "DELETE /mcp",
@@ -12,7 +12,6 @@
     "OPTIONS /mcp",
     "PATCH /mcp",
     "POST /api/reviews/:repoId/:prNumber/notes",
-    "POST /api/reviews/:repoId/:prNumber/notes/:id/replies",
     "POST /mcp",
     "PUT /api/reviews/:repoId/:prNumber/context",
     "PUT /api/reviews/:repoId/:prNumber/files",
@@ -124,19 +123,6 @@
         "summary"
       ]
     },
-    "NewNoteReplySchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "text": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "text"
-      ]
-    },
     "NewNoteSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -185,45 +171,6 @@
         "line",
         "text",
         "headSha"
-      ]
-    },
-    "NoteReplyAuthorSchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "string",
-      "enum": [
-        "reviewer",
-        "agent"
-      ]
-    },
-    "NoteReplySchema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
-        },
-        "author": {
-          "type": "string",
-          "enum": [
-            "reviewer",
-            "agent"
-          ]
-        },
-        "text": {
-          "type": "string",
-          "minLength": 1
-        },
-        "createdAt": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "author",
-        "text",
-        "createdAt"
       ]
     },
     "NoteSchema": {
@@ -301,39 +248,6 @@
         },
         "createdAt": {
           "type": "string"
-        },
-        "replies": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "integer",
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991
-              },
-              "author": {
-                "type": "string",
-                "enum": [
-                  "reviewer",
-                  "agent"
-                ]
-              },
-              "text": {
-                "type": "string",
-                "minLength": 1
-              },
-              "createdAt": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "author",
-              "text",
-              "createdAt"
-            ]
-          }
         }
       },
       "required": [
@@ -345,8 +259,7 @@
         "headSha",
         "commitRef",
         "summary",
-        "createdAt",
-        "replies"
+        "createdAt"
       ]
     },
     "NoteStateSchema": {
@@ -676,31 +589,6 @@
         },
         "required": [
           "id"
-        ],
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      }
-    },
-    {
-      "name": "reply_to_note",
-      "description": "Add an agent reply to a review note. Use this for clarification, reasoning, or a response that should remain with the review. Replying does not address or resolve the note and does not change its lifecycle state.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991,
-            "description": "Note id from get_review_notes."
-          },
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The reply to add to the note thread."
-          }
-        },
-        "required": [
-          "id",
-          "text"
         ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       }

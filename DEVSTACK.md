@@ -203,16 +203,16 @@ claude mcp add --transport http gander "$GANDER_SERVICE_URL/mcp" \
   --header "Authorization: Bearer $GANDER_TOKEN"
 ```
 
-Run it in the repository being reviewed, not in this one. Three tools appear:
+Run it in the repository being reviewed, not in this one. Two tools appear:
 
 | Tool | Purpose |
 |------|---------|
-| `get_review_notes` | Notes for a repo + branch (or pull request number), with reply threads and counts for every state; addressed and resolved notes can be included explicitly |
-| `reply_to_note` | Adds an agent reply to a note without changing its lifecycle state |
+| `get_review_notes` | Notes for a repo + branch (or pull request number), with counts for every state; addressed and resolved notes can be included explicitly |
 | `mark_note_addressed` | Flags one as acted on, with an optional commit ref and summary |
 
-Nothing over MCP resolves a note. That stays the reviewer's act, made by
-re-reviewing the file in the app.
+Discuss notes in the active agent session. Nothing over MCP replies to or resolves
+a note. Resolution stays the reviewer's act, made by re-reviewing the file in the
+app.
 
 ## Config precedence
 

@@ -130,49 +130,6 @@ describe("storage", () => {
       expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", summary: "Dropped the retry" });
     });
 
-    it("appends reviewer and agent replies without changing the note state", () => {
-      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 4, text: "Why?", headSha: null });
-
-      expect(storage.addReviewerReply("acme/atlas", 7, q.id, { text: "Because this runs twice." })).toMatchObject({
-        author: "reviewer", text: "Because this runs twice.",
-      });
-      expect(storage.addAgentReply(q.id, { text: "That constraint belongs in the model." })).toMatchObject({
-        author: "agent", text: "That constraint belongs in the model.",
-      });
-
-      expect(storage.listNotes("acme/atlas", 7)[0]).toMatchObject({
-        state: "open",
-        replies: [
-          { author: "reviewer", text: "Because this runs twice." },
-          { author: "agent", text: "That constraint belongs in the model." },
-        ],
-      });
-
-      storage.markNoteAddressed(q.id, { commitRef: null, summary: null });
-      storage.addAgentReply(q.id, { text: "One more detail." });
-      expect(storage.listNotes("acme/atlas", 7)[0]?.state).toBe("addressed");
-
-      storage.putFileState("acme/atlas", 7, {
-        checked: true, path: "a.rb", baseHash: "b", headHash: "h",
-        baseContent: "old", headContent: "new", machine: "studio",
-      });
-      storage.addReviewerReply("acme/atlas", 7, q.id, { text: "Closing note." });
-      expect(storage.listNotes("acme/atlas", 7)[0]?.state).toBe("resolved");
-    });
-
-    it("scopes reviewer replies to the note's review", () => {
-      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
-      expect(storage.addReviewerReply("acme/atlas", 8, q.id, { text: "Wrong review" })).toBeNull();
-      expect(storage.listNotes("acme/atlas", 7)[0]?.replies).toEqual([]);
-    });
-
-    it("deletes a note's reply thread with the note", () => {
-      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
-      storage.addAgentReply(q.id, { text: "Here is why." });
-      expect(storage.deleteNote("acme/atlas", 7, q.id)).toBe(true);
-      expect(storage.addAgentReply(q.id, { text: "Too late" })).toBeNull();
-    });
-
     it("refuses to re-address a note the reviewer already resolved", () => {
       const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
       storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" });

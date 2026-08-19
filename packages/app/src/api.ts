@@ -60,7 +60,6 @@ export interface GanderApi {
   closeLocal(): Promise<void>;
   onLocalViewChanged(listener: (update: LocalViewUpdate) => void): () => void;
   addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha">): Promise<PrView>;
-  addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<PrView>;
   deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
   getSettings(): Promise<AppSettings>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;

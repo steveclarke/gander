@@ -57,7 +57,6 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     closeLocal: async () => {},
     onLocalViewChanged: () => () => {},
     addNote: async () => prView(),
-    addReviewerReply: async () => prView(),
     deleteNote: async () => prView(),
     getSettings: async () => ({
       editor: { fontFamily: "monospace", fontSize: 16 },
@@ -349,21 +348,6 @@ describe("store", () => {
     await store.refresh();
     expect(store.selectedPath).toBe("b.rb");
     expect(store.view).not.toBeNull();
-  });
-
-  it("sends a reviewer reply for the open review", async () => {
-    let call: [string, number, number, string] | null = null;
-    const store = createStore(fakeApi({
-      addReviewerReply: async (repo, pr, id, text) => {
-        call = [repo, pr, id, text];
-        return prView();
-      },
-    }));
-    await store.loadRepos();
-    await store.selectRepo("acme/atlas");
-    await store.openPr(1);
-    await store.addReviewerReply(12, "A reviewer reply");
-    expect(call).toEqual(["acme/atlas", 1, 12, "A reviewer reply"]);
   });
 
   it("busy is true only while a long-running action is in flight, and clears even on failure", async () => {

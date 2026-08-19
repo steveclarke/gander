@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, MarkAddressed, NewNote, NewNoteReply, PrContext, PutFileState, Note, NoteReply, ReviewState } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, NewNote, PrContext, PutFileState, Note, ReviewState } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -40,14 +40,6 @@ CREATE TABLE IF NOT EXISTS notes (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS notes_by_review ON notes(review_id);
-CREATE TABLE IF NOT EXISTS note_replies (
-  id INTEGER PRIMARY KEY,
-  note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-  author TEXT NOT NULL CHECK(author IN ('reviewer', 'agent')),
-  text TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-CREATE INDEX IF NOT EXISTS note_replies_by_note ON note_replies(note_id, id);
 `;
 
 export interface Storage {
@@ -65,14 +57,11 @@ export interface Storage {
   markNoteAddressed(id: number, input: MarkAddressed): Note | null;
   listNotes(repoId: string, prNumber: number): Note[];
   addNote(repoId: string, prNumber: number, input: NewNote): Note;
-  addReviewerReply(repoId: string, prNumber: number, id: number, input: NewNoteReply): NoteReply | null;
-  addAgentReply(id: number, input: NewNoteReply): NoteReply | null;
   deleteNote(repoId: string, prNumber: number, id: number): boolean;
   close(): void;
 }
 
 interface NoteRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; commit_ref: string | null; summary: string | null; created_at: string }
-interface NoteReplyRow { id: number; note_id: number; author: string; text: string; created_at: string }
 interface FileStateRow { path: string; checked: number; base_hash: string | null; head_hash: string | null; checked_at: string | null; machine: string | null }
 
 const rowToCheckoff = (r: FileStateRow): FileCheckoff => ({
@@ -81,24 +70,15 @@ const rowToCheckoff = (r: FileStateRow): FileCheckoff => ({
   checkedAt: r.checked_at, machine: r.machine,
 });
 
-const rowToReply = (r: NoteReplyRow): NoteReply => ({
-  id: r.id,
-  author: r.author as NoteReply["author"],
-  text: r.text,
-  createdAt: r.created_at,
-});
-
-const rowToNote = (r: NoteRow, replies: NoteReply[] = []): Note => ({
+const rowToNote = (r: NoteRow): Note => ({
   id: r.id, path: r.path, line: r.line, text: r.text,
   state: r.state as Note["state"],
   headSha: r.head_sha,
   commitRef: r.commit_ref, summary: r.summary,
   createdAt: r.created_at,
-  replies,
 });
 
 const NOTE_COLUMNS = "id, path, line, text, state, head_sha, commit_ref, summary, created_at";
-const REPLY_COLUMNS = "id, note_id, author, text, created_at";
 const FILE_STATE_COLUMNS = "path, checked, base_hash, head_hash, checked_at, machine";
 
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
@@ -115,13 +95,6 @@ export function openStorage(dbPath: string): Storage {
     const row = db.prepare("SELECT id FROM reviews WHERE repo_id = ? AND pr_number = ?").get(repoId, prNumber) as { id: number };
     return row.id;
   };
-
-  const repliesForNote = (id: number): NoteReply[] =>
-    (db.prepare(`SELECT ${REPLY_COLUMNS} FROM note_replies WHERE note_id = ? ORDER BY id`).all(id) as NoteReplyRow[])
-      .map(rowToReply);
-
-  const replyById = (id: number | bigint): NoteReply =>
-    rowToReply(db.prepare(`SELECT ${REPLY_COLUMNS} FROM note_replies WHERE id = ?`).get(id) as NoteReplyRow);
 
   return {
     getReview(repoId, prNumber) {
@@ -227,26 +200,13 @@ export function openStorage(dbPath: string): Storage {
         WHERE id = ? AND state = 'open'
       `).run(input.commitRef, input.summary, id).changes;
       if (changed === 0) return null;
-      return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow, repliesForNote(id));
+      return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow);
     },
 
     listNotes(repoId, prNumber) {
       const rid = reviewId(repoId, prNumber);
       const rows = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE review_id = ? ORDER BY id`).all(rid) as NoteRow[];
-      const replyRows = db.prepare(`
-        SELECT qr.id, qr.note_id, qr.author, qr.text, qr.created_at
-        FROM note_replies qr
-        JOIN notes q ON q.id = qr.note_id
-        WHERE q.review_id = ?
-        ORDER BY qr.id
-      `).all(rid) as NoteReplyRow[];
-      const replies = new Map<number, NoteReply[]>();
-      for (const row of replyRows) {
-        const current = replies.get(row.note_id) ?? [];
-        current.push(rowToReply(row));
-        replies.set(row.note_id, current);
-      }
-      return rows.map((row) => rowToNote(row, replies.get(row.id) ?? []));
+      return rows.map(rowToNote);
     },
 
     addNote(repoId, prNumber, input) {
@@ -256,23 +216,6 @@ export function openStorage(dbPath: string): Storage {
         .run(rid, input.path, input.line, input.text, input.headSha);
       const row = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(lastInsertRowid) as NoteRow;
       return rowToNote(row);
-    },
-
-    addReviewerReply(repoId, prNumber, id, input) {
-      const rid = reviewId(repoId, prNumber);
-      const result = db.prepare(`
-        INSERT INTO note_replies (note_id, author, text)
-        SELECT q.id, 'reviewer', ? FROM notes q WHERE q.id = ? AND q.review_id = ?
-      `).run(input.text, id, rid);
-      return result.changes === 0 ? null : replyById(result.lastInsertRowid);
-    },
-
-    addAgentReply(id, input) {
-      const result = db.prepare(`
-        INSERT INTO note_replies (note_id, author, text)
-        SELECT id, 'agent', ? FROM notes WHERE id = ?
-      `).run(input.text, id);
-      return result.changes === 0 ? null : replyById(result.lastInsertRowid);
     },
 
     deleteNote(repoId, prNumber, id) {

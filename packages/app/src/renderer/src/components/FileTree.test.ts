@@ -60,7 +60,6 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async reviewedSnapshot() { return null; },
     async imagePreview() { return null; },
     async addNote() {},
-    async addReviewerReply() {},
     async deleteNote() {},
     async setChecked(path: string, checked: boolean) {
       calls.setChecked.push([path, checked]);
@@ -175,7 +174,6 @@ describe("FileTree", () => {
       commitRef: null,
       summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",
-      replies: [],
     }]));
     const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 
@@ -216,7 +214,6 @@ describe("FileTree", () => {
       commitRef: null,
       summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",
-      replies: [],
     });
     const { store } = fakeStore(prView(1, [target, other], [
       note(1, target.path, "open"),
@@ -245,7 +242,6 @@ describe("FileTree", () => {
       commitRef: null,
       summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",
-      replies: [],
     }]));
     const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
 

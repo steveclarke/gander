@@ -53,9 +53,9 @@ an agent has acted on one, and `resolved` when the reviewer re-checks the file.
 Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`
 for registration.
 
-Notes also carry reply threads. Reviewer and agent replies remain attached
-to the note and do not change its lifecycle state; agents add replies with
-the dedicated MCP reply tool.
+Agents discuss notes with the reviewer in their active session. Once the work is
+complete, they record the durable completion state through MCP with an optional
+commit ref and summary.
 
 Each opened pull request records its own branch, which is how the service maps an
 agent's working branch to a pull request without holding GitHub credentials.
@@ -95,7 +95,7 @@ those release manifests for updates and ask before restarting to install. The
 repository also generates a checksummed Homebrew cask handoff; publishing and
 verifying the separate personal tap remains a manual release task.
 
-Interface work and the agent reply channel are tracked as GitHub issues.
+Interface work is tracked as GitHub issues.
 
 ## Testing
 

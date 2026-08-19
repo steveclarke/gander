@@ -17,7 +17,6 @@ export interface Reviewer {
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
   addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha">): Promise<PrView>;
-  addReviewerReply(repoId: string, prNumber: number, id: number, text: string): Promise<PrView>;
   deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
   /** The file as it stood when the reviewer last checked it — the base for the delta view. */
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
@@ -279,15 +278,6 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
         side(file.headHash, entry.headSha),
       ]);
       return { base, head };
-    },
-    async addReviewerReply(repoId, prNumber, id, text) {
-      const entry = requireWritable(repoId, prNumber);
-      const { view } = entry;
-      const note = view.notes.find((q) => q.id === id);
-      if (!note) throw new Error(`Note ${id} is not part of PR #${prNumber}`);
-      const reply = await writeServiceState(entry, () => deps.service.addReviewerReply(repoId, prNumber, id, text));
-      note.replies = [...note.replies, reply];
-      return view;
     },
     async deleteNote(repoId, prNumber, id) {
       const entry = requireWritable(repoId, prNumber);
