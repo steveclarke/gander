@@ -7,6 +7,19 @@ import type { Store } from "../store.js";
 import { pendingReveal } from "../selection.js";
 import QuestionsDrawer from "./QuestionsDrawer.vue";
 
+// jsdom ships the <dialog> element without showModal/close; Chromium, which is what the
+// app runs on, has both. Shimmed here rather than softened in the component, so the
+// production path stays the one the browser actually takes.
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    this.open = false;
+    this.dispatchEvent(new Event("close"));
+  };
+}
+
 const view = (questions: PrView["questions"]): PrView => ({
   pr: { number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
   files: [],
@@ -144,7 +157,34 @@ describe("QuestionsDrawer", () => {
     expect(addReviewerReply).toHaveBeenCalledWith(1, "A reviewer follow-up");
 
     await open.get("button[aria-label='Delete question 1']").trigger("click");
+    // The click opens the confirmation; nothing is deleted until it is answered.
+    expect(deleteQuestion).not.toHaveBeenCalled();
+    await open.get("dialog.confirm button.danger").trigger("click");
     expect(deleteQuestion).toHaveBeenCalledWith(1);
+  });
+
+  it("deletes nothing when the confirmation is dismissed", async () => {
+    const deleteQuestion = vi.fn(async () => {});
+    const drawerStore = store(questions, { deleteQuestion });
+    const wrapper = mount(QuestionsDrawer, { props: { store: drawerStore, dock: "right" } });
+    const open = wrapper.get("[data-question-id='1']");
+
+    await open.get("button[aria-label='Delete question 1']").trigger("click");
+    await open.get("dialog.confirm button.cancel").trigger("click");
+    expect(deleteQuestion).not.toHaveBeenCalled();
+
+    // And the dialog is available again rather than stuck shut.
+    await open.get("button[aria-label='Delete question 1']").trigger("click");
+    await open.get("dialog.confirm button.danger").trigger("click");
+    expect(deleteQuestion).toHaveBeenCalledWith(1);
+  });
+
+  it("counts what a delete would take with it", async () => {
+    const drawerStore = store(questions);
+    const wrapper = mount(QuestionsDrawer, { props: { store: drawerStore, dock: "right" } });
+    const open = wrapper.get("[data-question-id='1']");
+    await open.get("button[aria-label='Delete question 1']").trigger("click");
+    expect(open.get("dialog.confirm .detail").text()).toMatch(/cannot be undone/);
   });
 
   it("preserves an explicit disclosure choice when a reply refreshes the question", async () => {
