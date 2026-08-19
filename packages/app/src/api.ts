@@ -60,7 +60,8 @@ export interface GanderApi {
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
   openLocal(repoId: string, path: string): Promise<LocalView>;
-  listLocalFiles(path: string): Promise<LocalFileEntry[]>;
+  /** Lists one directory only. Descendants are requested when the reviewer expands it. */
+  listLocalFiles(path: string, directory?: string): Promise<LocalFileEntry[]>;
   localFile(path: string, filePath: string): Promise<LocalFile>;
   refreshLocal(path: string): Promise<LocalView>;
   localImagePreview(path: string): Promise<ImagePreview>;

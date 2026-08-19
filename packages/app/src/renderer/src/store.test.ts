@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LocalView, PrListItem, PrView } from "@gander/shared";
+import type { LocalFileEntry, LocalView, PrListItem, PrView } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 import { createStore, readable } from "./store.js";
 import { DEFAULT_APP_SETTINGS } from "../../settings.js";
@@ -51,7 +51,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     reviewedSnapshot: async () => null,
     imagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
     openLocal: async () => { throw new Error("no local fixture"); },
-    listLocalFiles: async () => [{ path: "working.ts" }],
+    listLocalFiles: async () => [{ path: "working.ts", kind: "file" }],
     localFile: async (_path, filePath) => ({ path: filePath, content: "new\n", hash: "hash", binary: false }),
     refreshLocal: async () => { throw new Error("no local fixture"); },
     localImagePreview: async () => ({ base: { kind: "absent" }, head: { kind: "absent" } }),
@@ -158,6 +158,36 @@ describe("store", () => {
     expect(store.localFile?.content).toBe("new\n");
   });
 
+  it("loads Explorer directories only when the reviewer expands them", async () => {
+    const opened = localView();
+    const requested: string[] = [];
+    const store = createStore(fakeApi({
+      listWorktrees: async () => [opened.worktree],
+      openLocal: async () => opened,
+      listLocalFiles: async (_path, directory = "") => {
+        requested.push(directory);
+        return directory === ""
+          ? [{ path: "src", kind: "directory" }, { path: "README.md", kind: "file" }]
+          : [{ path: "src/main.ts", kind: "file" }];
+      },
+    }));
+
+    await store.selectRepo("acme/atlas");
+    await store.openLocal(opened.worktree.path);
+
+    expect(requested).toEqual([""]);
+    expect(store.localFiles).toEqual([
+      { path: "src", kind: "directory" },
+      { path: "README.md", kind: "file" },
+    ]);
+    expect(store.selectedPath).toBe("README.md");
+
+    await store.loadLocalDirectory("src");
+    expect(requested).toEqual(["", "src"]);
+    expect(store.localFiles).toContainEqual({ path: "src/main.ts", kind: "file" });
+    expect(store.loadedLocalDirectories).toEqual(["src"]);
+  });
+
   it("keeps the worktree and pull request targets while moving between their views", async () => {
     const opened = localView();
     const store = createStore(fakeApi({
@@ -258,12 +288,12 @@ describe("store", () => {
     const second = { ...localView(), worktree: { ...localView().worktree, path: "/tmp/second", branch: "second" } };
     let notify: Parameters<GanderApi["onLocalViewChanged"]>[0] | undefined;
     let deferFirst = false;
-    let resolveOld!: (files: Array<{ path: string }>) => void;
+    let resolveOld!: (files: LocalFileEntry[]) => void;
     const store = createStore(fakeApi({
       openLocal: async (_repo, path) => path === first.worktree.path ? first : second,
       listLocalFiles: async (path) => {
         if (path === first.worktree.path && deferFirst) return new Promise((resolve) => { resolveOld = resolve; });
-        return [{ path: path === first.worktree.path ? "first.ts" : "second.ts" }];
+        return [{ path: path === first.worktree.path ? "first.ts" : "second.ts", kind: "file" }];
       },
       localFile: async (_path, filePath) => ({ path: filePath, content: filePath, hash: filePath, binary: false }),
       onLocalViewChanged: (listener) => { notify = listener; return () => {}; },
@@ -274,12 +304,12 @@ describe("store", () => {
     notify?.({ path: first.worktree.path, view: first, error: null });
     await Promise.resolve();
     await store.openLocal(second.worktree.path);
-    resolveOld([{ path: "stale.ts" }]);
+    resolveOld([{ path: "stale.ts", kind: "file" }]);
     await Promise.resolve();
     await Promise.resolve();
 
     expect(store.localView?.worktree.path).toBe(second.worktree.path);
-    expect(store.localFiles).toEqual([{ path: "second.ts" }]);
+    expect(store.localFiles).toEqual([{ path: "second.ts", kind: "file" }]);
     expect(store.localFile?.path).toBe("second.ts");
   });
 

@@ -22,6 +22,8 @@ export interface Store {
   localView: LocalView | null;
   selectedPath: string | null;
   localFiles: LocalFileEntry[];
+  /** Directories whose immediate children Explorer has loaded for the selected worktree. */
+  loadedLocalDirectories: string[];
   localFile: LocalFile | null;
   localSurface: "explorer" | "changes";
   error: string | null;
@@ -44,6 +46,7 @@ export interface Store {
   selectRepo(repoId: string): Promise<void>;
   openPr(prNumber: number): Promise<void>;
   openLocal(path: string): Promise<void>;
+  loadLocalDirectory(directory: string): Promise<void>;
   showLocalSurface(surface: "explorer" | "changes"): void;
   refresh(): Promise<void>;
   /** The reviewer pressing Fetch origin: same work as refresh, but it clears a stale error. */
@@ -78,6 +81,7 @@ export function createStore(api: GanderApi): Store {
   let localFileRequest = 0;
   let localContextGeneration = 0;
   let targetContextRequest = 0;
+  let explorerMutation = Promise.resolve();
 
   function syncCurrentProgress(): void {
     if (!store.view) return;
@@ -105,6 +109,7 @@ export function createStore(api: GanderApi): Store {
     localView: null,
     selectedPath: null,
     localFiles: [],
+    loadedLocalDirectories: [],
     localFile: null,
     localSurface: "explorer",
     error: null,
@@ -250,15 +255,31 @@ export function createStore(api: GanderApi): Store {
         store.targetWorktreePath = path;
         store.view = null;
         store.selectedPath = store.localView.files[0]?.path ?? null;
-        const localFiles = await api.listLocalFiles(path);
+        const localFiles = await api.listLocalFiles(path, "");
         if (generation !== localContextGeneration) return;
         store.localFiles = localFiles;
+        store.loadedLocalDirectories = [];
         store.localSurface = "explorer";
-        store.selectedPath = store.localFiles[0]?.path ?? null;
+        store.selectedPath = firstLocalFilePath();
         const localFile = store.selectedPath ? await api.localFile(path, store.selectedPath) : null;
         if (generation !== localContextGeneration) return;
         store.localFile = localFile;
         store.lastFetchAt = new Date().toISOString();
+      })));
+    },
+    async loadLocalDirectory(directory: string) {
+      if (store.loadedLocalDirectories.includes(directory)) return;
+      await userAction(() => withExplorerMutation(() => guard(async () => {
+        if (!store.localView) throw new Error("no local worktree open");
+        const worktreePath = store.localView.worktree.path;
+        const generation = localContextGeneration;
+        const entries = await api.listLocalFiles(worktreePath, directory);
+        if (generation !== localContextGeneration || store.localView?.worktree.path !== worktreePath) return;
+        store.localFiles = [
+          ...store.localFiles.filter((entry) => parentDirectory(entry.path) !== directory),
+          ...entries,
+        ];
+        store.loadedLocalDirectories.push(directory);
       })));
     },
     showLocalSurface(surface) {
@@ -266,8 +287,8 @@ export function createStore(api: GanderApi): Store {
       store.localSurface = surface;
       if (surface === "changes" && !store.localView.files.some((file) => file.path === store.selectedPath)) {
         store.selectedPath = store.localView.files[0]?.path ?? null;
-      } else if (surface === "explorer" && !store.localFiles.some((file) => file.path === store.selectedPath)) {
-        store.selectedPath = store.localFiles[0]?.path ?? null;
+      } else if (surface === "explorer" && !store.localFiles.some((file) => file.kind === "file" && file.path === store.selectedPath)) {
+        store.selectedPath = firstLocalFilePath();
       }
       if (surface === "explorer" && store.selectedPath) void selectLocalFile(store.selectedPath);
     },
@@ -380,18 +401,44 @@ export function createStore(api: GanderApi): Store {
   }
 
   async function refreshExplorer(): Promise<void> {
+    await withExplorerMutation(refreshExplorerNow);
+  }
+
+  async function refreshExplorerNow(): Promise<void> {
     if (!store.localView) return;
     const worktreePath = store.localView.worktree.path;
     const generation = localContextGeneration;
-    const files = await api.listLocalFiles(worktreePath);
+    const files = await api.listLocalFiles(worktreePath, "");
+    const stillExpanded: string[] = [];
+    for (const directory of [...store.loadedLocalDirectories].sort((left, right) => left.split("/").length - right.split("/").length)) {
+      if (!files.some((entry) => entry.kind === "directory" && entry.path === directory)) continue;
+      files.push(...await api.listLocalFiles(worktreePath, directory));
+      stillExpanded.push(directory);
+    }
     if (generation !== localContextGeneration || store.localView?.worktree.path !== worktreePath) return;
     store.localFiles = files;
+    store.loadedLocalDirectories = stillExpanded;
     if (store.localSurface !== "explorer") return;
-    if (!store.localFiles.some((file) => file.path === store.selectedPath)) {
-      store.selectedPath = store.localFiles[0]?.path ?? null;
+    if (!store.localFiles.some((file) => file.kind === "file" && file.path === store.selectedPath)) {
+      store.selectedPath = firstLocalFilePath();
     }
     if (store.selectedPath) await selectLocalFile(store.selectedPath);
     else store.localFile = null;
+  }
+
+  async function withExplorerMutation(fn: () => Promise<void>): Promise<void> {
+    const operation = explorerMutation.then(fn, fn);
+    explorerMutation = operation.catch(() => {});
+    await operation;
+  }
+
+  function firstLocalFilePath(): string | null {
+    return store.localFiles.find((entry) => entry.kind === "file")?.path ?? null;
+  }
+
+  function parentDirectory(path: string): string {
+    const separator = path.lastIndexOf("/");
+    return separator < 0 ? "" : path.slice(0, separator);
   }
 
   async function loadContexts(repoId: string): Promise<void> {
@@ -430,6 +477,7 @@ export function createStore(api: GanderApi): Store {
     store.view = null;
     store.localView = null;
     store.localFiles = [];
+    store.loadedLocalDirectories = [];
     store.localFile = null;
     store.selectedPath = null;
   }

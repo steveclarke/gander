@@ -73,8 +73,9 @@ workspace; the activity bar switches among Explorer, Current Diff, and Pull Requ
 without changing what those modes mean.
 
 A selected worktree has two peer views. Explorer shows the complete filesystem tree,
-including ignored files but not Git administrative metadata, and reads selected files lazily. Current Diff shows the
-live change from the default-branch merge base through the current working tree;
+including ignored files but not Git administrative metadata, and loads each directory only
+when it is expanded before reading selected files lazily. Current Diff shows the live change
+from the default-branch merge base through the current working tree;
 untracked files are included unless ignored by Git.
 
 Local views are read-only and machine-local. They do not expose or persist checkoffs,

@@ -178,6 +178,7 @@ export interface LocalView {
 /** A path in the selected worktree's complete, git-aware Explorer. */
 export interface LocalFileEntry {
   path: string;
+  kind: "directory" | "file";
 }
 
 /** One lazily-read worktree file. Local browsing never creates review state. */

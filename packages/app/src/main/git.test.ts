@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -198,14 +198,25 @@ describe("git engine", () => {
       expect(view.files.some((file) => file.path === "ignored.txt")).toBe(false);
 
       rmSync(join(linked, "b.rb"));
+      mkdirSync(join(linked, "vendor/cache"), { recursive: true });
+      writeFileSync(join(linked, "vendor/cache/archive.zip"), "dependency cache\n");
       const explorer = await engine.listLocalFiles(linked);
-      expect(explorer.map((file) => file.path)).toEqual([
-        ".gitignore",
-        "a.rb",
-        "ignored.txt",
-        "unchanged.txt",
-        "untracked.ts",
+      expect(explorer).toEqual([
+        { path: "vendor", kind: "directory" },
+        { path: ".gitignore", kind: "file" },
+        { path: "a.rb", kind: "file" },
+        { path: "ignored.txt", kind: "file" },
+        { path: "unchanged.txt", kind: "file" },
+        { path: "untracked.ts", kind: "file" },
       ]);
+      expect(await engine.listLocalFiles(linked, "vendor")).toEqual([
+        { path: "vendor/cache", kind: "directory" },
+      ]);
+      expect(await engine.listLocalFiles(linked, "vendor/cache")).toEqual([
+        { path: "vendor/cache/archive.zip", kind: "file" },
+      ]);
+      await expect(engine.listLocalFiles(linked, ".git")).rejects.toThrow("Cannot display Git metadata");
+      await expect(engine.listLocalFiles(linked, "../")).rejects.toThrow("outside the worktree");
       expect(await engine.localFile(linked, "untracked.ts")).toMatchObject({
         path: "untracked.ts",
         content: "export const local = true;\n",

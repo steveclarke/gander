@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import type { ChangedFile, OpenTarget } from "@gander/shared";
+import type { OpenTarget } from "@gander/shared";
 import { MessageSquare, Plus, RefreshCw, X } from "lucide-vue-next";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
@@ -46,15 +46,6 @@ let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
 const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
 const questionCount = computed(() => store.view?.questions.length ?? 0);
 const hasLoadedView = computed(() => store.view !== null || store.localView !== null);
-const explorerFiles = computed<ChangedFile[]>(() => store.localFiles.map((file) => ({
-  path: file.path,
-  status: "M",
-  baseContent: null,
-  headContent: null,
-  baseHash: null,
-  headHash: null,
-})));
-const localSidebarFiles = computed(() => activeMode.value === "changes" ? store.localView?.files ?? [] : explorerFiles.value);
 const questionsSize = computed({
   get: () => (questionsDock.value === "right" ? questionsWidth.value : questionsHeight.value),
   set: (value: number) => {
@@ -289,7 +280,6 @@ onBeforeUnmount(() => {
           v-if="activeMode === 'explorer' || activeMode === 'changes'"
           :store="store"
           :mode="activeMode"
-          :files="localSidebarFiles"
           :icon-theme="editorSettings.settings.workbench.iconTheme"
           :typography="treeTypography"
           @scroll="onTreeScroll"

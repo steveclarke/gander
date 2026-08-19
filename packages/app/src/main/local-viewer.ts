@@ -18,7 +18,7 @@ function identity(view: LocalView, explorerFiles: LocalFileEntry[]): string {
     defaultBranch: view.defaultBranch,
     mergeBaseSha: view.mergeBaseSha,
     files: view.files.map((file) => [file.path, file.status, file.baseHash, file.headHash]),
-    explorerFiles: explorerFiles.map((file) => file.path),
+    explorerFiles: explorerFiles.map((file) => [file.path, file.kind]),
   });
 }
 
@@ -50,9 +50,8 @@ export async function watchLocalView(
     computing = true;
     try {
       const view = await git.localView(worktreePath);
-      // Walking a complete filesystem tree every 500ms is bounded but unnecessarily
-      // expensive. Diff/ref state stays responsive; ignored-only additions can lag by at
-      // most two seconds before the Explorer refreshes.
+      // Root enumeration is cheap and bounded; expanded directories are refreshed by the
+      // renderer when this derived view changes and by its slower focus/poll refresh.
       if (++explorerTick % 4 === 0) explorerFiles = await git.listLocalFiles(worktreePath);
       const next = identity(view, explorerFiles);
       if (next !== previous || previousError !== null) {

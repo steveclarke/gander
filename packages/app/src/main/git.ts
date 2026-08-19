@@ -29,7 +29,7 @@ const CLONE_TIMEOUT_MS = 10 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 60 * 1000;
 const MAX_LOCAL_CONTENT_BYTES = 8 * 1024 * 1024;
-const MAX_EXPLORER_FILES = 100_000;
+const MAX_EXPLORER_ENTRIES_PER_DIRECTORY = 50_000;
 
 export interface ShowFileResult {
   /** Decoded UTF-8 content, or null if the path is absent at this revision or the blob is binary. */
@@ -59,7 +59,8 @@ export interface GitEngine {
   worktreeRoot(repoDir: string): Promise<string>;
   listWorktrees(repoDir: string): Promise<LocalWorktree[]>;
   localView(worktreeDir: string): Promise<LocalView>;
-  listLocalFiles(worktreeDir: string): Promise<LocalFileEntry[]>;
+  /** Lists one directory only; recursion belongs to explicit Explorer expansion. */
+  listLocalFiles(worktreeDir: string, directory?: string): Promise<LocalFileEntry[]>;
   localFile(worktreeDir: string, path: string): Promise<LocalFile>;
   localImage(worktreeDir: string, mergeBaseSha: string, path: string, basePath?: string): Promise<{ base: ImageSide; head: ImageSide }>;
 }
@@ -442,23 +443,22 @@ export function createGitEngine(clonesRoot: string): GitEngine {
       return { worktree, defaultBranch, mergeBaseSha, files };
     },
 
-    async listLocalFiles(worktreeDir) {
-      const files: LocalFileEntry[] = [];
-      const walk = async (directory: string, prefix: string): Promise<void> => {
-        const entries = await readdir(directory, { withFileTypes: true });
-        entries.sort((left, right) => left.name.localeCompare(right.name));
-        for (const entry of entries) {
-          if (entry.name === ".git") continue;
-          const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-          if (entry.isDirectory()) await walk(join(directory, entry.name), path);
-          else if (entry.isFile() || entry.isSymbolicLink()) files.push({ path });
-          if (files.length > MAX_EXPLORER_FILES) {
-            throw new Error(`Explorer stopped after ${MAX_EXPLORER_FILES} files in ${worktreeDir}`);
-          }
-        }
-      };
-      await walk(worktreeDir, "");
-      return files;
+    async listLocalFiles(worktreeDir, directory = "") {
+      if (directory) validateExplorerPath(worktreeDir, `${directory}/.gander-directory-probe`);
+      const absolute = directory ? join(worktreeDir, directory) : worktreeDir;
+      const entries = await readdir(absolute, { withFileTypes: true });
+      if (entries.length > MAX_EXPLORER_ENTRIES_PER_DIRECTORY) {
+        throw new Error(`Explorer stopped after ${MAX_EXPLORER_ENTRIES_PER_DIRECTORY} entries in ${directory || worktreeDir}`);
+      }
+      return entries
+        .filter((entry) => entry.name !== ".git" && (entry.isDirectory() || entry.isFile() || entry.isSymbolicLink()))
+        .map((entry): LocalFileEntry => ({
+          path: directory ? `${directory}/${entry.name}` : entry.name,
+          kind: entry.isDirectory() ? "directory" : "file",
+        }))
+        .sort((left, right) => left.kind === right.kind
+          ? left.path.localeCompare(right.path)
+          : left.kind === "directory" ? -1 : 1);
     },
 
     async localFile(worktreeDir, path) {

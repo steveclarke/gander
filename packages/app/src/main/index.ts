@@ -120,11 +120,11 @@ async function bootstrap(): Promise<GanderConfig> {
     localViews.set(event.sender.id, view);
     return view;
   });
-  ipcMain.handle("gander:listLocalFiles", async (event, path: string) => {
+  ipcMain.handle("gander:listLocalFiles", async (event, path: string, directory = "") => {
     if (localViews.get(event.sender.id)?.worktree.path !== path) {
       throw new Error(`${path} is not the open local worktree`);
     }
-    return git.listLocalFiles(path);
+    return git.listLocalFiles(path, directory);
   });
   ipcMain.handle("gander:localFile", async (event, path: string, filePath: string) => {
     if (localViews.get(event.sender.id)?.worktree.path !== path) {
