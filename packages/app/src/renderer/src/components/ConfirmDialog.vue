@@ -46,12 +46,16 @@ watch(() => props.open, (open) => {
 
 <style scoped>
 .confirm {
+  /* The browser centres a modal dialog with `margin: auto`, and theme.css resets margin
+     to 0 on every element — so without this the dialog sits in the top-left corner, over
+     the window controls. */
+  inset: 0; margin: auto;
   min-width: 340px; max-width: 460px; padding: 18px 20px 16px;
   border: 1px solid var(--workbench-border); border-radius: 8px;
   background: var(--panel-background); color: var(--workbench-foreground);
   box-shadow: 0 16px 40px rgb(0 0 0 / .45);
 }
-.confirm::backdrop { background: rgb(0 0 0 / .45); }
+.confirm::backdrop { background: rgb(0 0 0 / .5); }
 h2 { font-size: 14px; line-height: 1.35; }
 .detail { margin-top: 7px; color: var(--faint-foreground); font-size: 12px; line-height: 1.5; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
