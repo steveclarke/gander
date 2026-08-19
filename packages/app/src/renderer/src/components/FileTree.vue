@@ -2,7 +2,7 @@
 import { computed, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
-import { collapsedDirs, toggleCollapsed } from "../tree-nav.js";
+import { collapsedDirs, cursor, toggleCollapsed } from "../tree-nav.js";
 import {
   fileIconFor,
   folderIconFor,
@@ -105,10 +105,11 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
       <div
         v-if="node.type === 'dir'"
         class="tnode isdir"
+        :class="{ cur: node.path === cursor }"
         :style="{ paddingLeft: `${10 + depth * 16}px` }"
         role="button"
         tabindex="0"
-        @click="toggleCollapsed(node.path)"
+        @click="cursor = node.path; toggleCollapsed(node.path)"
         @keydown.enter.space.prevent="toggleCollapsed(node.path)"
       >
         <component
@@ -146,11 +147,11 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
       <div
         v-if="node.type === 'file'"
         class="tnode"
-        :class="{ sel: node.file.path === store.selectedPath, checked: reviewFile(node)?.checked }"
+        :class="{ sel: node.file.path === store.selectedPath, cur: node.file.path === cursor, checked: reviewFile(node)?.checked }"
         :style="{ paddingLeft: `${10 + depth * 16}px` }"
         role="button"
         tabindex="0"
-        @click="store.select(node.file.path)"
+        @click="cursor = node.file.path; store.select(node.file.path)"
         @keydown.enter.space.prevent="store.select(node.file.path)"
       >
         <span class="hierarchy-slot" aria-hidden="true" />
@@ -193,6 +194,8 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 .cb.on { border-color: var(--success); color: var(--success); }
 .cb.part { border-color: var(--success); color: var(--success); }
 .tnode.checked .fname { color: var(--faint-foreground); }
+/* The cursor is where the keyboard is, which is not always the file on screen. */
+.tnode.cur { box-shadow: inset 2px 0 0 var(--accent); }
 .note-mark { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); flex: none; }
 .note-count { font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }
 .delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; }

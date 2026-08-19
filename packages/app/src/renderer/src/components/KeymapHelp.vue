@@ -21,10 +21,7 @@ const inGroup = (group: string) => BINDINGS.filter((binding) => binding.group ==
           <dl>
             <template v-for="binding in inGroup(group)" :key="binding.command">
               <dt><kbd>{{ binding.label }}</kbd></dt>
-              <dd>
-                {{ binding.description }}
-                <span v-if="binding.treeOnly" class="scope">in the tree</span>
-              </dd>
+              <dd>{{ binding.description }}</dd>
             </template>
           </dl>
         </section>
@@ -44,5 +41,4 @@ dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; a
 dt { justify-self: start; }
 dd { margin: 0; font-size: 13px; }
 kbd { display: inline-block; padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); font: 11px var(--mono); white-space: nowrap; }
-.scope { color: var(--faint-foreground); font-size: 11px; }
 </style>

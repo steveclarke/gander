@@ -119,10 +119,11 @@ reviewed", not "unchanged".
 
 **Keyboard** is one table: `renderer/src/keymap.ts` lists every binding, and both the
 handler in `App.vue` and the `?` sheet read it, so a key cannot be added without the help
-learning about it. Tree collapse state and the visible-file order live in
-`renderer/src/tree-nav.ts` rather than inside `FileTree.vue`, which renders itself
-recursively — keyboard movement needs one answer to what is visible. Keys that change the
-tree's shape act only while the tree holds focus.
+learning about it. `renderer/src/tree-nav.ts` holds the cursor, the collapse state, and the
+row order, rather than `FileTree.vue`, which renders itself recursively — keyboard movement
+needs one answer to what is visible. The cursor walks directories as well as files and is
+separate from the selected file, because a directory has nothing to show in the diff:
+passing over one leaves the reader on the file they were already reading.
 
 **Note lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
 over MCP, with optional commit ref and summary) → `resolved` (reviewer re-checks

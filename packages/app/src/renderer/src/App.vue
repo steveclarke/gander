@@ -11,7 +11,7 @@ import { currentLine } from "./selection.js";
 import type { NoteTarget } from "./selection.js";
 import type { PrFile } from "@gander/shared";
 import { bindingFor, type Command } from "./keymap.js";
-import { collapsedDirectoryAfter, collapsedDirs, directoryOf, edge, nextUnchecked, step, treeFocus } from "./tree-nav.js";
+import { collapsedDirs, cursor, edge, filesAt, nextUnmarked, parentOf, rowAt, step } from "./tree-nav.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -256,63 +256,44 @@ function isTyping(target: HTMLElement | null): boolean {
 // input and the settings fields, which are the only places a letter means itself.
 function runCommand(command: Command): boolean {
   const files = store.files();
-  const selected = store.selectedPath;
+  const at = cursor.value ?? store.selectedPath;
 
   switch (command) {
     case "next-file":
-    case "previous-file": {
-      const next = step(files, selected, command === "next-file" ? 1 : -1);
-      if (next !== null) store.select(next);
-      return true;
-    }
+    case "previous-file":
+      return moveTo(step(files, at, command === "next-file" ? 1 : -1));
     case "first-file":
-    case "last-file": {
-      const next = edge(files, command === "first-file" ? "first" : "last");
-      if (next !== null) store.select(next);
-      return true;
-    }
+    case "last-file":
+      return moveTo(edge(files, command === "first-file" ? "first" : "last"));
     case "collapse": {
-      // The row the cursor sits on is about to fold away, so the cursor steps out with it,
-      // onto the file above the directory rather than into a hidden row.
-      const dir = selected === null ? null : directoryOf(files, selected);
-      if (dir === null) return true;
-      const above = step(files, selected, -1);
-      collapsedDirs.add(dir);
-      const landing = above !== null && !above.startsWith(`${dir}/`) ? above : edge(files, "first");
-      if (landing !== null) store.select(landing);
-      return true;
+      // On an open directory this closes it; anywhere else it steps out to the directory
+      // that contains the row, which is how an explorer's left arrow behaves.
+      if (at !== null && rowAt(files, at)?.type === "dir" && !collapsedDirs.has(at)) {
+        collapsedDirs.add(at);
+        return true;
+      }
+      return moveTo(at === null ? null : parentOf(files, at));
     }
     case "expand": {
-      const dir = collapsedDirectoryAfter(files, selected);
-      if (dir !== null) collapsedDirs.delete(dir);
+      if (at !== null && rowAt(files, at)?.type === "dir") collapsedDirs.delete(at);
       return true;
     }
-    case "focus-tree": {
-      treeFocus.active = true;
-      (document.querySelector(".view-sidebar .tnode.sel") as HTMLElement | null)?.focus();
-      return true;
-    }
-    case "focus-diff": {
-      if (helpOpen.value) { helpOpen.value = false; return true; }
-      if (!treeFocus.active) return false;
-      treeFocus.active = false;
-      (document.activeElement as HTMLElement | null)?.blur();
+    case "dismiss": {
+      if (!helpOpen.value) return false;
+      helpOpen.value = false;
       return true;
     }
     case "toggle-checked": {
-      const file = reviewFileAt(selected);
-      if (file !== null) void store.setChecked(file.path, !file.checked);
+      mark(at, null);
       return true;
     }
     case "mark-and-advance":
     case "mark-and-retreat": {
-      const file = reviewFileAt(selected);
-      if (file === null) return true;
-      // Read before marking: once this file is checked it would no longer be a candidate,
-      // and the search would skip over where the reviewer actually is.
-      const next = nextUnchecked(files, file.path, command === "mark-and-advance" ? 1 : -1);
-      if (!file.checked) void store.setChecked(file.path, true);
-      if (next !== null && next !== file.path) store.select(next);
+      // Read before marking: once this row is marked it is no longer a candidate, and the
+      // search would step over where the reviewer actually is.
+      const next = nextUnmarked(files, at, command === "mark-and-advance" ? 1 : -1);
+      mark(at, true);
+      if (next !== null && next !== at) moveTo(next);
       return true;
     }
     case "next-change":
@@ -339,18 +320,41 @@ function runCommand(command: Command): boolean {
   }
 }
 
+/**
+ * Moves the cursor, and opens the row when it is a file. A directory has nothing to show,
+ * so passing over one leaves the reader looking at the file they were already reading.
+ */
+function moveTo(path: string | null): boolean {
+  if (path === null) return true;
+  cursor.value = path;
+  if (rowAt(store.files(), path)?.type === "file") store.select(path);
+  return true;
+}
+
+/** Marks a row: one file, or every file under a directory. `checked` null means toggle. */
+function mark(path: string | null, checked: boolean | null): void {
+  const under = filesAt(store.files(), path).filter((file): file is PrFile => "checked" in file);
+  if (under.length === 0) return;
+  const next = checked ?? under.some((file) => !file.checked);
+  const changing = under.filter((file) => file.checked !== next).map((file) => file.path);
+  if (changing.length === 0) return;
+  if (changing.length === 1) void store.setChecked(changing[0]!, next);
+  else void store.setCheckedMany(changing, next);
+}
+
+
 // Keyboard movement can leave the cursor outside the scrolled area, where the reviewer
-// cannot see what they selected. Follow it; a mouse click is already in view.
-watch(() => store.selectedPath, async () => {
+// cannot see what they are on. Follow it; a mouse click is already in view.
+watch(cursor, async () => {
   await nextTick();
-  document.querySelector(".view-sidebar .tnode.sel")?.scrollIntoView({ block: "nearest" });
+  document.querySelector(".view-sidebar .tnode.cur")?.scrollIntoView({ block: "nearest" });
 });
 
-function reviewFileAt(path: string | null): PrFile | null {
-  if (path === null) return null;
-  const file = store.files().find((f) => f.path === path);
-  return file !== undefined && "checked" in file ? file as PrFile : null;
-}
+// A file opened by any other route — a click, a note, opening the pull request — becomes
+// where the keyboard continues from.
+watch(() => store.selectedPath, (path) => {
+  if (path !== null && rowAt(store.files(), cursor.value)?.type !== "dir") cursor.value = path;
+});
 
 function onKey(event: KeyboardEvent): void {
   if (isTyping(event.target as HTMLElement | null)) return;
@@ -360,7 +364,6 @@ function onKey(event: KeyboardEvent): void {
   // viewer there is no checkoff, no note, and no delta to reach.
   const reviewing = store.view !== null && activeMode.value === "pulls";
   if (!reviewing && binding.group !== "Panels") return;
-  if (binding.treeOnly === true && !treeFocus.active) return;
   if (!runCommand(binding.command)) return;
   event.preventDefault();
   event.stopPropagation();
@@ -419,8 +422,6 @@ onBeforeUnmount(() => {
         v-if="treeVisible && activeMode !== 'settings'"
         class="view-sidebar"
         :class="{ scrolling: treeScrolling }"
-        @focusin="treeFocus.active = true"
-        @focusout="treeFocus.active = false"
         :style="{ width: `${treeWidth}px` }"
       >
         <LocalSidebar

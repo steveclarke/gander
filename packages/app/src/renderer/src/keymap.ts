@@ -12,8 +12,7 @@ export type Command =
   | "last-file"
   | "collapse"
   | "expand"
-  | "focus-tree"
-  | "focus-diff"
+  | "dismiss"
   | "toggle-checked"
   | "mark-and-advance"
   | "mark-and-retreat"
@@ -35,23 +34,20 @@ export interface Binding {
   group: "Move" | "Review" | "Read" | "Panels";
   /** Held with Command on macOS, Control elsewhere. */
   meta?: true;
-  /** Acts only while the file tree holds focus, because it changes the tree's shape. */
-  treeOnly?: true;
 }
 
 export const BINDINGS: Binding[] = [
-  { command: "next-file", keys: ["j", "ArrowDown"], label: "j / ↓", description: "Next file", group: "Move" },
-  { command: "previous-file", keys: ["k", "ArrowUp"], label: "k / ↑", description: "Previous file", group: "Move" },
-  { command: "first-file", keys: ["Home"], label: "Home", description: "First file", group: "Move" },
-  { command: "last-file", keys: ["End"], label: "End", description: "Last file", group: "Move" },
-  { command: "collapse", keys: ["h", "ArrowLeft"], label: "h / ←", description: "Collapse the directory", group: "Move", treeOnly: true },
-  { command: "expand", keys: ["l", "ArrowRight"], label: "l / →", description: "Expand the directory", group: "Move", treeOnly: true },
-  { command: "focus-tree", keys: ["Tab"], label: "Tab", description: "Focus the file tree", group: "Move" },
-  { command: "focus-diff", keys: ["Escape"], label: "Esc", description: "Return to the diff", group: "Move" },
+  { command: "next-file", keys: ["j", "ArrowDown"], label: "j / ↓", description: "Next row", group: "Move" },
+  { command: "previous-file", keys: ["k", "ArrowUp"], label: "k / ↑", description: "Previous row", group: "Move" },
+  { command: "first-file", keys: ["Home"], label: "Home", description: "First row", group: "Move" },
+  { command: "last-file", keys: ["End"], label: "End", description: "Last row", group: "Move" },
+  { command: "collapse", keys: ["h", "ArrowLeft"], label: "h / ←", description: "Close the directory, or step out to it", group: "Move" },
+  { command: "expand", keys: ["l", "ArrowRight", "o"], label: "l / → / o", description: "Open the directory", group: "Move" },
+  { command: "dismiss", keys: ["Escape"], label: "Esc", description: "Close what is open on top", group: "Move" },
 
-  { command: "toggle-checked", keys: ["m", " "], label: "m / Space", description: "Mark or unmark this file", group: "Review" },
-  { command: "mark-and-advance", keys: ["J"], label: "⇧J", description: "Mark it and go to the next unmarked file", group: "Review" },
-  { command: "mark-and-retreat", keys: ["K"], label: "⇧K", description: "Mark it and go to the previous unmarked file", group: "Review" },
+  { command: "toggle-checked", keys: ["m", " "], label: "m / Space", description: "Mark or unmark this file, or the whole directory", group: "Review" },
+  { command: "mark-and-advance", keys: ["J"], label: "⇧J", description: "Mark it and go to the next unmarked row", group: "Review" },
+  { command: "mark-and-retreat", keys: ["K"], label: "⇧K", description: "Mark it and go to the previous unmarked row", group: "Review" },
   { command: "capture-note", keys: ["n"], label: "n", description: "Capture a note", group: "Review" },
   { command: "toggle-notes", keys: ["N"], label: "⇧N", description: "Show or hide the notes", group: "Review" },
 

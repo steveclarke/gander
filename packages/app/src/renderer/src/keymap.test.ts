@@ -27,9 +27,10 @@ describe("keymap", () => {
     expect(bindingFor(press("j", { altKey: true }))).toBeNull();
   });
 
-  it("binds the arrow keys alongside hjkl", () => {
+  it("binds the arrow keys alongside hjkl, and o alongside expand", () => {
     expect(bindingFor(press("ArrowDown"))?.command).toBe("next-file");
     expect(bindingFor(press("ArrowLeft"))?.command).toBe("collapse");
+    expect(bindingFor(press("o"))?.command).toBe("expand");
   });
 
   // The `?` sheet renders from this table, so a binding outside the printed groups would
