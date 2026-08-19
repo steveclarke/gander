@@ -13,6 +13,7 @@ let repo: string;
 let fakeBin: string;
 let argsFile: string;
 let envFile: string;
+let configFile: string;
 let env: NodeJS.ProcessEnv;
 
 type CommandResult = { status: number | null; output: string };
@@ -35,6 +36,7 @@ beforeEach(() => {
   fakeBin = join(tmpRoot, "bin");
   argsFile = join(tmpRoot, "args");
   envFile = join(tmpRoot, "inspector-env");
+  configFile = join(tmpRoot, "inspector-config");
 
   mkdirSync(join(repo, "bin"), { recursive: true });
   mkdirSync(join(repo, "nested/directory"), { recursive: true });
@@ -54,6 +56,14 @@ beforeEach(() => {
   writeExecutable(join(fakeBin, "pnpm"), `#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$@" > "$MCP_TEST_ARGS_FILE"
+prior=""
+for arg in "$@"; do
+  if [[ "$prior" == "--config" ]]; then
+    cp "$arg" "$MCP_TEST_CONFIG_FILE"
+    break
+  fi
+  prior="$arg"
+done
 printf 'CLIENT_PORT=%s\nMCP_SANDBOX_PORT=%s\nHOST=%s\n' \
   "\${CLIENT_PORT:-}" "\${MCP_SANDBOX_PORT:-}" "\${HOST:-}" > "$MCP_TEST_ENV_FILE"
 if [[ " $* " == *" --format json "* ]]; then
@@ -72,6 +82,7 @@ fi
     PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
     MCP_TEST_ARGS_FILE: argsFile,
     MCP_TEST_ENV_FILE: envFile,
+    MCP_TEST_CONFIG_FILE: configFile,
   };
 });
 
@@ -88,9 +99,19 @@ describe.skipIf(platform === "win32")("bin/mcp", () => {
 
     const args = readFileSync(argsFile, "utf8");
     expect(args).toMatch(/^exec\nmcp-inspector\n/);
-    expect(args).toContain("http://127.0.0.1:4321/mcp");
-    expect(args).toContain("Authorization: Bearer test-token");
+    expect(args).toContain("--config");
+    expect(args).not.toContain("test-token");
     expect(args).toContain("tools/list");
+    expect(JSON.parse(readFileSync(configFile, "utf8"))).toEqual({
+      mcpServers: {
+        gander: {
+          type: "streamable-http",
+          url: "http://127.0.0.1:4321/mcp",
+          headers: { Authorization: "Bearer test-token" },
+          protocolEra: "modern",
+        },
+      },
+    });
   });
 
   it("passes tool calls through the Inspector CLI", () => {

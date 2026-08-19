@@ -1,5 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpHandler, McpServer, type McpHttpHandler } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   DEFAULT_REPLY_WAIT_SECONDS,
@@ -10,6 +9,8 @@ import {
 } from "./reply-waiters.js";
 import type { Storage } from "./storage.js";
 
+export const GANDER_MCP_PROTOCOL_VERSION = "2026-07-28";
+
 /**
  * The MCP contract is deliberately tiny: agents read the reviewer's questions, reply,
  * and say when they have acted on one. Nothing here reads diffs, lists files, touches
@@ -18,7 +19,10 @@ import type { Storage } from "./storage.js";
  * only the conversation.
  */
 export function buildMcpServer(storage: Storage, version: string, replyWaiters: ReviewerReplyWaiters): McpServer {
-  const server = new McpServer({ name: "gander", version });
+  const server = new McpServer(
+    { name: "gander", version },
+    { supportedProtocolVersions: [GANDER_MCP_PROTOCOL_VERSION] },
+  );
 
   /** Agents know their own repository and branch; the pull request number they usually don't. */
   function resolvePr(repo: string, prNumber?: number, branch?: string): number | string {
@@ -56,7 +60,7 @@ export function buildMcpServer(storage: Storage, version: string, replyWaiters: 
         ),
       },
     },
-    async ({ repo, branch, prNumber, includeAddressed, includeResolved, afterReplyCursor, waitSeconds }, { signal }) => {
+    async ({ repo, branch, prNumber, includeAddressed, includeResolved, afterReplyCursor, waitSeconds }, { mcpReq }) => {
       const resolved = resolvePr(repo, prNumber, branch);
       if (typeof resolved === "string") return { content: [{ type: "text", text: resolved }], isError: true };
 
@@ -80,7 +84,7 @@ export function buildMcpServer(storage: Storage, version: string, replyWaiters: 
             afterReplyCursor,
             () => storage.getReviewerReplyCursor(repo, resolved),
             effectiveWaitSeconds * 1_000,
-            signal,
+            mcpReq.signal,
           );
           if (outcome === "cancelled") {
             return { content: [{ type: "text", text: "Reply wait cancelled." }], isError: true };
@@ -244,24 +248,19 @@ export function buildMcpServer(storage: Storage, version: string, replyWaiters: 
   return server;
 }
 
-/**
- * One transport per request, with no session id. Agents connect, ask, and disconnect;
- * nothing here is worth keeping between calls, and statelessness means a restarted
- * service never leaves an agent holding a session it cannot use.
- */
-export async function handleMcpRequest(
+/** Modern MCP is stateless per request, while the handler owns shared stream cleanup. */
+export function buildMcpHandler(
   storage: Storage,
   version: string,
-  req: import("node:http").IncomingMessage,
-  res: import("node:http").ServerResponse,
-  body: unknown,
   replyWaiters: ReviewerReplyWaiters,
-): Promise<void> {
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  res.on("close", () => void transport.close());
-  const server = buildMcpServer(storage, version, replyWaiters);
-  await server.connect(transport);
-  // Fastify has already read and parsed the body; handing it over here stops the
-  // transport waiting forever on a stream that will never emit again.
-  await transport.handleRequest(req, res, body);
+): McpHttpHandler {
+  return createMcpHandler(
+    () => buildMcpServer(storage, version, replyWaiters),
+    {
+      // Gander is a new single-user service. Fail loudly rather than preserving
+      // protocol behavior that predates the app.
+      legacy: "reject",
+      maxSubscriptions: 32,
+    },
+  );
 }

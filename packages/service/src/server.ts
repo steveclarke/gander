@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { NewQuestionReplySchema, NewQuestionSchema, PrContextSchema, PutFileStateSchema } from "@gander/shared";
-import { handleMcpRequest } from "./mcp.js";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+import { buildMcpHandler } from "./mcp.js";
 import { ReviewerReplyWaiters, reviewWaitKey } from "./reply-waiters.js";
 import type { Storage } from "./storage.js";
 
@@ -18,7 +19,12 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
   // active sockets triggers the same cleanup path as a disconnected MCP client.
   const app = Fastify({ logger: false, forceCloseConnections: true });
   const replyWaiters = opts.replyWaiters ?? new ReviewerReplyWaiters();
-  app.addHook("preClose", async () => replyWaiters.close());
+  const mcpHandler = buildMcpHandler(opts.storage, opts.version, replyWaiters);
+  const handleMcpRequest = toNodeHandler(mcpHandler);
+  app.addHook("preClose", async () => {
+    replyWaiters.close();
+    await mcpHandler.close();
+  });
 
   app.get("/healthz", async () => ({ ok: true, version: opts.version }));
 
@@ -147,7 +153,7 @@ export function buildServer(opts: { storage: Storage; token: string; version: st
   // Agents reach the same questions the app writes, over MCP. Same bearer token as
   // /api — one credential per install, not two.
   app.all("/mcp", async (req, reply) => {
-    await handleMcpRequest(opts.storage, opts.version, req.raw, reply.raw, req.body, replyWaiters);
+    await handleMcpRequest(req.raw, reply.raw, req.body);
     // The transport writes and ends the raw response itself; telling Fastify the reply
     // is already sent stops it appending a second one.
     reply.hijack();

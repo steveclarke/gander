@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { openStorage, type Storage } from "./storage.js";
+import { GANDER_MCP_PROTOCOL_VERSION } from "./mcp.js";
 import { ReviewerReplyWaiters } from "./reply-waiters.js";
 import { buildServer } from "./server.js";
 
@@ -20,7 +20,10 @@ let baseUrl: string;
 let replyWaiters: ReviewerReplyWaiters;
 
 async function connect(token = "test-token"): Promise<Client> {
-  const client = new Client({ name: "test-agent", version: "1.0.0" });
+  const client = new Client(
+    { name: "test-agent", version: "1.0.0" },
+    { versionNegotiation: { mode: { pin: GANDER_MCP_PROTOCOL_VERSION } } },
+  );
   await client.connect(
     new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
       requestInit: { headers: { Authorization: `Bearer ${token}` } },
@@ -72,9 +75,30 @@ afterEach(async () => {
 describe("MCP endpoint", () => {
   it("offers the three question conversation tools", async () => {
     const client = await connect();
+    expect(client.getProtocolEra()).toBe("modern");
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
     expect(names).toEqual(["get_review_questions", "mark_question_addressed", "reply_to_question"]);
     await client.close();
+  });
+
+  it("rejects clients that do not speak the 2026-07-28 protocol", async () => {
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { Authorization: "Bearer test-token", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "legacy-test", version: "1.0.0" },
+        },
+      }),
+    });
+    const payload = await response.json() as { error?: { message?: string; data?: unknown } };
+    expect(payload.error?.message).toMatch(/protocol version/i);
+    expect(JSON.stringify(payload.error?.data)).toContain(GANDER_MCP_PROTOCOL_VERSION);
   });
 
   it("returns the reviewer's open questions for a branch", async () => {
@@ -133,7 +157,7 @@ describe("MCP endpoint", () => {
     const waiting = client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", branch: "feat/thing", afterReplyCursor: 0, waitSeconds: 30 },
-    }, undefined, { timeout: 35_000 });
+    }, { timeout: 35_000 });
     await expect.poll(() => replyWaiters.activeCount).toBe(1);
 
     await addReviewerReply(7, question.id, "The requirement changed.");
@@ -152,7 +176,7 @@ describe("MCP endpoint", () => {
     const waits = clients.map((client, index) => client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", prNumber: index < 2 ? 7 : 8, afterReplyCursor: 0, waitSeconds: 30 },
-    }, undefined, { timeout: 35_000 }));
+    }, { timeout: 35_000 }));
     await expect.poll(() => replyWaiters.activeCount).toBe(3);
 
     await addReviewerReply(7, firstQuestion.id, "For both agents on this pull request.");
@@ -172,7 +196,7 @@ describe("MCP endpoint", () => {
     const result = await client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 1 },
-    }, undefined, { timeout: 5_000 });
+    }, { timeout: 5_000 });
     const payload = JSON.parse(textOf(result as { content?: unknown })) as { replyCursor: number; wait: { outcome: string; timeoutSeconds: number; message: string } };
     expect(payload).toMatchObject({ replyCursor: 0, wait: { outcome: "timeout", timeoutSeconds: 1 } });
     expect(payload.wait.message).toContain("afterReplyCursor: 0");
@@ -186,7 +210,7 @@ describe("MCP endpoint", () => {
     const waiting = client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
-    }, undefined, { timeout: 35_000 });
+    }, { timeout: 35_000 });
     await expect.poll(() => replyWaiters.activeCount).toBe(1);
 
     await client.close();
@@ -200,14 +224,14 @@ describe("MCP endpoint", () => {
     const waiting = client.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
-    }, undefined, { timeout: 35_000 });
+    }, { timeout: 35_000 });
     await expect.poll(() => replyWaiters.activeCount).toBe(1);
 
     await server.close();
     expect(replyWaiters.activeCount).toBe(0);
-    const cancelled = await waiting;
-    expect(cancelled.isError).toBe(true);
-    expect(textOf(cancelled as { content?: unknown })).toContain("cancelled");
+    // Modern Streamable HTTP cancellation closes the request stream instead of
+    // manufacturing a tool result after the service has begun shutting down.
+    await expect(waiting).rejects.toThrow();
     await client.close();
   });
 
@@ -218,7 +242,7 @@ describe("MCP endpoint", () => {
     const first = clients[0]!.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
-    }, undefined, { timeout: 35_000 });
+    }, { timeout: 35_000 });
     await expect.poll(() => replyWaiters.activeCount).toBe(1);
 
     const refused = await clients[1]!.callTool({
@@ -241,7 +265,7 @@ describe("MCP endpoint", () => {
     const first = clients[0]!.callTool({
       name: "get_review_questions",
       arguments: { repo: "acme/atlas", prNumber: 7, afterReplyCursor: 0, waitSeconds: 30 },
-    }, undefined, { timeout: 35_000 });
+    }, { timeout: 35_000 });
     await expect.poll(() => replyWaiters.activeCount).toBe(1);
 
     const refused = await clients[1]!.callTool({

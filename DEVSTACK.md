@@ -197,6 +197,19 @@ Agents read the reviewer's questions from the same service, at `/mcp`, with the
 same bearer token. Port and token are allocated per checkout, so the command is
 generated rather than committed — read the live values out of `.env`:
 
+Gander requires MCP protocol `2026-07-28`; it deliberately rejects legacy
+clients. In Codex, enable the current modern-protocol feature before connecting:
+
+`Streamable HTTP` is the transport: the agent connects to Gander's existing
+service URL, and long-lived responses use SSE when needed. It does not mean an
+older protocol revision. `STDIO` is the alternative transport where the agent
+launches a local child process and communicates over its standard streams; that
+does not fit Gander's shared cross-machine service.
+
+```
+codex features enable mcp_2026_07_28
+```
+
 ```
 source .env
 claude mcp add --transport http gander "$GANDER_SERVICE_URL/mcp" \

@@ -15,13 +15,14 @@ SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ENV_FILE="$SCRIPT_ROOT/.env"
 INSPECTOR_PACKAGE="${GANDER_MCP_INSPECTOR_PACKAGE:-}"
 MCP_URL=""
-AUTH_HEADER=""
+INSPECTOR_CONFIG=""
 
 ################################################################################
 # Main Orchestration
 ################################################################################
 
 main() {
+  trap cleanup EXIT
   local command="${1:-check}"
   [[ $# -gt 0 ]] && shift
 
@@ -34,6 +35,10 @@ main() {
     help|-h|--help) usage ;;
     *) fail "Unknown command: $command" ;;
   esac
+}
+
+cleanup() {
+  [[ -z "$INSPECTOR_CONFIG" ]] || rm -f "$INSPECTOR_CONFIG"
 }
 
 ################################################################################
@@ -89,7 +94,22 @@ load_config() {
   [[ -n "${GANDER_TOKEN:-}" ]] || fail "GANDER_TOKEN is missing from $ENV_FILE. Run bin/setup."
 
   MCP_URL="${GANDER_SERVICE_URL%/}/mcp"
-  AUTH_HEADER="Authorization: Bearer $GANDER_TOKEN"
+
+  INSPECTOR_CONFIG="$(mktemp "${TMPDIR:-/tmp}/gander-mcp-inspector.XXXXXX.json")"
+  MCP_URL="$MCP_URL" GANDER_TOKEN="$GANDER_TOKEN" node - "$INSPECTOR_CONFIG" <<'NODE'
+const { writeFileSync } = require("node:fs");
+const [path] = process.argv.slice(2);
+writeFileSync(path, JSON.stringify({
+  mcpServers: {
+    gander: {
+      type: "streamable-http",
+      url: process.env.MCP_URL,
+      headers: { Authorization: `Bearer ${process.env.GANDER_TOKEN}` },
+      protocolEra: "modern",
+    },
+  },
+}));
+NODE
 }
 
 ensure_service() {
@@ -110,13 +130,13 @@ run_inspector() {
 
 run_cli() {
   run_inspector --cli \
-    --server-url "$MCP_URL" \
-    --transport http \
-    --header "$AUTH_HEADER" \
+    --config "$INSPECTOR_CONFIG" \
+    --server gander \
     "$@"
 }
 
 prepare_client() {
+  require_command node
   load_config
   ensure_service
 }
@@ -128,7 +148,6 @@ prepare_client() {
 cmd_check() {
   [[ $# -eq 0 ]] || fail "check does not accept arguments."
   prepare_client
-  require_command node
 
   local response
   if ! response="$(run_cli --method tools/list --format json)"; then
@@ -185,9 +204,8 @@ cmd_tui() {
   [[ $# -eq 0 ]] || fail "tui does not accept arguments."
   prepare_client
   run_inspector --tui \
-    --server-url "$MCP_URL" \
-    --transport http \
-    --header "$AUTH_HEADER"
+    --config "$INSPECTOR_CONFIG" \
+    --server gander
 }
 
 cmd_inspect() {
@@ -202,9 +220,8 @@ cmd_inspect() {
     export CLIENT_PORT="$MCP_INSPECTOR_CLIENT_PORT"
     export MCP_SANDBOX_PORT="$MCP_INSPECTOR_SANDBOX_PORT"
     run_inspector --web \
-      --server-url "$MCP_URL" \
-      --transport http \
-      --header "$AUTH_HEADER"
+      --config "$INSPECTOR_CONFIG" \
+      --server gander
   )
 }
 
