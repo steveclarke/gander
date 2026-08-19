@@ -493,6 +493,26 @@ describe("store", () => {
       expect(store.serviceStatus).toEqual({ state: "unreachable", reason: "network down" });
     });
 
+    it("clears a recovered read-only connection error without hiding a failed change", async () => {
+      const unreachable = { state: "unreachable" as const, reason: "Could not reach http://service: fetch failed" };
+      let connected = false;
+      const store = createStore(fakeApi({
+        serviceStatus: async () => connected
+          ? { state: "connected", serviceVersion: "0.1.0", supportedVersion: "0.1.0" }
+          : unreachable,
+      }));
+
+      await store.checkService();
+      store.error = unreachable.reason;
+      connected = true;
+      await store.checkService();
+      expect(store.error).toBeNull();
+
+      store.error = `${unreachable.reason} This change was not saved and will not be retried.`;
+      await store.checkService();
+      expect(store.error).toContain("not saved");
+    });
+
     it("shows cached mode immediately when refresh falls back while the service is down", async () => {
       let status: "connected" | "unreachable" = "connected";
       const store = createStore(fakeApi({
