@@ -22,10 +22,11 @@ while preserving the checkout's process and config isolation.
 | End-to-end tests (build + run) | `pnpm test:e2e` |
 | Re-run end-to-end tests without rebuilding | `pnpm test:e2e:run [file]` |
 
-`pnpm test:e2e` builds the Electron app once, then Playwright runs six independent
-window scenarios: settings persistence, checkoff persistence, changed-image
-decoding, live local changes, the real `bin/gander` command, and the concurrent
-clone regression. Each spec starts with a fresh Electron process, config,
+`pnpm test:e2e` builds the Electron app once, then Playwright runs independent
+window scenarios across persistence, content-based review state, notes and MCP,
+service failure and compatibility, target isolation, keyboard focus, images,
+local changes, the real `bin/gander` command, and clone concurrency. Each spec
+starts with a fresh Electron process, config,
 user-data directory, real service and SQLite database, local GitHub fake, and real
 temporary Git repositories. A spec restarts only its own app when restart is the
 behavior under test.

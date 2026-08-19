@@ -14,6 +14,7 @@ import type { FastifyInstance } from "fastify";
 import { GanderApplication } from "./application.js";
 import { GithubServer, type PullRequestFixture } from "./github-server.js";
 import {
+  amendPullRequest,
   createRepositoryFixture,
   removeRepositoryFixture,
   type RepositoryFixture,
@@ -36,10 +37,11 @@ export class GanderWorld {
   readonly socketPath: string;
   readonly clonesPath: string;
   readonly github: GithubServer;
-  readonly service: FastifyInstance;
   readonly serviceUrl: string;
   readonly serviceToken = "e2e-service-token";
 
+  private service: FastifyInstance;
+  private serviceRunning = true;
   private readonly storage: Storage;
   private readonly testInfo: TestInfo;
   private readonly repositories: RepositoryFixture[] = [];
@@ -118,8 +120,49 @@ export class GanderWorld {
     return repository;
   }
 
-  async launch(): Promise<GanderApplication> {
-    const application = new GanderApplication(this.childEnvironment(), this.userDataPath, this.testInfo);
+  async rewritePullRequest(repository: RepositoryFixture, files: Record<string, string | Uint8Array>): Promise<void> {
+    await amendPullRequest(repository, files);
+    this.github.updatePullRequest(repository.repoId, {
+      number: repository.number,
+      title: repository.title,
+      baseSha: repository.baseSha,
+      headSha: repository.headSha,
+    });
+  }
+
+  async stopService(): Promise<void> {
+    if (!this.serviceRunning) return;
+    await this.service.close();
+    this.serviceRunning = false;
+  }
+
+  async startService(options: { version?: string; token?: string } = {}): Promise<void> {
+    if (this.serviceRunning) throw new Error("The E2E service is already running");
+    this.service = buildServer({
+      storage: this.storage,
+      token: options.token ?? this.serviceToken,
+      version: options.version ?? SERVICE_VERSION,
+    });
+    const port = Number(new URL(this.serviceUrl).port);
+    await this.service.listen({ host: "127.0.0.1", port });
+    this.serviceRunning = true;
+  }
+
+  async restartService(options: { version?: string; token?: string } = {}): Promise<void> {
+    await this.stopService();
+    await this.startService(options);
+  }
+
+  uncheckFileInService(repository: RepositoryFixture, path: string): void {
+    this.storage.putFileState(repository.repoId, repository.number, { path, checked: false });
+  }
+
+  async launch(options: { connectionFromEnvironment?: boolean } = {}): Promise<GanderApplication> {
+    const application = new GanderApplication(
+      this.childEnvironment(options.connectionFromEnvironment ?? true),
+      this.userDataPath,
+      this.testInfo,
+    );
     this.applications.push(application);
     return application.launch();
   }
@@ -142,7 +185,7 @@ export class GanderWorld {
     const failed = this.testInfo.status !== this.testInfo.expectedStatus;
     for (const application of [...this.applications].reverse()) await application.close(failed);
     await this.github.close();
-    await this.service.close();
+    if (this.serviceRunning) await this.service.close();
     this.storage.close();
     for (const repository of [...this.repositories].reverse()) {
       await removeRepositoryFixture(repository);
@@ -150,14 +193,12 @@ export class GanderWorld {
     await rm(this.root, { recursive: true, force: true });
   }
 
-  private childEnvironment(): Record<string, string> {
+  private childEnvironment(connectionFromEnvironment = true): Record<string, string> {
     const environment = stringEnvironment(process.env);
     delete environment.ELECTRON_RUN_AS_NODE;
     delete environment.ELECTRON_RENDERER_URL;
     Object.assign(environment, {
       GANDER_CONFIG: this.configPath,
-      GANDER_SERVICE_URL: this.serviceUrl,
-      GANDER_TOKEN: this.serviceToken,
       GANDER_GITHUB_API_URL: this.github.url,
       GANDER_GITHUB_TOKEN: this.github.token,
       GANDER_APP_SOCKET: this.socketPath,
@@ -165,6 +206,13 @@ export class GanderWorld {
       GIT_CONFIG_SYSTEM: join(this.root, "empty-gitconfig"),
       GIT_CONFIG_COUNT: String(this.repositories.length),
     });
+    if (connectionFromEnvironment) {
+      environment.GANDER_SERVICE_URL = this.serviceUrl;
+      environment.GANDER_TOKEN = this.serviceToken;
+    } else {
+      delete environment.GANDER_SERVICE_URL;
+      delete environment.GANDER_TOKEN;
+    }
     // Hidden is the routine mode: the renderer still paints for Playwright, but the suite
     // cannot cover the reviewer's desktop. Opt into a visible window only while debugging.
     if (environment.GANDER_E2E_HEADFUL === "1") delete environment.GANDER_E2E;

@@ -20,4 +20,11 @@ export class WorkbenchDriver {
     await expect(trigger).toContainText(branch);
     await expect(this.page.locator(".context-title span")).toHaveText(branch);
   }
+
+  async selectRepository(repoId: string): Promise<void> {
+    const trigger = this.page.locator('button[aria-controls="target-picker"]');
+    await trigger.click();
+    await this.page.locator(".picker-row").filter({ hasText: repoId }).click();
+    await expect(trigger).toContainText(repoId.split("/").at(-1) ?? repoId);
+  }
 }

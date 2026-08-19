@@ -100,9 +100,10 @@ Interface work is tracked as GitHub issues.
 ## Testing
 
 `pnpm test` runs the unit suites against real git repositories and real service
-instances. `pnpm test:e2e` builds the Electron app once, then Playwright runs six
-independent, clean-world scenarios covering settings and checkoff persistence,
-changed images, live local worktrees, the real `bin/gander` command, and the clone
-race that reached a person before it reached a test. The suite uses real Git,
+instances. `pnpm test:e2e` builds the Electron app once, then Playwright runs
+independent, clean-world scenarios covering persistence, content-based review
+state, notes and MCP, service recovery and compatibility, target isolation,
+keyboard focus, images, local worktrees, the real `bin/gander` command, and clone
+concurrency. The suite uses real Git,
 Fastify, SQLite, IPC, preload, and renderer boundaries; only GitHub's HTTP endpoint
 is represented by a local fake.

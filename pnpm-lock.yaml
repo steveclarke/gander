@@ -51,6 +51,9 @@ importers:
       '@gander/service':
         specifier: workspace:*
         version: link:../service
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.30.0
+        version: 1.30.0(zod@4.4.3)
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1

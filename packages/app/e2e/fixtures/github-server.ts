@@ -60,6 +60,14 @@ export class GithubServer {
     this.repositories.set(repoId, { pullRequests, onList, requestCount: 0 });
   }
 
+  updatePullRequest(repoId: string, pullRequest: PullRequestFixture): void {
+    const repository = this.repositories.get(repoId);
+    if (!repository) throw new Error(`${repoId} is not registered with the GitHub fixture`);
+    const index = repository.pullRequests.findIndex((candidate) => candidate.number === pullRequest.number);
+    if (index < 0) throw new Error(`${repoId}#${pullRequest.number} is not registered with the GitHub fixture`);
+    repository.pullRequests[index] = pullRequest;
+  }
+
   requestsFor(repoId: string): number {
     return this.repositories.get(repoId)?.requestCount ?? 0;
   }

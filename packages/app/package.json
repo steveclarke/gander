@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@gander/service": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@playwright/test": "1.62.1",
     "@types/node": "^22.0.0",
     "@vitejs/plugin-vue": "^5.2.0",
