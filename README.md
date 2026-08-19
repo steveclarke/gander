@@ -16,7 +16,19 @@ service token. `bin/dev` starts the review service and the app together.
 `bin/dev --hosted` starts only the app and uses the hosted connection saved in
 this checkout's settings; see `DEVSTACK.md` for the setup and precedence rules.
 
-Reviewing a pull request needs a GitHub token — `gh auth login` is enough.
+Reviewing a pull request needs `git` and a GitHub API token. The GitHub CLI is
+not a runtime requirement: Gander calls GitHub's REST API directly. Today it
+looks for a token in this order:
+
+1. `GANDER_GITHUB_TOKEN`, for development and automation
+2. the token entered in Settings → Connection
+3. an existing `gh auth login` session, as a convenience fallback
+
+Git operations use the system `git` binary and its configured credential
+helper. Until built-in sign-in lands, a token entered in Settings is stored in
+Gander's mode-`0600` config file rather than the OS credential store. See
+[the GitHub authentication decision](docs/github-authentication.md) for the
+planned replacement and current security boundaries.
 
 See `DEVSTACK.md` for the dev stack, and `docs/STATE.md` for where the project
 stands.
