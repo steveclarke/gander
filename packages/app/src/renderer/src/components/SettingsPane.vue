@@ -195,10 +195,10 @@ onBeforeUnmount(() => {
 .title h1 { color: var(--workbench-foreground); font-size: 16px; line-height: 1.25; }
 .title p, .json-heading p { color: var(--faint-foreground); font-size: 11.5px; }
 .title-actions, .view-switcher { display: flex; align-items: center; gap: 4px; }
-.view-switcher { padding: 2px; border-radius: 7px; background: var(--input-background); }
+.view-switcher { padding: 2px; border-radius: var(--radius-md); background: var(--input-background); }
 .view-switcher button, .close {
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  height: 28px; border: 0; border-radius: 5px; background: transparent;
+  height: 28px; border: 0; border-radius: var(--radius-md); background: transparent;
   color: var(--muted-foreground); cursor: pointer; font: inherit; font-size: 12px;
 }
 .view-switcher button { padding: 0 10px; }
@@ -208,8 +208,8 @@ onBeforeUnmount(() => {
 .close:hover { background: var(--hover-background); color: var(--workbench-foreground); }
 .settings-body { display: grid; grid-template-columns: 190px 1fr; min-width: 0; min-height: 0; }
 .categories { padding: 18px 10px; border-right: 1px solid var(--workbench-border); background: var(--secondary-panel-background); }
-.categories > p { padding: 0 10px 8px; color: var(--faint-foreground); font-size: 10.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
-.category { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--muted-foreground); cursor: pointer; font: inherit; text-align: left; }
+.categories > p { padding: 0 10px 8px; color: var(--faint-foreground); font-size: 10px; font-weight: 700; letter-spacing: .55px; text-transform: uppercase; }
+.category { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted-foreground); cursor: pointer; font: inherit; text-align: left; }
 .category.active { background: var(--selection-background); color: var(--workbench-foreground); }
 .content { min-width: 0; min-height: 0; overflow: hidden; }
 .json-view { display: grid; grid-template-rows: auto 1fr; height: 100%; min-width: 0; min-height: 0; }

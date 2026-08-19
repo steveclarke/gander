@@ -47,7 +47,6 @@ in code, comments, commits, or issues.
 | One test file | `pnpm vitest run packages/service/src/storage.test.ts` |
 | One test by name | `pnpm vitest run -t "un-check retains the snapshot"` |
 | Typecheck (all packages) | `pnpm typecheck` |
-| Electron E2E | `pnpm test:e2e` |
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Repair a config the settings schema has outgrown | `bin/fix-config` |
 | Update the service on its host | `bin/deploy` |
@@ -72,8 +71,7 @@ another worktree's port, token, config, database, or process.
 
 **Electron install trap:** Electron 33's extract-zip silently truncates under
 Node 24, leaving a `node_modules/electron/dist` of a few hundred KB while the
-install script exits 0. E2E then fails with `chromedriver ENOENT` or
-`DevToolsActivePort file doesn't exist`. The root `postinstall` hook runs
+install script exits 0. Electron then fails to launch. The root `postinstall` hook runs
 `bin/repair-electron`, which detects this and re-runs only the Electron download
 scripts under Node 22 via mise, so every `pnpm install` repairs itself. If the
 binaries are broken anyway, run `bin/repair-electron` rather than debugging
@@ -136,11 +134,14 @@ after a schema change.
 
 Real dependencies, never mocks: real throwaway git repositories
 (`main/fixtures.ts`), real SQLite files in temp dirs, real Fastify instances,
-real MCP clients. The E2E suite builds the app and drives the Electron window
-through WebDriverIO against an isolated service and a local GitHub fake — it
-needs no GitHub credentials and does not touch the dev stack. `test/setup-git-env.ts`
-points git at an empty global and system config, so a developer's own git
-settings cannot change what the suite sees.
+real MCP clients. `test/setup-git-env.ts` points git at an empty global and
+system config, so a developer's own git settings cannot change what the suite
+sees.
+
+There is no end-to-end suite. The previous one drove the built app as a single
+eleven-step session, so one broken step took the rest with it and every check
+cost a full rebuild. Anything that replaces it starts each check from a clean
+app.
 
 Bugs that reached a person get a test that fails without the fix; prove it by
 reverting the fix.

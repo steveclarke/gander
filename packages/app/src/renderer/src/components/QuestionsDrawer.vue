@@ -142,10 +142,10 @@ async function copyAll(): Promise<void> {
 .drawer { container: questions / inline-size; display: flex; flex-direction: column; background: var(--panel-background); border-left: 1px solid var(--workbench-border); overflow: hidden auto; }
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--workbench-border); color: var(--muted-foreground); flex: none; }
 .title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
-.count { font: 11px var(--mono); background: var(--badge-background); border-radius: 9px; padding: 1px 7px; }
+.count { font: 11px var(--mono); background: var(--badge-background); border-radius: var(--radius-pill); padding: 1px 7px; }
 .add, .copy-all {
   display: flex; align-items: center; gap: 4px;
-  background: none; border: 1px solid var(--workbench-border); border-radius: 5px;
+  background: none; border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
   color: var(--workbench-foreground); padding: 3px 7px; font: inherit; font-size: 11px; cursor: pointer;
 }
 .copy-all { margin-left: auto; }
@@ -160,14 +160,14 @@ header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; borde
 .empty p { margin-bottom: 10px; }
 .empty button {
   display: flex; align-items: center; gap: 6px;
-  background: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--accent); border: 1px solid var(--accent); border-radius: var(--radius-md);
   color: var(--accent-foreground); padding: 5px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .empty button kbd { color: var(--workbench-foreground); }
 .add:focus-visible, .copy-all:focus-visible, .empty button:focus-visible, .close:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
-kbd { font: 11px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: 4px; padding: 1px 5px; }
+kbd { font: 11px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-sm); padding: 1px 5px; }
 
 ul { list-style: none; margin: 0; padding: 0; }
 @container questions (max-width: 330px) {

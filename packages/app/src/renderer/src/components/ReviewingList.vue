@@ -101,7 +101,7 @@ function select(prNumber: number): void {
   margin: 5px 8px;
   padding: 4px 0;
   border: 1px solid var(--workbench-border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--badge-background) 45%, transparent);
 }
 .stack-heading {
@@ -130,7 +130,7 @@ function select(prNumber: number): void {
   cursor: pointer;
 }
 .stack-group .sw-item { padding-inline: 10px; }
-.sw-item:hover { background: var(--selection-background); }
+.sw-item:hover { background: var(--hover-background); }
 .sw-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .sw-item .num { font: 12px var(--mono); color: var(--muted-foreground); }
 .sw-item .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

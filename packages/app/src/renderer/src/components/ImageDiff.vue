@@ -47,7 +47,7 @@ const hasImageCandidate = computed(() => [props.preview.base, props.preview.head
 <style scoped>
 .image-diff { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
 .toolbar { display: flex; flex: none; justify-content: flex-end; gap: 2px; padding: 5px 10px; border-bottom: 1px solid var(--workbench-border); background: var(--panel-background); }
-.toolbar button { border: 0; border-radius: 4px; padding: 3px 8px; background: transparent; color: var(--muted-foreground); font-size: 11px; cursor: pointer; }
+.toolbar button { border: 0; border-radius: var(--radius-sm); padding: 3px 8px; background: transparent; color: var(--muted-foreground); font-size: 11px; cursor: pointer; }
 .toolbar button:hover, .toolbar button.active { background: var(--elevated-background); color: var(--workbench-foreground); }
 .toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .sides { display: flex; flex: 1; min-width: 0; min-height: 0; }

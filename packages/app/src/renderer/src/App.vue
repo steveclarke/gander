@@ -72,17 +72,19 @@ onMounted(async () => {
   }
 
   const firstRepo = store.repos[0];
-  if (firstRepo) await selectTargetRepo(firstRepo.repoId);
+  if (firstRepo) await selectTargetRepo(firstRepo.repoId, { keepChosenMode: true });
 });
 
 async function openExternalTarget(target: OpenTarget): Promise<void> {
   await store.openTarget(target);
-  if (store.targetRepoId !== target.repoId || store.targetWorktreePath === null) {
-    activeMode.value = "explorer";
+  // A named pull request opens in the review even for a repository with no checkout on
+  // this machine: the command named a review, not a folder.
+  if (target.prNumber !== null && store.targetRepoId === target.repoId) {
+    activeMode.value = "pulls";
     return;
   }
-  if (target.prNumber !== null) {
-    activeMode.value = "pulls";
+  if (store.targetRepoId !== target.repoId || store.targetWorktreePath === null) {
+    activeMode.value = "explorer";
     return;
   }
   if (store.targetWorktreePath) {
@@ -146,14 +148,35 @@ async function removeRepo(): Promise<void> {
   if (next) await selectTargetRepo(next.repoId);
 }
 
-async function selectTargetRepo(repoId: string): Promise<void> {
+/**
+ * `keepChosenMode` is for the repository opened at launch: that load finishes long after
+ * the window is usable, and it must not drag the reviewer out of a view they opened
+ * while it was still working.
+ */
+async function selectTargetRepo(repoId: string, { keepChosenMode = false } = {}): Promise<void> {
   await store.selectRepo(repoId);
   const contextError = store.error;
   if (!store.targetWorktreePath) {
-    activeMode.value = "explorer";
+    landIn("explorer", keepChosenMode);
     return;
   }
-  await openLocalTarget(store.targetWorktreePath, "explorer", contextError);
+  await openLocalTarget(store.targetWorktreePath, "explorer", contextError, keepChosenMode);
+}
+
+/**
+ * Settings covers the work surface instead of replacing it: rebuilding the editor every
+ * time the reviewer checks a setting is the cost this avoids.
+ */
+const surfaceMode = computed(() => (activeMode.value === "settings" ? modeBeforeSettings.value : activeMode.value));
+
+function landIn(mode: "explorer" | "changes", keepChosenMode: boolean): void {
+  // The reviewer went somewhere else while the load was in flight: remember where this
+  // target landed, so closing Settings returns to it, and leave them where they are.
+  if (keepChosenMode && activeMode.value !== "explorer") {
+    modeBeforeSettings.value = mode;
+    return;
+  }
+  activeMode.value = mode;
 }
 
 async function selectTargetWorktree(path: string): Promise<void> {
@@ -164,14 +187,19 @@ async function selectTargetWorktree(path: string): Promise<void> {
   activeMode.value = nextMode;
 }
 
-async function openLocalTarget(path: string, mode: "explorer" | "changes", contextError: string | null): Promise<void> {
+async function openLocalTarget(
+  path: string,
+  mode: "explorer" | "changes",
+  contextError: string | null,
+  keepChosenMode = false,
+): Promise<void> {
   await store.openLocal(path);
   const localError = store.error;
   const errors = [...new Set([contextError, localError].filter((error): error is string => error !== null))];
   store.error = errors.length ? errors.join("\n") : null;
   if (localError) return;
   store.showLocalSurface(mode);
-  activeMode.value = mode;
+  landIn(mode, keepChosenMode);
 }
 
 async function selectMode(value: WorkbenchMode): Promise<void> {
@@ -327,7 +355,7 @@ onBeforeUnmount(() => {
           @close="closeSettings"
         />
 
-        <template v-else-if="activeMode === 'explorer' || activeMode === 'changes'">
+        <template v-if="surfaceMode === 'explorer' || surfaceMode === 'changes'">
           <div v-if="store.localView" class="context-toolbar">
             <div class="context-title">
               <strong>{{ store.currentRepoId?.split('/').at(-1) }}</strong>
@@ -350,7 +378,7 @@ onBeforeUnmount(() => {
               <button type="button" @click="store.targetRepoId && locateRepo(store.targetRepoId)">Locate checkout…</button>
             </div>
             <div v-else-if="!store.localView" class="empty">Select the target again to load this worktree.</div>
-            <FullFilePane v-else-if="activeMode === 'explorer'" :file="store.localFile" :editor-settings="editorSettings.settings.editor" class="diff" />
+            <FullFilePane v-else-if="surfaceMode === 'explorer'" :file="store.localFile" :editor-settings="editorSettings.settings.editor" class="diff" />
             <DiffPane v-else :store="store" :editor-settings="editorSettings.settings.editor" class="diff" />
           </section>
         </template>
@@ -425,17 +453,18 @@ onBeforeUnmount(() => {
 .error-banner span { flex: 1; }
 .error-banner button { flex: none; display: flex; border: 0; background: none; color: inherit; cursor: pointer; }
 .body { display: flex; min-height: 0; }
-.content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.content { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.content > .settings-pane { position: absolute; inset: 0; z-index: 5; background: var(--workbench-background); }
 .view-sidebar { --scrollbar-thumb: transparent; --scrollbar-track: transparent; flex: none; min-height: 0; border-right: 1px solid var(--workbench-border); scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; transition: scrollbar-color 120ms cubic-bezier(0.16, 1, 0.3, 1); }
 .view-sidebar:hover, .view-sidebar:focus-within, .view-sidebar.scrolling { --scrollbar-thumb: color-mix(in srgb, var(--faint-foreground) 45%, transparent); }
 .context-toolbar { height: 35px; flex: none; display: flex; align-items: center; gap: 6px; padding-inline: 12px 7px; border-bottom: 1px solid var(--workbench-border); background: var(--panel-background); }
 .context-title { min-width: 0; display: flex; align-items: baseline; gap: 7px; margin-right: auto; }
 .context-title strong { font-size: 12px; }
 .context-title span { min-width: 0; display: flex; align-items: center; gap: 5px; color: var(--muted-foreground); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.context-toolbar button { min-height: 26px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--workbench-border); border-radius: 5px; background: var(--elevated-background); color: var(--muted-foreground); font: inherit; cursor: pointer; }
+.context-toolbar button { min-height: 26px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--elevated-background); color: var(--muted-foreground); font: inherit; cursor: pointer; }
 .context-toolbar button:hover { color: var(--workbench-foreground); border-color: var(--faint-foreground); }
 .context-toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.context-toolbar button:disabled { opacity: .5; cursor: default; }
+.context-toolbar button:disabled { opacity: .55; cursor: default; }
 .progress { padding-inline: 4px; color: var(--faint-foreground); font-size: 11px; white-space: nowrap; }
 .work-surface { flex: 1; min-width: 0; min-height: 0; display: flex; background: var(--workbench-background); }
 .workspace { flex: 1; display: flex; min-width: 0; min-height: 0; }
@@ -451,7 +480,7 @@ onBeforeUnmount(() => {
 .welcome, .empty-state { margin: auto; max-width: 460px; padding: 40px; text-align: center; color: var(--muted-foreground); }
 .welcome h1, .empty-state h1 { margin: 0 0 10px; color: var(--workbench-foreground); font-size: 22px; letter-spacing: -.02em; }
 .welcome p, .empty-state p { margin: 0 0 22px; line-height: 1.55; }
-.welcome button, .empty-state button { min-height: 32px; padding: 6px 13px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--accent-foreground); font: inherit; cursor: pointer; }
+.welcome button, .empty-state button { min-height: 32px; padding: 6px 13px; border: 1px solid var(--accent); border-radius: var(--radius-md); background: var(--accent); color: var(--accent-foreground); font: inherit; cursor: pointer; }
 .welcome .text-action { display: block; margin: 14px auto 0; border: 0; background: none; color: var(--accent); }
 .welcome button:focus-visible, .empty-state button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .view-sidebar { transition: none; } }

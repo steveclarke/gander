@@ -1,9 +1,0 @@
-{
-  "extends": "../../../tsconfig.base.json",
-  "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework"]
-  },
-  "include": ["*.ts"]
-}
