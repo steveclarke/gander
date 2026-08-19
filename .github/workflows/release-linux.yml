@@ -34,7 +34,11 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      # The root postinstall repairs Electron's Node 24 extraction bug by executing the
+      # downloaded GUI binaries. This runner deliberately uses Node 22, and those binaries
+      # cannot be launched before electron-builder installs its Linux runtime libraries.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm rebuild electron esbuild better-sqlite3
 
       - run: pnpm --filter @gander/app run dist:linux
         env:
