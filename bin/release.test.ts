@@ -35,6 +35,7 @@ describe("Homebrew cask release handoff", () => {
     expect(cask).toContain('version "1.2.3"');
     expect(cask).toContain('sha256 "3ba84e1d362618f0e9f45064634a1594485bca3298b8182b5a7eaa3fded4688f"');
     expect(cask).toContain("Gander-#{version}-arm64.dmg");
+    expect(cask).toContain("depends_on macos: :catalina");
     expect(cask).not.toContain("__VERSION__");
     expect(cask).not.toContain("__SHA256__");
   });
