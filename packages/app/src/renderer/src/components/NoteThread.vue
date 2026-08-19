@@ -225,7 +225,7 @@ function formatTimestamp(value: string): string {
 .reply-form { margin-top: 9px; }
 .reply-form label { display: block; margin-bottom: 4px; color: var(--muted-foreground); font: 600 9.5px var(--mono); letter-spacing: .4px; text-transform: uppercase; }
 .reply-form input { width: 100%; background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-md); color: var(--workbench-foreground); font: inherit; font-size: 12px; padding: 6px 8px; }
-.reply-form input:focus { outline: none; border-color: var(--accent); }
+.reply-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 .reply-form input:disabled { color: var(--faint-foreground); }
 .thread-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
 .thread-actions button { display: inline-flex; align-items: center; gap: 5px; border: 0; padding: 2px 0; background: none; color: var(--muted-foreground); font: inherit; font-size: 10.5px; cursor: pointer; }

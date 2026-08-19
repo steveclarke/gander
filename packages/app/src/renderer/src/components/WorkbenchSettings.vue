@@ -40,20 +40,21 @@ async function reset(): Promise<void> {
 </script>
 
 <template>
-  <section class="workbench-settings" aria-labelledby="workbench-settings-title">
-    <header class="heading">
+  <section class="settings-page workbench-settings" aria-labelledby="workbench-settings-title">
+    <header class="settings-page-heading">
       <div>
-        <h2 id="workbench-settings-title">Workbench</h2>
-        <p>Colors for Gander's interface and code surfaces.</p>
+        <h2 id="workbench-settings-title" class="settings-page-title">Workbench</h2>
+        <p class="settings-description">Colors for Gander's interface and code surfaces.</p>
       </div>
-      <button class="reset" type="button" :disabled="store.busy" @click="reset">Use default</button>
+      <button class="settings-reset" type="button" :disabled="store.busy" @click="reset">Use default</button>
     </header>
 
-    <div class="setting">
-      <label for="workbench-color-theme">Color theme</label>
-      <p>Controls <code>workbench.colorTheme</code>. Themes are bundled with Gander.</p>
+    <div class="settings-field">
+      <label class="settings-label" for="workbench-color-theme">Color theme</label>
+      <p class="settings-description">Controls <code class="settings-code">workbench.colorTheme</code>. Themes are bundled with Gander.</p>
       <select
         id="workbench-color-theme"
+        class="settings-control settings-select"
         name="workbench.colorTheme"
         :value="store.settings.workbench.colorTheme"
         :disabled="store.busy"
@@ -61,14 +62,15 @@ async function reset(): Promise<void> {
       >
         <option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
       </select>
-      <p class="source">Source: {{ activeTheme.source }}</p>
+      <p class="settings-description source">Source: {{ activeTheme.source }}</p>
     </div>
 
-    <div class="setting">
-      <label for="workbench-icon-theme">File icon theme</label>
-      <p>Controls <code>workbench.iconTheme</code>. Icon themes are bundled with Gander.</p>
+    <div class="settings-field">
+      <label class="settings-label" for="workbench-icon-theme">File icon theme</label>
+      <p class="settings-description">Controls <code class="settings-code">workbench.iconTheme</code>. Icon themes are bundled with Gander.</p>
       <select
         id="workbench-icon-theme"
+        class="settings-control settings-select"
         name="workbench.iconTheme"
         :value="store.settings.workbench.iconTheme"
         :disabled="store.busy"
@@ -76,7 +78,7 @@ async function reset(): Promise<void> {
       >
         <option v-for="theme in iconThemes" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
       </select>
-      <p class="source">Source: {{ activeIconTheme.source }}</p>
+      <p class="settings-description source">Source: {{ activeIconTheme.source }}</p>
     </div>
 
     <div class="swatches" role="img" :aria-label="`${activeTheme.label} color palette`">
@@ -88,23 +90,14 @@ async function reset(): Promise<void> {
   </section>
 </template>
 
+<style scoped src="../styles/settings.css"></style>
+
 <style scoped>
-.workbench-settings { height: 100%; overflow: auto; padding: 28px; }
-.heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; max-width: 820px; margin-bottom: 30px; }
-.heading h2 { color: var(--workbench-foreground); font-size: 20px; line-height: 1.25; }
-.heading p, .setting > p { color: var(--faint-foreground); font-size: 12px; }
-.reset { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; white-space: nowrap; }
-.reset:disabled { cursor: default; opacity: .55; }
-.reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.setting { max-width: 820px; margin-bottom: 24px; }
-.setting label { display: block; color: var(--workbench-foreground); font-size: 13px; font-weight: 650; margin-bottom: 2px; }
-.setting code { color: var(--muted-foreground); font: 11.5px var(--mono); }
-.setting select {
+.settings-select {
   width: min(420px, 100%); margin-top: 8px; padding: 8px 34px 8px 10px;
   border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
-  outline: none; background: var(--input-background); color: var(--workbench-foreground); font: inherit; font-size: 13px;
+  background: var(--input-background); color: var(--workbench-foreground); font: inherit; font-size: 13px;
 }
-.setting select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
 .source { margin-top: 7px; }
 .swatches { display: flex; width: min(420px, 100%); height: 36px; overflow: hidden; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); }
 .swatches span { flex: 1; min-width: 2px; }

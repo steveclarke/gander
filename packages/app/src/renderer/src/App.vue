@@ -23,7 +23,6 @@ import Splitter from "./components/Splitter.vue";
 import StackPosition from "./components/StackPosition.vue";
 import StatusBar from "./components/StatusBar.vue";
 import TargetBar from "./components/TargetBar.vue";
-import "./theme.css";
 
 type WorkbenchMode = "explorer" | "changes" | "pulls" | "settings";
 
