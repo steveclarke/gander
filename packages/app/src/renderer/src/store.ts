@@ -174,6 +174,10 @@ export function createStore(api: GanderApi): Store {
     async openTarget(target: OpenTarget) {
       await userAction(() => withBusy(() => guard(async () => {
         const generation = target.prNumber === null ? null : ++localContextGeneration;
+        // bin/gander can register a repository as it opens one, which happens in the main
+        // process after this list was last read. Re-read before refusing, or the first
+        // open of a checkout the app has not seen always fails.
+        if (!store.repos.some((r) => r.repoId === target.repoId)) store.repos = await api.listRepos();
         if (!store.repos.some((r) => r.repoId === target.repoId)) {
           throw new Error(`${target.repoId} is not registered. Open one of its checkout folders first.`);
         }

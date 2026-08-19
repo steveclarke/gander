@@ -101,6 +101,23 @@ describe("store", () => {
     expect(store.error).toBe("acme/new is not registered. Open one of its checkout folders first.");
   });
 
+  // bin/gander registers a repository in the main process as it opens one, which happens
+  // after the renderer last read the list. Without the re-read, the first open of a
+  // checkout the app has not seen always failed.
+  it("re-reads the repository list before refusing a target", async () => {
+    let registered = false;
+    const store = createStore(fakeApi({
+      listRepos: async () => (registered ? [{ repoId: "acme/atlas", url: "u", localPath: "/p" }] : []),
+    }));
+    await store.loadRepos();
+    registered = true;
+
+    await store.openTarget({ repoId: "acme/atlas", prNumber: null });
+
+    expect(store.error).toBeNull();
+    expect(store.targetRepoId).toBe("acme/atlas");
+  });
+
   it("loads repos, selects one, opens a PR, tracks progress", async () => {
     const store = createStore(fakeApi());
     await store.loadRepos();
