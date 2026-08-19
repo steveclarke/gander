@@ -513,6 +513,16 @@ describe("store", () => {
       expect(store.error).toContain("not saved");
     });
 
+    it("clears a stale connection error restored after the health check already recovered", async () => {
+      const store = createStore(fakeApi());
+
+      await store.checkService();
+      store.error = "Could not reach https://gander.example.test: fetch failed";
+      await store.checkService();
+
+      expect(store.error).toBeNull();
+    });
+
     it("shows cached mode immediately when refresh falls back while the service is down", async () => {
       let status: "connected" | "unreachable" = "connected";
       const store = createStore(fakeApi({

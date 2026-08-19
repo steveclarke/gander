@@ -119,12 +119,14 @@ export function createStore(api: GanderApi): Store {
       const previous = store.serviceStatus;
       store.serviceStatus = await api.serviceStatus();
       // A read can fail during launch and leave exactly the health-check reason in the
-      // banner. Once that same connection recovers, the warning is stale. Failed writes
-      // append their no-retry consequence, so the exact match deliberately leaves those
-      // visible until the reviewer dismisses them or starts another action.
+      // banner. Opening a large local checkout can outlive the health poll that recovers,
+      // then restore that old reason after the status is already connected; recognize the
+      // health-check sentence as well as the immediately previous reason. Failed writes use
+      // a different sentence with their no-retry consequence and deliberately stay visible.
       if ((store.serviceStatus.state === "connected" || store.serviceStatus.state === "newer")
-        && previous.state === "unreachable"
-        && store.error === previous.reason) {
+        && ((previous.state === "unreachable" && store.error === previous.reason)
+          || (/^Could not reach https?:\/\/\S+: [^\n]+$/.test(store.error ?? "")
+            && !store.error?.includes("This change was not saved and will not be retried.")))) {
         store.error = null;
       }
     },
