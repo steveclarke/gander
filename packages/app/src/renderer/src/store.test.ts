@@ -419,6 +419,48 @@ describe("store", () => {
     expect(store.view).not.toBeNull();
   });
 
+  it("refreshPrs picks up a pull request opened after the repository was targeted", async () => {
+    // The list arrives once, when the repository becomes the target. Without a way to ask
+    // again, a pull request opened in a browser or by an agent never reaches the reviewer.
+    let open = [{ ...prView().pr, number: 1, title: "First", reviewProgress: null }];
+    const store = createStore(fakeApi({ listPrs: async () => open }));
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    expect(store.prs.map((pr) => pr.number)).toEqual([1]);
+
+    open = [...open, { ...prView().pr, number: 2, title: "Second", reviewProgress: null }];
+    await store.refreshPrs();
+
+    expect(store.prs.map((pr) => pr.number)).toEqual([1, 2]);
+  });
+
+  it("refreshPrs leaves an error on screen and never flags the workbench busy", async () => {
+    // It also runs on window focus, where clearing the reviewer's error or flashing a
+    // spinner would be an interruption they did not ask for.
+    let fail = true;
+    const store = createStore(fakeApi({
+      listPrs: async () => { if (fail) throw new Error("GitHub API 403: rate limited"); return []; },
+    }));
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    expect(store.error).toMatch(/403/);
+
+    fail = false;
+    const pending = store.refreshPrs();
+    expect(store.busy).toBe(false);
+    await pending;
+
+    expect(store.error).toMatch(/403/);
+    expect(store.busy).toBe(false);
+  });
+
+  it("refreshPrs does nothing when no repository is targeted", async () => {
+    let calls = 0;
+    const store = createStore(fakeApi({ listPrs: async () => { calls += 1; return []; } }));
+    await store.refreshPrs();
+    expect(calls).toBe(0);
+  });
+
   it("busy is true only while a long-running action is in flight, and clears even on failure", async () => {
     let resolveOpen!: () => void;
     const store = createStore(fakeApi({

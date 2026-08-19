@@ -59,6 +59,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     showLocalSurface() {},
     async refresh() {},
     async fetchNow() {},
+    async refreshPrs() {},
     async reviewedSnapshot() { return null; },
     async imagePreview() { return null; },
     async addNote() {},

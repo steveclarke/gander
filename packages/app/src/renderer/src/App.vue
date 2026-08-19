@@ -406,7 +406,11 @@ async function refreshOnce(): Promise<void> {
 const timer = setInterval(() => void refreshOnce(), POLL_MS);
 const HEALTH_MS = 15_000;
 const healthTimer = setInterval(() => void store.checkService(), HEALTH_MS);
-const onFocus = (): void => { void store.checkService(); void refreshOnce(); };
+const onFocus = (): void => { void store.checkService(); void refreshOnce();
+  // A pull request opened elsewhere — a browser, an agent, `gh pr create` — is the
+  // usual reason the reviewer comes back to the window at all.
+  void store.refreshPrs();
+};
 window.addEventListener("focus", onFocus);
 onBeforeUnmount(() => {
   clearInterval(timer);
