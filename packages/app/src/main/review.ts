@@ -77,11 +77,15 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     const state = knownState ?? await deps.service.getReview(repoId, prNumber);
 
     const raw: PrFile[] = [];
-    for (const { path, status } of changed) {
-      const baseFile = await deps.git.showFile(clone, mergeBase, path);
+    for (const { path, status, basePath } of changed) {
+      // A rename's base side exists only under its old path. Reading the new path at the
+      // merge base comes back "absent", which showFile reports as null content — and the
+      // whole file then reads as newly added instead of as the change actually made.
+      const baseFile = await deps.git.showFile(clone, mergeBase, basePath);
       const headFile = await deps.git.showFile(clone, head, path);
       raw.push({
         path, status,
+        ...(basePath === path ? {} : { basePath }),
         baseContent: baseFile.content, headContent: headFile.content,
         baseHash: baseFile.hash, headHash: headFile.hash,
         checked: false, changedSince: false,
@@ -270,12 +274,15 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       if (!entry) throw new Error(`PR #${prNumber} on ${repoId} must be opened first`);
       const file = entry.view.files.find((candidate) => candidate.path === path);
       if (!file) throw new Error(`${path} is not part of PR #${prNumber}`);
-      const side = (hash: string | null, rev: string): Promise<ImageSide> => hash === null
+      // Each side reads the path that revision actually knows: a rename's base blob lives
+      // under its old name. showImage resolves a size before anything else and raises on a
+      // path the revision does not hold, so passing the new path here would fail outright.
+      const side = (hash: string | null, rev: string, at: string): Promise<ImageSide> => hash === null
         ? Promise.resolve({ kind: "absent" })
-        : deps.git.showImage(entry.clone, rev, path);
+        : deps.git.showImage(entry.clone, rev, at);
       const [base, head] = await Promise.all([
-        side(file.baseHash, entry.mergeBase),
-        side(file.headHash, entry.headSha),
+        side(file.baseHash, entry.mergeBase, file.basePath ?? path),
+        side(file.headHash, entry.headSha, path),
       ]);
       return { base, head };
     },
