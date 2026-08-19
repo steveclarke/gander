@@ -14,6 +14,7 @@ import { createServiceClient } from "./service-client.js";
 import { registerSettingsIpc } from "./settings-ipc.js";
 import { buildMenuTemplate } from "./menu.js";
 import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.js";
+import { revealWindow, windowIsHidden } from "./window-visibility.js";
 import { linkedWorktreeLabel } from "./development-context.js";
 import { createZoomController, type ZoomController } from "./zoom-controller.js";
 import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
@@ -292,12 +293,14 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
     isDevelopment,
     worktreeLabel,
   );
+  const hidden = windowIsHidden();
   // Lives outside the bundle so it survives electron-vite's build untouched. The path is
   // relative to out/main/, which is where this file runs from in dev and after a build alike.
   const appIcon = nativeImage.createFromPath(join(import.meta.dirname, "../../resources", appearance.iconFilename));
   const win = new BrowserWindow({
     width: 1360, height: 860,
     ...appearance.windowOptions,
+    ...(hidden ? { show: false, skipTaskbar: true } : {}),
     // Ignored on macOS, where the dock icon comes from the bundle — app.dock.setIcon covers that.
     icon: appIcon,
     // sandbox: false — our preload output is an ES module (index.mjs, from "type": "module");
@@ -312,9 +315,10 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
   });
   // On macOS the web content paints beneath the traffic lights. Reveal only the themed
   // first frame so the system never exposes its default light backing surface.
-  if (process.platform === "darwin") win.once("ready-to-show", () => win.show());
+  if (process.platform === "darwin" && !hidden) win.once("ready-to-show", () => win.show());
+  if (hidden) app.dock?.hide();
   // Unpackaged runs show Electron's own icon in the dock; this is the only way to override it.
-  if (!appIcon.isEmpty()) app.dock?.setIcon(appIcon);
+  if (!hidden && !appIcon.isEmpty()) app.dock?.setIcon(appIcon);
   // The renderer's whole input is arbitrary repo content — Monaco link-detects URLs inside
   // reviewed files — so a window this preload is attached to must never be allowed to
   // navigate away or spawn a same-preload child window. Electron would otherwise carry the
@@ -345,9 +349,7 @@ function socketPath(): string {
 function deliver(target: OpenTarget): void {
   const win = BrowserWindow.getAllWindows()[0];
   if (win === undefined) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+  revealWindow(win);
   win.webContents.send("gander:openTarget", target);
 }
 

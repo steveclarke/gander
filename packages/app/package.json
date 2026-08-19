@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "typecheck": "vue-tsc --noEmit",
+    "test:e2e": "pnpm run build && pnpm run test:e2e:run",
+    "test:e2e:run": "playwright test --config e2e/playwright.config.ts",
+    "typecheck": "vue-tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
     "dist:mac": "electron-vite build && electron-builder --mac --publish never",
     "dist:linux": "electron-vite build && electron-builder --linux",
     "dist:unsigned": "electron-vite build && electron-builder --mac --dir -c.mac.identity=null -c.mac.notarize=false"
@@ -21,6 +23,7 @@
   },
   "devDependencies": {
     "@gander/service": "workspace:*",
+    "@playwright/test": "1.62.1",
     "@types/node": "^22.0.0",
     "@vitejs/plugin-vue": "^5.2.0",
     "@vue/test-utils": "^2.4.11",

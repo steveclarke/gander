@@ -54,6 +54,8 @@ in code, comments, commits, or issues.
 | Start service + app | `bin/dev` (`-D` headless, `stop`, `status`, `logs service`) |
 | Start app against hosted service | `bin/dev --hosted` (add `-D` for headless) |
 | Unit tests | `pnpm test` |
+| End-to-end tests (build + run) | `pnpm test:e2e` |
+| Re-run end-to-end tests without rebuilding | `pnpm test:e2e:run` |
 | One test file | `pnpm vitest run packages/service/src/storage.test.ts` |
 | One test by name | `pnpm vitest run -t "un-check retains the snapshot"` |
 | Typecheck (all packages) | `pnpm typecheck` |
@@ -156,10 +158,13 @@ real MCP clients. `test/setup-git-env.ts` points git at an empty global and
 system config, so a developer's own git settings cannot change what the suite
 sees.
 
-There is no end-to-end suite. The previous one drove the built app as a single
-eleven-step session, so one broken step took the rest with it and every check
-cost a full rebuild. Anything that replaces it starts each check from a clean
-app.
+The Playwright end-to-end suite drives the built Electron app. Every spec owns a
+fresh app process, config, user-data directory, service database, GitHub fake,
+and real temporary repositories. Specs can restart their own app when restart is
+the behavior under test. `pnpm test:e2e` builds once and runs every spec;
+`pnpm test:e2e:run [file]` reuses the existing build while iterating. The suite
+runs one worker with no retries so desktop state never overlaps and a failure is
+reported as the failure it was.
 
 Bugs that reached a person get a test that fails without the fix; prove it by
 reverting the fix.

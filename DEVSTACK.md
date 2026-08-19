@@ -19,9 +19,26 @@ while preserving the checkout's process and config isolation.
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Check the live MCP endpoint | `bin/mcp check` |
 | Debug the live MCP endpoint | `bin/mcp tui` or `bin/mcp inspect` |
+| End-to-end tests (build + run) | `pnpm test:e2e` |
+| Re-run end-to-end tests without rebuilding | `pnpm test:e2e:run [file]` |
 
-`pnpm test` runs the Vitest suite. There is no end-to-end suite; issue #91 tracks
-building one.
+`pnpm test:e2e` builds the Electron app once, then Playwright runs six independent
+window scenarios: settings persistence, checkoff persistence, changed-image
+decoding, live local changes, the real `bin/gander` command, and the concurrent
+clone regression. Each spec starts with a fresh Electron process, config,
+user-data directory, real service and SQLite database, local GitHub fake, and real
+temporary Git repositories. A spec restarts only its own app when restart is the
+behavior under test.
+
+The suite uses one worker and no retries. It does not use the dev stack, GitHub
+credentials, an existing Gander service, or another worktree's state. On failure
+it keeps a screenshot, Playwright trace, and Electron stdout/stderr under
+`packages/app/e2e/test-results/`. The ordinary `pnpm test` command continues to
+run only the fast Vitest suite.
+
+The Electron window stays hidden by default, while its renderer continues to
+paint for Playwright assertions, screenshots, and traces. To watch one scenario
+while debugging, run `GANDER_E2E_HEADFUL=1 pnpm test:e2e:run <file>`.
 
 ### When the app cannot start Electron
 
