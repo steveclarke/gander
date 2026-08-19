@@ -112,7 +112,11 @@ export function createServiceClient(connection: Connection): ServiceClient {
       && (options.reviewKey === undefined || !reviewsReadSinceRecovery.has(options.reviewKey))) {
       throw new ServiceConnectionError(STALE_SERVICE_DATA_WRITE_ERROR);
     }
-    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    // Content-Type only when something is being sent. Declaring JSON and sending nothing
+    // is a 400 from Fastify — "Body cannot be empty when content-type is set" — which is
+    // how every body-less DELETE failed.
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
     let res: Response;
     try {
       res = await fetch(`${baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });

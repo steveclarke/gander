@@ -47,3 +47,37 @@ describe("a failed request", () => {
     expect(error).not.toContain("{");
   });
 });
+
+describe("a request with no body", () => {
+  it("deletes without declaring a content type it is not sending", async () => {
+    // The service's own tests drive DELETE through app.inject, which sends no
+    // Content-Type — so the header the real client sets was never exercised, and every
+    // delete from the app failed against a real listener.
+    const seen: Array<string | undefined> = [];
+    const url = await serve((app) => {
+      app.delete("/api/reviews/:repoId/:prNumber/questions/:id", async (req, reply) => {
+        seen.push(req.headers["content-type"]);
+        return reply.code(204).send();
+      });
+    });
+    const client = createServiceClient(() => ({ url, token: "t" }));
+    await expect(client.deleteQuestion("acme/atlas", 1, 2)).resolves.toBeUndefined();
+    expect(seen).toEqual([undefined]);
+  });
+
+  it("still declares it when there is a body", async () => {
+    const seen: Array<string | undefined> = [];
+    const url = await serve((app) => {
+      app.post("/api/reviews/:repoId/:prNumber/questions", async (req, reply) => {
+        seen.push(req.headers["content-type"]);
+        return reply.code(201).send({
+          id: 1, path: "a.rb", line: null, text: "why?", state: "open", replies: [],
+          headSha: null, commitRef: null, note: null, createdAt: new Date().toISOString(),
+        });
+      });
+    });
+    const client = createServiceClient(() => ({ url, token: "t" }));
+    await client.addQuestion("acme/atlas", 1, { path: "a.rb", line: null, text: "why?", headSha: null });
+    expect(seen).toEqual(["application/json"]);
+  });
+});
