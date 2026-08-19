@@ -1,6 +1,6 @@
-appId: ca.sevenview.gander
+appId: com.clevertakes.gander
 productName: Gander
-copyright: Copyright © 2026 Sevenview Studios Inc.
+copyright: Copyright © 2026 Stephen Clarke
 
 directories:
   output: dist

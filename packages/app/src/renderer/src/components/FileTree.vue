@@ -39,13 +39,20 @@ const rootTypographyStyle = computed(() => depth.value === 0 && props.typography
 // instead of walking the subtree on every call.
 // FileTree renders itself recursively, so every level would otherwise re-scan the whole
 // question list per row.
+// Resolved questions are finished business, so they stop marking the file — otherwise a
+// heavily reviewed file wears the marker forever.
 const questionCounts = computed(() => {
   const map = new Map<string, number>();
   for (const q of props.store.view?.questions ?? []) {
-    if (q.path !== null) map.set(q.path, (map.get(q.path) ?? 0) + 1);
+    if (q.path !== null && q.state !== "resolved") map.set(q.path, (map.get(q.path) ?? 0) + 1);
   }
   return map;
 });
+
+function questionTitle(path: string): string {
+  const count = questionCounts.value.get(path) ?? 0;
+  return `${count} unresolved question${count === 1 ? "" : "s"} on this file`;
+}
 
 const dirStates = computed(() => {
   const map = new Map<string, "all" | "some" | "none">();
@@ -166,12 +173,12 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         <span v-else class="review-slot" aria-hidden="true" />
         <FileIcon :src="fileIcon(node.file.path).src" :data-icon-id="fileIcon(node.file.path).id" />
         <span class="fname">{{ fileName(node.file.path) }}</span>
-        <MessageSquare
-          v-if="questionCounts.get(node.file.path)"
-          class="qmark"
-          :size="12"
-          :title="`${questionCounts.get(node.file.path)} question(s) on this file`"
-        />
+        <span v-if="questionCounts.get(node.file.path)" class="qmark" :title="questionTitle(node.file.path)">
+          <MessageSquare :size="12" />
+          <!-- The icon alone already says "one question"; the number earns its space only
+               once there is more than one. -->
+          <span v-if="questionCounts.get(node.file.path)! > 1" class="qcount">{{ questionCounts.get(node.file.path) }}</span>
+        </span>
         <span v-if="reviewFile(node)?.changedSince" class="delta-mark" title="Changed since your review" />
         <span v-if="showStatus" class="st" :class="node.file.status">{{ node.file.status }}</span>
       </div>
@@ -198,6 +205,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 .cb.part { border-color: var(--success); color: var(--success); }
 .review-slot { width: 15px; flex: none; }
 .tnode.checked .fname { color: var(--faint-foreground); }
-.qmark { color: var(--accent); flex: none; }
+.qmark { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); flex: none; }
+.qcount { font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }
 .delta-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; }
 </style>
