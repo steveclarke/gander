@@ -116,7 +116,17 @@ export function createStore(api: GanderApi): Store {
       });
     },
     async checkService() {
+      const previous = store.serviceStatus;
       store.serviceStatus = await api.serviceStatus();
+      // A read can fail during launch and leave exactly the health-check reason in the
+      // banner. Once that same connection recovers, the warning is stale. Failed writes
+      // append their no-retry consequence, so the exact match deliberately leaves those
+      // visible until the reviewer dismisses them or starts another action.
+      if ((store.serviceStatus.state === "connected" || store.serviceStatus.state === "newer")
+        && previous.state === "unreachable"
+        && store.error === previous.reason) {
+        store.error = null;
+      }
     },
     dismissError() {
       store.error = null;
