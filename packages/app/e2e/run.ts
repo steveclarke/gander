@@ -132,14 +132,32 @@ async function main(): Promise<void> {
         }
       }
 
-      return [{
+      const pullRequest = {
         number: 1,
         title: fixture.title,
         body: "End-to-end fixture",
         draft: false,
         base: { ref: "main", sha: fixture.baseSha },
         head: { ref: "feature", sha: fixture.headSha },
-      }];
+      };
+      if (fixture !== persistence) return [pullRequest];
+
+      return [
+        { ...pullRequest, stack: { id: 7, size: 2, position: 2 } },
+        {
+          ...pullRequest,
+          number: 3,
+          title: "Independent cleanup",
+          head: { ref: "cleanup", sha: fixture.headSha },
+        },
+        {
+          ...pullRequest,
+          number: 2,
+          title: "Prepare review state",
+          head: { ref: "review-state", sha: fixture.headSha },
+          stack: { id: 7, size: 2, position: 1 },
+        },
+      ];
     },
   );
 
