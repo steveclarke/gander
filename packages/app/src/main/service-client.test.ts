@@ -29,6 +29,18 @@ describe("a failed request", () => {
     await expect(client.getReview("acme/atlas", 1)).rejects.toThrow(/does not have GET .*older than this app/s);
   });
 
+  it("keeps the explanation from a resource 404", async () => {
+    const url = await serve((app) => {
+      app.get("/api/reviews/:repoId/:prNumber", async (_req, reply) => {
+        return reply.code(404).send({ error: "no review for that pull request" });
+      });
+    });
+    const client = createServiceClient(() => ({ url, token: "t" }));
+    const error = await client.getReview("acme/atlas", 1).catch((e: Error) => e.message);
+    expect(error).toContain("no review for that pull request");
+    expect(error).not.toContain("older than this app");
+  });
+
   it("says where to fix a rejected token", async () => {
     const url = await serve((app) => {
       app.get("/api/reviews/:repoId/:prNumber", async (_req, reply) => reply.code(401).send({ error: "nope" }));
