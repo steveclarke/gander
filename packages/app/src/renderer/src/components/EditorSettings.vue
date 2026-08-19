@@ -76,20 +76,21 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="editor-settings" aria-labelledby="editor-settings-title">
-    <header class="heading">
+  <section class="settings-page editor-settings" aria-labelledby="editor-settings-title">
+    <header class="settings-page-heading">
       <div>
-        <h2 id="editor-settings-title">Editor</h2>
-        <p>Typography for diffs, full-file views, and other code surfaces.</p>
+        <h2 id="editor-settings-title" class="settings-page-title">Editor</h2>
+        <p class="settings-description">Typography for diffs, full-file views, and other code surfaces.</p>
       </div>
-      <button class="reset" type="button" :disabled="store.busy" @click="reset">Use defaults</button>
+      <button class="settings-reset" type="button" :disabled="store.busy" @click="reset">Use defaults</button>
     </header>
 
-    <div class="setting">
-      <label for="editor-font-family">Font family</label>
-      <p>Controls <code>editor.fontFamily</code>. Keep fonts in fallback order, separated by commas.</p>
+    <div class="settings-field">
+      <label class="settings-label" for="editor-font-family">Font family</label>
+      <p class="settings-description">Controls <code class="settings-code">editor.fontFamily</code>. Keep fonts in fallback order, separated by commas.</p>
       <input
         id="editor-font-family"
+        class="settings-control settings-text-control"
         v-model="fontFamily"
         name="editor.fontFamily"
         spellcheck="false"
@@ -100,12 +101,13 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <div class="setting">
-      <label for="editor-font-size">Font size</label>
-      <p>Controls <code>editor.fontSize</code> in pixels. Use a value from 6 to 100.</p>
+    <div class="settings-field">
+      <label class="settings-label" for="editor-font-size">Font size</label>
+      <p class="settings-description">Controls <code class="settings-code">editor.fontSize</code> in pixels. Use a value from 6 to 100.</p>
       <div class="size-row">
         <input
           id="editor-font-size"
+          class="settings-control settings-text-control"
           v-model.number="fontSize"
           name="editor.fontSize"
           type="number"
@@ -120,32 +122,19 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="setting preview-setting">
-      <p id="editor-preview-label" class="setting-label">Preview</p>
+    <div class="settings-field preview-setting">
+      <p id="editor-preview-label" class="settings-label">Preview</p>
       <pre class="preview" aria-labelledby="editor-preview-label" :style="previewStyle"><code>const review = "ready";</code></pre>
     </div>
 
-    <p v-if="localError" class="error" role="alert">{{ localError }}</p>
+    <p v-if="localError" class="settings-error error" role="alert">{{ localError }}</p>
   </section>
 </template>
 
+<style scoped src="../styles/settings.css"></style>
+
 <style scoped>
-.editor-settings { height: 100%; overflow: auto; padding: 28px; }
-.heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; max-width: 820px; margin-bottom: 30px; }
-.heading h2 { color: var(--workbench-foreground); font-size: 20px; line-height: 1.25; }
-.heading p, .setting > p { color: var(--faint-foreground); font-size: 12px; }
-.reset { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; white-space: nowrap; }
-.reset:disabled { cursor: default; opacity: .55; }
-.setting { max-width: 820px; margin-bottom: 26px; }
-.setting label, .setting-label { display: block; color: var(--workbench-foreground); font-size: 13px; font-weight: 650; margin-bottom: 2px; }
-.setting code { color: var(--muted-foreground); font: 11.5px var(--mono); }
-.setting input {
-  width: 100%; min-width: 0; margin-top: 8px; padding: 8px 10px;
-  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
-  outline: none; background: var(--input-background); color: var(--workbench-foreground); font: 13px/1.4 var(--mono);
-}
-.setting input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
-.setting input:disabled { opacity: .65; }
+.editor-settings { --settings-field-gap: 26px; }
 .size-row { display: flex; align-items: center; gap: 8px; width: 130px; color: var(--faint-foreground); }
 .preview-setting { margin-top: 34px; }
 .preview {
@@ -154,5 +143,5 @@ onBeforeUnmount(() => {
   color: var(--workbench-foreground); line-height: 1.5; white-space: nowrap;
 }
 .preview code { color: inherit; font: inherit; }
-.error { max-width: 820px; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
+.error { max-width: 820px; }
 </style>

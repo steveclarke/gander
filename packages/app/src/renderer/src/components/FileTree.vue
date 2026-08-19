@@ -186,15 +186,10 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
   </div>
 </template>
 
+<style scoped src="../styles/tree.css"></style>
+
 <style scoped>
 .tree.root { padding: 8px 0; }
-.tnode { display: flex; align-items: center; gap: 6px; height: 22px; padding: 3px 12px 3px 0; box-sizing: border-box; cursor: pointer; white-space: nowrap; }
-.tnode:hover { background: var(--hover-background); }
-.tnode.sel { background: var(--selection-background); box-shadow: inset 2px 0 0 var(--accent); }
-.tnode .hierarchy-slot { width: 14px; flex: none; }
-.tnode .chev { flex: none; color: var(--faint-foreground); }
-.tnode .fname { font: inherit; overflow: hidden; text-overflow: ellipsis; }
-.tnode.isdir .fname { color: var(--muted-foreground); }
 .tnode .st { margin-left: auto; font: 11px var(--mono); flex: none; }
 .st.M { color: var(--warning); }
 .st.A { color: var(--success); }
@@ -203,7 +198,6 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 .cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint-foreground); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
 .cb.on { border-color: var(--success); color: var(--success); }
 .cb.part { border-color: var(--success); color: var(--success); }
-.review-slot { width: 15px; flex: none; }
 .tnode.checked .fname { color: var(--faint-foreground); }
 .note-mark { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); flex: none; }
 .note-count { font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }

@@ -1,0 +1,13 @@
+* { box-sizing: border-box; }
+body, h1, h2, h3, p, pre, ul, ol { margin: 0; }
+ul, ol { padding: 0; }
+:where(button, input, textarea, select) { margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--workbench-background); color: var(--workbench-foreground);
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+code, pre { font-family: var(--editor-font-family); font-size: var(--editor-font-size); }
+/* The surfaces the browser draws for us still belong to the theme. */
+::selection { background: var(--selection-background); }
+:root { caret-color: var(--accent); }

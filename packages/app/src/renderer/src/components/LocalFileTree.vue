@@ -124,17 +124,11 @@ function folderIcon(entry: LocalFileEntry) {
   </div>
 </template>
 
+<style scoped src="../styles/tree.css"></style>
+
 <style scoped>
 .local-tree.root { height: 100%; overflow: auto; padding: 8px 0; box-sizing: border-box; }
-.tnode { width: 100%; display: flex; align-items: center; gap: 6px; height: 22px; padding: 3px 12px 3px 0; border: 0; background: none; box-sizing: border-box; color: var(--workbench-foreground); font: inherit; text-align: left; cursor: pointer; white-space: nowrap; }
-.tnode:hover { background: var(--hover-background); }
-.tnode:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.tnode.sel { background: var(--selection-background); box-shadow: inset 2px 0 0 var(--accent); }
-.tnode .hierarchy-slot { width: 14px; flex: none; }
-.tnode .chev { color: var(--faint-foreground); }
-.tnode .fname { overflow: hidden; text-overflow: ellipsis; }
-.tnode.isdir .fname { color: var(--muted-foreground); }
-.review-slot { width: 15px; flex: none; }
+.tnode { width: 100%; border: 0; background: none; color: var(--workbench-foreground); text-align: left; }
 .loading { color: var(--faint-foreground); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .loading { animation: none; } }

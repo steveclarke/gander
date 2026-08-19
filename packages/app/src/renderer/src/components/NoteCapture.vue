@@ -60,7 +60,7 @@ async function submit(): Promise<void> {
 .context b { color: var(--workbench-foreground); font-weight: 600; }
 .note { width: 100%; height: clamp(180px, 42vh, 420px); min-height: 120px; max-height: calc(100vh - 160px); background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-md); color: var(--workbench-foreground); caret-color: var(--accent); font: inherit; font-size: 14px; line-height: 1.6; padding: 14px 16px; resize: vertical; }
 .note::selection { background: var(--selection-background); }
-.note:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.note:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 .hint { font-size: 11px; color: var(--faint-foreground); }
 kbd { font: 10.5px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-sm); padding: 1px 5px; }
 </style>

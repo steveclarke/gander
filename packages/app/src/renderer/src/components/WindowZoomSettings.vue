@@ -59,24 +59,25 @@ onBeforeUnmount(flushSave);
 </script>
 
 <template>
-  <section class="window-zoom" aria-labelledby="window-zoom-title">
-    <div class="section-heading">
+  <section class="settings-section window-zoom" aria-labelledby="window-zoom-title">
+    <div class="settings-section-heading">
       <div>
-        <h3 id="window-zoom-title">Window zoom level</h3>
-        <p>Sets the default scale for every Gander window.</p>
+        <h3 id="window-zoom-title" class="settings-section-title">Window zoom level</h3>
+        <p class="settings-description">Sets the default scale for every Gander window.</p>
       </div>
-      <button class="reset" type="button" :disabled="store.busy" @click="reset">Use default</button>
+      <button class="settings-reset" type="button" :disabled="store.busy" @click="reset">Use default</button>
     </div>
 
-    <div class="setting">
-      <label for="window-zoom-level">Zoom level</label>
-      <p>
-        Controls <code>window.zoomLevel</code>. Each whole step changes the scale by 20%;
+    <div class="settings-field">
+      <label class="settings-label" for="window-zoom-level">Zoom level</label>
+      <p class="settings-description">
+        Controls <code class="settings-code">window.zoomLevel</code>. Each whole step changes the scale by 20%;
         decimals give finer control.
       </p>
       <div class="level-row">
         <input
           id="window-zoom-level"
+          class="settings-control settings-text-control"
           v-model.number="zoomLevel"
           name="window.zoomLevel"
           type="number"
@@ -92,29 +93,13 @@ onBeforeUnmount(flushSave);
       </div>
     </div>
 
-    <p v-if="localError" class="error" role="alert">{{ localError }}</p>
+    <p v-if="localError" class="settings-error" role="alert">{{ localError }}</p>
   </section>
 </template>
 
+<style scoped src="../styles/settings.css"></style>
+
 <style scoped>
-.window-zoom { max-width: 820px; margin-top: 34px; padding-top: 28px; border-top: 1px solid var(--workbench-border); }
-.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
-.section-heading h3 { color: var(--workbench-foreground); font-size: 15px; line-height: 1.3; }
-.section-heading p, .setting > p { color: var(--faint-foreground); font-size: 12px; }
-.reset { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; white-space: nowrap; }
-.reset:disabled { cursor: default; opacity: .55; }
-.reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.setting { margin-bottom: 22px; }
-.setting label { display: block; color: var(--workbench-foreground); font-size: 13px; font-weight: 650; margin-bottom: 2px; }
-.setting code { color: var(--muted-foreground); font: 11.5px var(--mono); }
 .level-row { display: flex; align-items: center; gap: 9px; width: 150px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-.level-row input {
-  width: 100%; min-width: 0; margin-top: 8px; padding: 8px 10px;
-  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
-  outline: none; background: var(--input-background); color: var(--workbench-foreground); font: 13px/1.4 var(--mono);
-}
-.level-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
-.level-row input:disabled { opacity: .65; }
 .level-row span { margin-top: 8px; }
-.error { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
 </style>

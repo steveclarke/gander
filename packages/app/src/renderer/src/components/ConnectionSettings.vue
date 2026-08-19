@@ -178,7 +178,7 @@ button:disabled { opacity: .55; cursor: default; }
 .working { display: flex; align-items: center; gap: 5px; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.result.bad { color: var(--red, #e06c75); }
+.result.bad { color: var(--danger); }
 .result.warning { color: var(--warning); }
 code { font-family: var(--mono, monospace); font-size: 11px; }
 </style>
