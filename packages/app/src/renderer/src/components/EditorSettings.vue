@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
 .setting code { color: var(--muted-foreground); font: 11.5px var(--mono); }
 .setting input {
   width: 100%; min-width: 0; margin-top: 8px; padding: 8px 10px;
-  border: 1px solid var(--workbench-border); border-radius: 6px;
+  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
   outline: none; background: var(--input-background); color: var(--workbench-foreground); font: 13px/1.4 var(--mono);
 }
 .setting input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
 .preview-setting { margin-top: 34px; }
 .preview {
   min-width: 0; overflow: hidden; margin-top: 8px; padding: 14px;
-  border: 1px solid var(--workbench-border); border-radius: 6px; background: var(--input-background);
+  border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--input-background);
   color: var(--workbench-foreground); line-height: 1.5; white-space: nowrap;
 }
 .preview code { color: inherit; font: inherit; }

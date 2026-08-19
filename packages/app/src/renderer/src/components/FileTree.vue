@@ -200,7 +200,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 .st.A { color: var(--success); }
 .st.D { color: var(--danger); }
 .st.R { color: var(--info); }
-.cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint-foreground); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
+.cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint-foreground); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
 .cb.on { border-color: var(--success); color: var(--success); }
 .cb.part { border-color: var(--success); color: var(--success); }
 .review-slot { width: 15px; flex: none; }

@@ -95,7 +95,7 @@ function reset(): void {
 .zoom-trigger {
   anchor-name: --zoom-trigger;
   display: flex; align-items: center; gap: 4px; height: 22px; padding: 0 4px;
-  border: 0; border-radius: 3px; background: transparent; color: var(--faint-foreground);
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--faint-foreground);
   cursor: pointer; font: inherit; font-variant-numeric: tabular-nums;
 }
 .zoom-trigger:hover, .zoom-trigger:focus-visible { background: var(--hover-background); color: var(--workbench-foreground); }
@@ -103,7 +103,7 @@ function reset(): void {
 .percentage { min-width: 3.25ch; text-align: end; }
 .zoom-toolbar {
   position: fixed; position-anchor: --zoom-trigger; position-area: block-start span-inline-start;
-  margin: 0 0 7px; padding: 5px; border: 1px solid var(--workbench-border); border-radius: 7px;
+  margin: 0 0 7px; padding: 5px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
   overflow: visible;
   background: var(--elevated-background); color: var(--workbench-foreground);
   box-shadow: 0 6px 18px var(--workbench-shadow);
@@ -117,7 +117,7 @@ function reset(): void {
 }
 .zoom-toolbar button {
   position: relative; display: flex; align-items: center; justify-content: center; gap: 6px;
-  min-width: 28px; height: 28px; padding: 0 7px; border: 0; border-radius: 4px;
+  min-width: 28px; height: 28px; padding: 0 7px; border: 0; border-radius: var(--radius-sm);
   background: transparent; color: var(--workbench-foreground); cursor: pointer; font: inherit;
 }
 .zoom-toolbar button:hover:not(:disabled) { background: var(--hover-background); }

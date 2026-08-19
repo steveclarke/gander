@@ -26,7 +26,7 @@ button { position: relative; height: 48px; display: grid; place-items: center; b
 button:hover:not(:disabled) { color: var(--workbench-foreground); background: var(--hover-background); }
 button.active { color: var(--workbench-foreground); }
 button.active::before { content: ""; position: absolute; inset-block: 8px; inset-inline-start: 0; width: 2px; background: var(--accent); }
-button:disabled { opacity: .28; cursor: default; }
+button:disabled { opacity: .55; cursor: default; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .spacer { flex: 1; }
 </style>

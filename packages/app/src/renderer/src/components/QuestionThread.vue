@@ -194,7 +194,7 @@ function formatTimestamp(value: string): string {
 .location:disabled { color: var(--faint-foreground); cursor: default; }
 .state {
   display: inline-flex; align-items: center; gap: 3px; flex: none;
-  border: 1px solid var(--workbench-border); border-radius: 999px; padding: 1px 5px;
+  border: 1px solid var(--workbench-border); border-radius: var(--radius-pill); padding: 1px 5px;
   color: var(--faint-foreground); font: 600 9px var(--mono); letter-spacing: .35px; text-transform: uppercase;
 }
 .state.open { color: var(--accent); }
@@ -209,7 +209,7 @@ function formatTimestamp(value: string): string {
 .chevron { color: var(--faint-foreground); transition: transform 120ms ease; }
 .chevron.expanded { transform: rotate(180deg); }
 .thread-body { padding: 1px 10px 11px; }
-.question-message, .agent-update, .replies { min-width: 0; border-radius: 6px; }
+.question-message, .agent-update, .replies { min-width: 0; border-radius: var(--radius-md); }
 .question-message { padding: 9px 10px; background: var(--input-background); border: 1px solid var(--workbench-border); }
 .agent-update, .replies { margin: 8px 0 0 12px; padding: 9px 10px; border-left: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .replies { border-left-color: var(--workbench-border); background: transparent; }
@@ -217,14 +217,14 @@ function formatTimestamp(value: string): string {
 .message-heading h3, .replies > h3, .author { margin: 0; color: var(--muted-foreground); font: 600 9.5px var(--mono); letter-spacing: .4px; text-transform: uppercase; }
 .agent-update .message-heading h3, .author.agent { color: var(--accent); }
 .message-heading time { min-width: 0; color: var(--faint-foreground); font-size: 9.5px; text-align: right; }
-.message-heading code { overflow: hidden; max-width: 45%; padding: 1px 5px; border-radius: 4px; background: var(--badge-background); color: var(--muted-foreground); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.message-heading code { overflow: hidden; max-width: 45%; padding: 1px 5px; border-radius: var(--radius-sm); background: var(--badge-background); color: var(--muted-foreground); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .message-text { margin: 4px 0 0; min-width: 0; color: var(--workbench-foreground); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
 .replies ol { list-style: none; margin: 7px 0 0; padding: 0; }
 .reply { padding: 8px 0; border-top: 1px solid var(--workbench-border); }
 .reply:last-child { padding-bottom: 0; }
 .reply-form { margin-top: 9px; }
 .reply-form label { display: block; margin-bottom: 4px; color: var(--muted-foreground); font: 600 9.5px var(--mono); letter-spacing: .4px; text-transform: uppercase; }
-.reply-form input { width: 100%; background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: 6px; color: var(--workbench-foreground); font: inherit; font-size: 12px; padding: 6px 8px; }
+.reply-form input { width: 100%; background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-md); color: var(--workbench-foreground); font: inherit; font-size: 12px; padding: 6px 8px; }
 .reply-form input:focus { outline: none; border-color: var(--accent); }
 .reply-form input:disabled { color: var(--faint-foreground); }
 .thread-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }

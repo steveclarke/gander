@@ -358,7 +358,7 @@ onBeforeUnmount(dispose);
   display: flex;
   gap: 2px;
   background: var(--input-background);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   padding: 2px;
   flex: none;
 }
@@ -371,7 +371,7 @@ onBeforeUnmount(dispose);
   background: none;
   border: none;
   color: var(--muted-foreground);
-  border-radius: 5px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 .tabs button.active {
@@ -386,7 +386,7 @@ onBeforeUnmount(dispose);
   border: 1px solid var(--workbench-border);
   background: var(--elevated-background);
   color: var(--workbench-foreground);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 4px 12px;
   font-size: 12px;
   cursor: pointer;
@@ -434,7 +434,7 @@ onBeforeUnmount(dispose);
   justify-content: center;
   padding: 1px;
   border: 1px solid var(--workbench-border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--elevated-background);
   color: var(--workbench-foreground);
   font: 700 16px/1 var(--mono);

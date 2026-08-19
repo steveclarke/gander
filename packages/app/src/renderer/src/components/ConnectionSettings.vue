@@ -163,15 +163,15 @@ async function run(action: "test" | "save"): Promise<void> {
 .heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .heading h2 { color: var(--workbench-foreground); font-size: 15px; }
 .heading p, .setting p { color: var(--faint-foreground); font-size: 11.5px; }
-.override { margin-bottom: 18px; padding: 9px 11px; border-radius: 6px; background: var(--input-background); color: var(--muted-foreground); font-size: 11.5px; line-height: 1.5; }
+.override { margin-bottom: 18px; padding: 9px 11px; border-radius: var(--radius-md); background: var(--input-background); color: var(--muted-foreground); font-size: 11.5px; line-height: 1.5; }
 .setting { margin-bottom: 18px; max-width: 560px; }
 .setting label { display: block; margin-bottom: 3px; color: var(--workbench-foreground); font-size: 12.5px; }
 .setting p { margin-bottom: 7px; }
-input { width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--workbench-border); border-radius: 5px; background: var(--input-background); color: var(--workbench-foreground); font: inherit; font-size: 12.5px; }
+input { width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--input-background); color: var(--workbench-foreground); font: inherit; font-size: 12.5px; }
 input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .actions { display: flex; align-items: center; gap: 8px; }
 hr { margin: 26px 0 22px; max-width: 560px; border: 0; border-top: 1px solid var(--workbench-border); }
-button { height: 28px; padding: 0 12px; border: 1px solid var(--workbench-border); border-radius: 5px; background: var(--input-background); color: var(--workbench-foreground); cursor: pointer; font: inherit; font-size: 12px; }
+button { height: 28px; padding: 0 12px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--input-background); color: var(--workbench-foreground); cursor: pointer; font: inherit; font-size: 12px; }
 button.primary { border-color: var(--accent); background: var(--accent); color: var(--workbench-background); }
 button:disabled { opacity: .55; cursor: default; }
 .result, .working { color: var(--muted-foreground); font-size: 11.5px; }

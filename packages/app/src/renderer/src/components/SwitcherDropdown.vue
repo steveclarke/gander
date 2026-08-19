@@ -22,5 +22,5 @@ const emit = defineEmits<{ close: [] }>();
 
 <style scoped>
 .veil { position: fixed; inset: 0; z-index: 30; }
-.dd { position: fixed; top: 51px; background: var(--panel-background); border: 1px solid var(--workbench-border); border-radius: 0 0 12px 12px; box-shadow: 0 20px 50px var(--workbench-shadow); max-height: 65vh; overflow: auto; z-index: 31; min-width: 320px; }
+.dd { position: fixed; top: 51px; background: var(--panel-background); border: 1px solid var(--workbench-border); border-radius: 0 0 var(--radius-lg) var(--radius-lg); box-shadow: 0 20px 50px var(--workbench-shadow); max-height: 65vh; overflow: auto; z-index: 31; min-width: 320px; }
 </style>

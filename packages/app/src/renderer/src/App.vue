@@ -461,10 +461,10 @@ onBeforeUnmount(() => {
 .context-title { min-width: 0; display: flex; align-items: baseline; gap: 7px; margin-right: auto; }
 .context-title strong { font-size: 12px; }
 .context-title span { min-width: 0; display: flex; align-items: center; gap: 5px; color: var(--muted-foreground); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.context-toolbar button { min-height: 26px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--workbench-border); border-radius: 5px; background: var(--elevated-background); color: var(--muted-foreground); font: inherit; cursor: pointer; }
+.context-toolbar button { min-height: 26px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--elevated-background); color: var(--muted-foreground); font: inherit; cursor: pointer; }
 .context-toolbar button:hover { color: var(--workbench-foreground); border-color: var(--faint-foreground); }
 .context-toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.context-toolbar button:disabled { opacity: .5; cursor: default; }
+.context-toolbar button:disabled { opacity: .55; cursor: default; }
 .progress { padding-inline: 4px; color: var(--faint-foreground); font-size: 11px; white-space: nowrap; }
 .work-surface { flex: 1; min-width: 0; min-height: 0; display: flex; background: var(--workbench-background); }
 .workspace { flex: 1; display: flex; min-width: 0; min-height: 0; }
@@ -480,7 +480,7 @@ onBeforeUnmount(() => {
 .welcome, .empty-state { margin: auto; max-width: 460px; padding: 40px; text-align: center; color: var(--muted-foreground); }
 .welcome h1, .empty-state h1 { margin: 0 0 10px; color: var(--workbench-foreground); font-size: 22px; letter-spacing: -.02em; }
 .welcome p, .empty-state p { margin: 0 0 22px; line-height: 1.55; }
-.welcome button, .empty-state button { min-height: 32px; padding: 6px 13px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--accent-foreground); font: inherit; cursor: pointer; }
+.welcome button, .empty-state button { min-height: 32px; padding: 6px 13px; border: 1px solid var(--accent); border-radius: var(--radius-md); background: var(--accent); color: var(--accent-foreground); font: inherit; cursor: pointer; }
 .welcome .text-action { display: block; margin: 14px auto 0; border: 0; background: none; color: var(--accent); }
 .welcome button:focus-visible, .empty-state button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .view-sidebar { transition: none; } }
