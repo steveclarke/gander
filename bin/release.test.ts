@@ -52,3 +52,13 @@ describe("Homebrew cask release handoff", () => {
     expect(result.stderr).toContain("Expected the release DMG to be named Gander-1.2.3-arm64.dmg");
   });
 });
+
+describe("release publisher ownership", () => {
+  it("leaves GitHub asset uploads to bin/release even in CI", () => {
+    const appPackage = JSON.parse(readFileSync(join(sourceRoot, "packages/app/package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(appPackage.scripts["dist:mac"]).toContain("--publish never");
+  });
+});
