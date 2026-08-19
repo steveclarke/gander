@@ -17,20 +17,32 @@ import { parseOpenTarget } from "./cli.js";
 
 interface OpenServerOptions {
   socketPath: string;
-  onTarget(target: OpenTarget): void;
+  /**
+   * `from` is the working directory the client ran in. Registration takes its identity
+   * from a checkout's origin, and `bin/gander` always runs inside one, so a request can
+   * carry the checkout that names the repository it is asking for.
+   */
+  onTarget(target: OpenTarget, from: string | null): Promise<void> | void;
 }
 
-function readRequest(raw: string): string[] {
+interface OpenRequest {
+  argv: string[];
+  from: string | null;
+}
+
+function readRequest(raw: string): OpenRequest {
   const body: unknown = JSON.parse(raw);
   if (typeof body !== "object" || body === null) throw new Error("expected a JSON object");
   const argv = (body as { argv?: unknown }).argv;
   if (!Array.isArray(argv) || argv.some((a) => typeof a !== "string")) {
     throw new Error("expected an argv array of strings");
   }
-  return argv as string[];
+  const from = (body as { from?: unknown }).from;
+  if (from !== undefined && typeof from !== "string") throw new Error("expected from to be a string");
+  return { argv: argv as string[], from: from ?? null };
 }
 
-function handle(socket: Socket, onTarget: (target: OpenTarget) => void): void {
+function handle(socket: Socket, onTarget: OpenServerOptions["onTarget"]): void {
   let buffer = "";
   socket.setEncoding("utf8");
   socket.on("data", (chunk: string) => {
@@ -41,14 +53,17 @@ function handle(socket: Socket, onTarget: (target: OpenTarget) => void): void {
     if (end === -1) return;
     const line = buffer.slice(0, end);
     buffer = "";
-    try {
-      const target = parseOpenTarget(readRequest(line));
-      if (target === null) throw new Error("no repository named: pass --repo owner/name");
-      onTarget(target);
-      socket.end(`${JSON.stringify({ ok: true, target })}\n`);
-    } catch (err) {
-      socket.end(`${JSON.stringify({ error: (err as Error).message })}\n`);
-    }
+    void (async () => {
+      try {
+        const request = readRequest(line);
+        const target = parseOpenTarget(request.argv);
+        if (target === null) throw new Error("no repository named: pass --repo owner/name");
+        await onTarget(target, request.from);
+        socket.end(`${JSON.stringify({ ok: true, target })}\n`);
+      } catch (err) {
+        socket.end(`${JSON.stringify({ error: (err as Error).message })}\n`);
+      }
+    })();
   });
   // A client that dies mid-request must not take the app down with it.
   socket.on("error", () => socket.destroy());

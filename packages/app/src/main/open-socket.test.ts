@@ -81,7 +81,7 @@ describe("open server", () => {
   });
 
   it("takes over a socket file a crashed run left behind", async () => {
-    const second = await startOpenServer({ socketPath, onTarget: (t) => delivered.push(t) });
+    const second = await startOpenServer({ socketPath, onTarget: (t) => { delivered.push(t); } });
     await send(["--repo", "acme/atlas"]);
     expect(delivered).toHaveLength(1);
     second();
