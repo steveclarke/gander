@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { describeNetworkError } from "./network-error.js";
-import { FileCheckoffSchema, NoteSchema, ReviewStateSchema, type FileCheckoff, type NewNote, type PrContext, type PutFileState, type Note, type ReviewState } from "@gander/shared";
+import { FileCheckoffSchema, NoteSchema, ReviewStateSchema, unreachableReason, type FileCheckoff, type NewNote, type PrContext, type PutFileState, type Note, type ReviewState } from "@gander/shared";
 import { checkServiceStatus, type ServiceStatus } from "./connection.js";
 
 export class ServiceConnectionError extends Error {}
@@ -129,7 +129,7 @@ export function createServiceClient(connection: Connection): ServiceClient {
       res = await fetch(`${baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     } catch (err) {
       const detail = describeNetworkError(err);
-      checkedConnection = { url: baseUrl, status: { state: "unreachable", reason: `Could not reach ${baseUrl}: ${detail}` } };
+      checkedConnection = { url: baseUrl, status: { state: "unreachable", reason: unreachableReason(baseUrl, detail) } };
       requireRecoveryReads();
       const consequence = method === "GET" ? "" : " This change was not saved and will not be retried.";
       throw new ServiceConnectionError(`Gander service unreachable at ${baseUrl}: ${detail}.${consequence}`);

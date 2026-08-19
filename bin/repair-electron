@@ -38,20 +38,18 @@ if ! command -v mise >/dev/null 2>&1; then
   exit 1
 fi
 if [[ ! -f "$electron_dir/install.js" ]]; then
-  echo "Electron's package installers are missing. Re-run pnpm install and try again." >&2
+  echo "Electron's package installer is missing. Re-run pnpm install and try again." >&2
   exit 1
 fi
 
-echo "==> Repairing Electron downloads with Node 22"
+echo "==> Repairing Electron download with Node 22"
 # Keep pnpm on Node 24 for native modules; run only the official Electron download
-# scripts under Node 22.
+# script under Node 22.
 mise install node@22 >/dev/null
 
-if ! electron_works; then
-  rm -rf "${electron_dir:?}/dist"
-  rm -f "${electron_dir:?}/path.txt"
-  mise exec node@22 -- node "$electron_dir/install.js"
-fi
+rm -rf "${electron_dir:?}/dist"
+rm -f "${electron_dir:?}/path.txt"
+mise exec node@22 -- node "$electron_dir/install.js"
 
 if ! electron_works; then
   echo "Electron is still incomplete after repair." >&2

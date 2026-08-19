@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { unreachableReason } from "@gander/shared";
 import type { LocalFileEntry, LocalView, PrListItem, PrView } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 import { createStore, readable } from "./store.js";
@@ -546,7 +547,7 @@ describe("store", () => {
     });
 
     it("clears a recovered read-only connection error without hiding a failed change", async () => {
-      const unreachable = { state: "unreachable" as const, reason: "Could not reach http://service: fetch failed" };
+      const unreachable = { state: "unreachable" as const, reason: unreachableReason("http://service", "fetch failed") };
       let connected = false;
       const store = createStore(fakeApi({
         serviceStatus: async () => connected
@@ -569,7 +570,7 @@ describe("store", () => {
       const store = createStore(fakeApi());
 
       await store.checkService();
-      store.error = "Could not reach https://gander.example.test: fetch failed";
+      store.error = unreachableReason("https://gander.example.test", "fetch failed");
       await store.checkService();
 
       expect(store.error).toBeNull();

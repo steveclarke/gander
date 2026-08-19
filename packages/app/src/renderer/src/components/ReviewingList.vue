@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { PrListItem } from "@gander/shared";
-import { Layers3 } from "lucide-vue-next";
+import { Layers3 } from "@lucide/vue";
 import StackPosition from "./StackPosition.vue";
 import ReviewProgress from "./ReviewProgress.vue";
 

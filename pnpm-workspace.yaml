@@ -8,12 +8,11 @@ publicHoistPattern:
 allowBuilds:
   '@modelcontextprotocol/inspector': true
   better-sqlite3: true
-  edgedriver: false
   electron: true
   # Pulled in by electron-builder. There is no Windows target.
   electron-winstaller: false
   esbuild: true
-  geckodriver: false
 minimumReleaseAgeExclude:
   - '@vue/language-core@3.3.10'
   - vue-tsc@3.3.10
+  - '@lucide/vue@1.33.0'

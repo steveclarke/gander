@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FileDiff, Files, GitPullRequest, Settings } from "lucide-vue-next";
+import { FileDiff, Files, GitPullRequest, Settings } from "@lucide/vue";
 
 defineProps<{ active: "explorer" | "changes" | "pulls" | "settings"; hasTarget: boolean }>();
 const emit = defineEmits<{ select: [value: "explorer" | "changes" | "pulls" | "settings"] }>();

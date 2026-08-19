@@ -123,6 +123,44 @@ describe("review pipeline", () => {
     await expect(reviewer.setChecked("acme/atlas", 1, "a.rb", true)).rejects.toThrow(/must be opened/i);
   });
 
+  it("diffs a renamed file against its merge-base path instead of reading it as wholly added", async () => {
+    // A rename with a content change is the case where the base side exists only under
+    // the old path. Reading the new path at the merge base returns "absent", which
+    // showFile reports as null content, and the reviewer sees every line as newly added.
+    // The file is long enough that a one-line edit stays above git's -M similarity
+    // threshold, so this is a real R rather than a delete/add pair.
+    const original = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n";
+    const moved = await makeFixtureRepo({}, { "long.txt": original });
+    const movedReviewer = createReviewer({
+      git: createGitEngine(clonesRoot),
+      service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
+      listPrs: async () => [await currentPr(moved)],
+      repoUrl: () => moved.dir,
+      machine: "test-machine",
+    });
+    try {
+      await moved.git(["checkout", "feature"]);
+      await moved.git(["mv", "long.txt", "renamed.txt"]);
+      writeFileSync(join(moved.dir, "renamed.txt"), original.replace("three\n", "THREE\n"));
+      await moved.git(["add", "-A"]);
+      await moved.git(["commit", "-m", "rename and edit"]);
+      await moved.git(["update-ref", "refs/pull/1/head", await moved.git(["rev-parse", "HEAD"])]);
+      await moved.git(["checkout", "main"]);
+
+      const view = await movedReviewer.openPr("acme/moved", 1);
+      const renamed = view.files.find((f) => f.path === "renamed.txt");
+
+      expect(renamed?.status).toBe("R");
+      expect(renamed?.basePath).toBe("long.txt");
+      // The whole point: the base side must carry the pre-rename content, not null.
+      expect(renamed?.baseContent).toBe(original);
+      expect(renamed?.baseHash).not.toBeNull();
+      expect(renamed?.headContent).toBe(original.replace("three\n", "THREE\n"));
+    } finally {
+      rmSync(moved.dir, { recursive: true, force: true });
+    }
+  });
+
   it("content change after checkoff un-checks with changedSince — and identical content survives history rewrites", async () => {
     await reviewer.openPr("acme/atlas", 1);
     await reviewer.setChecked("acme/atlas", 1, "a.rb", true);
@@ -286,6 +324,40 @@ describe("review pipeline", () => {
     const recovered = await reviewer.refreshPr("acme/atlas", 1);
     expect(recovered.files.find((file) => file.path === "a.rb")!.checked).toBe(true);
     expect(storage.getReview("acme/atlas", 1).files.find((file) => file.path === "a.rb")!.machine).toBe("other-machine");
+  });
+
+  it("previews a renamed image from its merge-base path on the base side", async () => {
+    // An identical rename keeps both hashes real, so neither side short-circuits to
+    // "absent" — and showImage raises on a path its revision does not hold, which is what
+    // reading the post-rename name at the merge base would do.
+    await server.close(); storage.close();
+    rmSync(fixture.dir, { recursive: true, force: true });
+    const png = readFileSync(join(import.meta.dirname, "../../resources/icon.png"));
+    fixture = await makeFixtureRepo({}, { "logo.png": png });
+    await fixture.git(["checkout", "feature"]);
+    await fixture.git(["mv", "logo.png", "brand.png"]);
+    await fixture.git(["commit", "-m", "rename the logo"]);
+    await fixture.git(["update-ref", "refs/pull/1/head", await fixture.git(["rev-parse", "HEAD"])]);
+    await fixture.git(["checkout", "main"]);
+
+    storage = openStorage(join(dbDir, "renamed-image.db"));
+    server = buildServer({ storage, token: "t", version: SERVICE_VERSION });
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    port = (server.addresses()[0] as { port: number }).port;
+    reviewer = createReviewer({
+      git: createGitEngine(clonesRoot),
+      service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
+      listPrs: async () => [await currentPr(fixture)],
+      repoUrl: () => fixture.dir,
+      machine: "test-machine",
+    });
+
+    const view = await reviewer.openPr("acme/atlas", 1);
+    expect(view.files.find((file) => file.path === "brand.png")).toMatchObject({ status: "R", basePath: "logo.png" });
+
+    const preview = await reviewer.imagePreview("acme/atlas", 1, "brand.png");
+    expect(preview.base).toMatchObject({ kind: "image", mediaType: "image/png" });
+    expect(preview.head).toMatchObject({ kind: "image", mediaType: "image/png" });
   });
 
   it("previews modified, added, and deleted images without persisting binary snapshots", async () => {

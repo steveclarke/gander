@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import type { Note } from "@gander/shared";
-import { Copy, MessageSquare, PanelBottom, PanelRight, Plus, X } from "lucide-vue-next";
+import { Copy, MessageSquare, PanelBottom, PanelRight, Plus, X } from "@lucide/vue";
 import type { Store } from "../store.js";
 import { revealLine } from "../selection.js";
 import NoteItem from "./NoteItem.vue";

@@ -11,9 +11,10 @@ import {
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import type { EffectiveTreeTypography } from "../../../settings.js";
 import { languageForPath } from "../languages.js";
-import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "lucide-vue-next";
+import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "@lucide/vue";
 import FileIcon from "./FileIcon.vue";
 import type { ChangedFile, PrFile } from "@gander/shared";
+import type { JumpTarget } from "../tree-jump.js";
 
 const props = withDefaults(defineProps<{
   store: Store;
@@ -23,6 +24,7 @@ const props = withDefaults(defineProps<{
   depth?: number;
   files?: ChangedFile[];
   showStatus?: boolean;
+  jumpTargets?: ReadonlyMap<string, JumpTarget>;
 }>(), { showStatus: true });
 
 const depth = computed(() => props.depth ?? 0);
@@ -97,6 +99,16 @@ function fileIcon(path: string) {
 function folderIcon(node: TreeNode & { type: "dir" }) {
   return folderIconFor(props.iconTheme, { name: node.name, expanded: !collapsedDirs.has(node.path) });
 }
+
+function nameParts(path: string, name: string): { text: string; matched: boolean }[] {
+  const matched = new Set(props.jumpTargets?.get(path)?.matchIndices ?? []);
+  return [...name].map((text, index) => ({ text, matched: matched.has(index) }));
+}
+
+function jumpShortcut(path: string): string | undefined {
+  const label = props.jumpTargets?.get(path)?.label;
+  return label ?? undefined;
+}
 </script>
 
 <template>
@@ -107,6 +119,7 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         class="tnode isdir"
         :class="{ cur: node.path === cursor }"
         :style="{ paddingLeft: `${10 + depth * 16}px` }"
+        :aria-keyshortcuts="jumpShortcut(node.path)"
         role="button"
         tabindex="0"
         @click="cursor = node.path; toggleCollapsed(node.path)"
@@ -134,7 +147,13 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         </span>
         <span v-else class="review-slot" aria-hidden="true" />
         <FileIcon :src="folderIcon(node).src" :data-icon-id="folderIcon(node).id" />
-        <span class="fname">{{ node.name }}</span>
+        <span class="fname">
+          <template v-for="(part, index) in nameParts(node.path, node.name)" :key="index">
+            <mark v-if="part.matched" class="jump-match">{{ part.text }}</mark>
+            <template v-else>{{ part.text }}</template>
+          </template>
+        </span>
+        <span v-if="jumpTargets?.get(node.path)?.label" class="jump-label" aria-hidden="true">{{ jumpTargets.get(node.path)?.label }}</span>
       </div>
       <FileTree
         v-if="node.type === 'dir' && !collapsedDirs.has(node.path)"
@@ -143,12 +162,14 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         :nodes="node.children"
         :depth="depth + 1"
         :show-status="showStatus"
+        :jump-targets="jumpTargets"
       />
       <div
         v-if="node.type === 'file'"
         class="tnode"
         :class="{ sel: node.file.path === store.selectedPath, cur: node.file.path === cursor, checked: reviewFile(node)?.checked }"
         :style="{ paddingLeft: `${10 + depth * 16}px` }"
+        :aria-keyshortcuts="jumpShortcut(node.file.path)"
         role="button"
         tabindex="0"
         @click="cursor = node.file.path; store.select(node.file.path)"
@@ -167,7 +188,13 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
         ><Check :size="12" :stroke-width="3" /></span>
         <span v-else class="review-slot" aria-hidden="true" />
         <FileIcon :src="fileIcon(node.file.path).src" :data-icon-id="fileIcon(node.file.path).id" />
-        <span class="fname">{{ fileName(node.file.path) }}</span>
+        <span class="fname">
+          <template v-for="(part, index) in nameParts(node.file.path, fileName(node.file.path))" :key="index">
+            <mark v-if="part.matched" class="jump-match">{{ part.text }}</mark>
+            <template v-else>{{ part.text }}</template>
+          </template>
+        </span>
+        <span v-if="jumpTargets?.get(node.file.path)?.label" class="jump-label" aria-hidden="true">{{ jumpTargets.get(node.file.path)?.label }}</span>
         <span v-if="noteCounts.get(node.file.path)" class="note-mark" :title="noteTitle(node.file.path)">
           <MessageSquare :size="12" />
           <!-- The icon alone already says "one note"; the number earns its space only
@@ -194,6 +221,9 @@ function folderIcon(node: TreeNode & { type: "dir" }) {
 .cb.on { border-color: var(--success); color: var(--success); }
 .cb.part { border-color: var(--success); color: var(--success); }
 .tnode.checked .fname { color: var(--faint-foreground); }
+
+.jump-match { padding: 0; border-radius: 1px; background: var(--accent); color: var(--accent-foreground); font-weight: 750; }
+.jump-label { width: 15px; height: 15px; flex: none; display: inline-grid; place-items: center; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-foreground); font: 800 10px/1 var(--mono); }
 
 .note-mark { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); flex: none; }
 .note-count { font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }

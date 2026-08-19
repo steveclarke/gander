@@ -3,7 +3,9 @@ import {
   FileCheckoffSchema,
   PutFileStateSchema,
   ReviewStateSchema,
+  isUnreachableReason,
   repoIdFromUrl,
+  unreachableReason,
 } from "./index.js";
 
 describe("repoIdFromUrl", () => {
@@ -43,5 +45,22 @@ describe("ReviewStateSchema", () => {
     };
     expect(ReviewStateSchema.parse(state)).toEqual(state);
     expect(FileCheckoffSchema.parse(state.files[0])).toEqual(state.files[0]);
+  });
+});
+
+describe("unreachableReason", () => {
+  it("produces a sentence its own predicate recognizes", () => {
+    // The renderer clears a recovered banner by recognizing this shape. Builder and
+    // predicate have to agree, or the banner outlives the failure that raised it.
+    expect(isUnreachableReason(unreachableReason("http://127.0.0.1:7777", "fetch failed"))).toBe(true);
+    expect(isUnreachableReason(unreachableReason("https://gander.example.test", "connect ECONNREFUSED"))).toBe(true);
+  });
+
+  it("does not claim unrelated failures", () => {
+    // A failed write keeps its no-retry consequence and must stay on screen.
+    expect(isUnreachableReason("Gander service unreachable at http://x: fetch failed. This change was not saved and will not be retried.")).toBe(false);
+    expect(isUnreachableReason("No Gander service configured.")).toBe(false);
+    expect(isUnreachableReason("http://x answered 500 on /healthz")).toBe(false);
+    expect(isUnreachableReason("Could not reach GitHub: socket hang up")).toBe(false);
   });
 });

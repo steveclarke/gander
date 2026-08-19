@@ -40,14 +40,14 @@ The Electron window stays hidden by default, while its renderer continues to
 paint for Playwright assertions, screenshots, and traces. To watch one scenario
 while debugging, run `GANDER_E2E_HEADFUL=1 pnpm test:e2e:run <file>`.
 
-### When the suite cannot start Electron
+### When the app cannot start Electron
 
-`electron` downloads an archive in its package lifecycle script. Electron 33's
-`extract-zip` step can silently stop after the first
-archive entry when it runs under Node 24. `electron/dist` then ends up a few
-hundred kilobytes rather than roughly 250 MB while the install script still
-reports success and exits 0. The suite then fails to launch Electron, often with
-`DevToolsActivePort file doesn't exist`.
+`electron` downloads its archive in a package lifecycle script. Electron 33's
+`extract-zip` step can silently stop after the first archive entry when it runs
+under Node 24. `electron/dist` then ends up a few hundred kilobytes rather than
+roughly 250 MB while the install script still reports success and exits 0.
+`bin/dev` then fails with `Error: Electron uninstall`, or Electron starts and
+dies with `DevToolsActivePort file doesn't exist`.
 
 Check for it, from the repository root:
 
@@ -56,10 +56,11 @@ Check for it, from the repository root:
 ```
 
 A working install prints the version. A truncated one raises
-`Electron failed to install correctly`. `bin/setup` checks Electron after
-`pnpm install`. If it is incomplete, it keeps pnpm and native module builds on
-Node 24 but reruns only the official Electron download script under Node 22
-through mise. Rerun `bin/setup` to repair an existing checkout.
+`Electron failed to install correctly`. The root `postinstall` hook runs
+`bin/repair-electron` after every `pnpm install`. If the binaries are incomplete,
+it keeps pnpm and native module builds on Node 24 but reruns only the official
+Electron download script under Node 22 through mise. Run `bin/repair-electron`
+to repair an existing checkout.
 
 ## Processes
 
@@ -172,6 +173,28 @@ the user data directory, which every checkout shares so they can reuse each
 other's clones.
 
 The app has to be running: `bin/dev -D` first, then the command.
+
+## Inspecting the running window
+
+Set `GANDER_DEBUG_PORT` before starting the app and the renderer speaks the Chrome
+DevTools Protocol on that port, so a layout or state question can be answered against the
+window already on screen instead of a rebuild. It is ignored in a packaged build — the
+port has no authentication.
+
+```bash
+GANDER_DEBUG_PORT=9229 bin/dev
+curl -s localhost:9229/json          # the page's webSocketDebuggerUrl
+```
+
+Open `chrome://inspect` in Chrome, or drive the socket from a script: `Runtime.evaluate`
+reads live geometry and store state, `Page.captureScreenshot` takes a picture of the
+window (pass `fromSurface: false` on macOS, or the call hangs whenever the window is not
+frontmost), and `Emulation.setDeviceMetricsOverride` resizes the viewport to reproduce a
+size-dependent bug.
+
+Restarting the app to attach the port throws away whatever repository, file, and scroll
+position the bug appeared in. When the bug is on screen, attach to a second window or
+reproduce it again after the restart.
 
 ## Testing and debugging MCP
 

@@ -4,8 +4,14 @@ import type { EffectiveTreeTypography } from "../../../settings.js";
 import type { Store } from "../store.js";
 import FileTree from "./FileTree.vue";
 import ReviewingList from "./ReviewingList.vue";
+import type { JumpTarget } from "../tree-jump.js";
 
-defineProps<{ store: Store; iconTheme: FileIconThemeId; typography: EffectiveTreeTypography }>();
+defineProps<{
+  store: Store;
+  iconTheme: FileIconThemeId;
+  typography: EffectiveTreeTypography;
+  jumpTargets?: ReadonlyMap<string, JumpTarget>;
+}>();
 defineEmits<{ selectPr: [prNumber: number]; scroll: [] }>();
 </script>
 
@@ -33,6 +39,7 @@ defineEmits<{ selectPr: [prNumber: number]; scroll: [] }>();
         :store="store"
         :icon-theme="iconTheme"
         :typography="typography"
+        :jump-targets="jumpTargets"
         @scroll.passive="$emit('scroll')"
       />
     </section>
