@@ -4,9 +4,9 @@ import { z } from "zod";
 import type { Storage } from "./storage.js";
 
 /**
- * The MCP contract is deliberately tiny: agents read the reviewer's questions, reply,
+ * The MCP contract is deliberately tiny: agents read the reviewer's notes, reply,
  * and say when they have acted on one. Nothing here reads diffs, lists files, touches
- * checkoffs, or resolves a question — resolution is the reviewer's act alone, made in
+ * checkoffs, or resolves a note — resolution is the reviewer's act alone, made in
  * the app by re-checking the file. Agents already have git and gh for code; this carries
  * only the conversation.
  */
@@ -19,27 +19,27 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
     if (branch === undefined) return "Pass either prNumber or branch.";
     const found = storage.findPrByHeadRef(repo, branch);
     if (found === null) {
-      return `No review in Gander for branch ${branch} on ${repo}. The pull request has to be opened in Gander once before its questions can be read.`;
+      return `No review in Gander for branch ${branch} on ${repo}. The pull request has to be opened in Gander once before its notes can be read.`;
     }
     return found;
   }
 
   server.registerTool(
-    "get_review_questions",
+    "get_review_notes",
     {
-      title: "Get review questions",
+      title: "Get review notes",
       description:
-        "Questions the reviewer has left on a pull request, with the file and line each one is about. " +
-        "Derive repo and branch from the working directory. Returns open questions by default — those are the ones still needing work. " +
-        "The response always counts open, addressed, and resolved questions so hidden states are visible. " +
-        "The response names the branch, title, and stack position of the pull request the questions belong to: check it matches the checkout being worked in, " +
-        "because a stacked pull request's sibling is a different branch with different questions.",
+        "Notes the reviewer has left on a pull request, with the file and line each one is about. " +
+        "Derive repo and branch from the working directory. Returns open notes by default — those are the ones still needing work. " +
+        "The response always counts open, addressed, and resolved notes so hidden states are visible. " +
+        "The response names the branch, title, and stack position of the pull request the notes belong to: check it matches the checkout being worked in, " +
+        "because a stacked pull request's sibling is a different branch with different notes.",
       inputSchema: {
         repo: z.string().describe('Repository as "owner/name", e.g. "acme/atlas".'),
         branch: z.string().optional().describe("The working branch. Use this when the pull request number is unknown."),
         prNumber: z.number().int().positive().optional().describe("Pull request number, if known."),
-        includeAddressed: z.boolean().optional().describe("Also return questions already marked addressed. Defaults to false."),
-        includeResolved: z.boolean().optional().describe("Also return questions the reviewer has resolved. Defaults to false."),
+        includeAddressed: z.boolean().optional().describe("Also return notes already marked addressed. Defaults to false."),
+        includeResolved: z.boolean().optional().describe("Also return notes the reviewer has resolved. Defaults to false."),
       },
     },
     async ({ repo, branch, prNumber, includeAddressed, includeResolved }) => {
@@ -51,10 +51,10 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       const wanted = new Set(["open"]);
       if (includeAddressed === true) wanted.add("addressed");
       if (includeResolved === true) wanted.add("resolved");
-      const allQuestions = storage.listQuestions(repo, resolved);
-      const questionCounts: Record<"open" | "addressed" | "resolved", number> = { open: 0, addressed: 0, resolved: 0 };
-      for (const question of allQuestions) questionCounts[question.state] += 1;
-      const questions = allQuestions
+      const allNotes = storage.listNotes(repo, resolved);
+      const noteCounts: Record<"open" | "addressed" | "resolved", number> = { open: 0, addressed: 0, resolved: 0 };
+      for (const note of allNotes) noteCounts[note.state] += 1;
+      const notes = allNotes
         .filter((q) => wanted.has(q.state))
         .map((q) => ({
           id: q.id,
@@ -68,7 +68,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
             text: reply.text,
             createdAt: reply.createdAt,
           })),
-          ...(q.state === "open" ? {} : { commitRef: q.commitRef, note: q.note }),
+          ...(q.state === "open" ? {} : { commitRef: q.commitRef, summary: q.summary }),
           capturedAtSha: q.headSha,
           // The branch may have moved since the reviewer read it, in which case the line
           // number is the one they saw, not necessarily the one there now.
@@ -76,20 +76,20 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         }));
 
       const hiddenStates = (["addressed", "resolved"] as const)
-        .filter((state) => !wanted.has(state) && questionCounts[state] > 0);
+        .filter((state) => !wanted.has(state) && noteCounts[state] > 0);
       let message: string;
-      if (questions.length === 0 && hiddenStates.length > 0) {
+      if (notes.length === 0 && hiddenStates.length > 0) {
         const includeFlag = { addressed: "includeAddressed", resolved: "includeResolved" } as const;
-        const hiddenCount = hiddenStates.reduce((total, state) => total + questionCounts[state], 0);
+        const hiddenCount = hiddenStates.reduce((total, state) => total + noteCounts[state], 0);
         const hidden = hiddenStates
-          .map((state) => `${questionCounts[state]} ${state} question${questionCounts[state] === 1 ? "" : "s"}`)
+          .map((state) => `${noteCounts[state]} ${state} note${noteCounts[state] === 1 ? "" : "s"}`)
           .join(" and ");
         const flags = hiddenStates.map((state) => `${includeFlag[state]}: true`).join(" and ");
-        message = `No ${[...wanted].join(" or ")} questions returned. ${hidden} ${hiddenCount === 1 ? "is" : "are"} hidden; pass ${flags} to retrieve ${hiddenCount === 1 ? "it" : "them"}.`;
-      } else if (questions.length === 0 && allQuestions.length === 0) {
-        message = "No questions exist for this pull request.";
+        message = `No ${[...wanted].join(" or ")} notes returned. ${hidden} ${hiddenCount === 1 ? "is" : "are"} hidden; pass ${flags} to retrieve ${hiddenCount === 1 ? "it" : "them"}.`;
+      } else if (notes.length === 0 && allNotes.length === 0) {
+        message = "No notes exist for this pull request.";
       } else {
-        message = `Returned ${questions.length} of ${allQuestions.length} question${allQuestions.length === 1 ? "" : "s"} on this pull request.`;
+        message = `Returned ${notes.length} of ${allNotes.length} note${allNotes.length === 1 ? "" : "s"} on this pull request.`;
       }
 
       const payload = {
@@ -99,7 +99,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         branch: context?.headRef ?? null,
         title: context?.title ?? null,
         headSha: context?.headSha ?? null,
-        questionCounts,
+        noteCounts,
         message,
         stack: context?.stackSize == null || context.stackPosition == null
           ? null
@@ -107,22 +107,22 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
               position: context.stackPosition,
               size: context.stackSize,
               // Named so an agent that asked about its own branch can see where the rest
-              // of the reviewer's questions are, instead of guessing pull request numbers.
+              // of the reviewer's notes are, instead of guessing pull request numbers.
               members: members.map((m) => ({
                 prNumber: m.prNumber, branch: m.headRef, title: m.title,
-                position: m.position, openQuestions: m.openQuestions,
+                position: m.position, openNotes: m.openNotes,
               })),
             },
-        questions,
+        notes,
       };
 
       // A stacked pull request splits one piece of work across branches, and the reviewer
       // reads whichever branch holds the code. Saying nothing here is what sent an agent
       // hunting through pull request numbers by hand.
-      const elsewhere = members.filter((m) => m.prNumber !== resolved && m.openQuestions > 0);
-      const hint = questions.length === 0 && elsewhere.length > 0
-        ? `\n\nNo open questions on this pull request, but this stack has some on: ${
-            elsewhere.map((m) => `#${m.prNumber} (${m.headRef ?? "unknown branch"}, ${m.openQuestions} open)`).join(", ")
+      const elsewhere = members.filter((m) => m.prNumber !== resolved && m.openNotes > 0);
+      const hint = notes.length === 0 && elsewhere.length > 0
+        ? `\n\nNo open notes on this pull request, but this stack has some on: ${
+            elsewhere.map((m) => `#${m.prNumber} (${m.headRef ?? "unknown branch"}, ${m.openNotes} open)`).join(", ")
           }. Call this tool again with that prNumber to read them.`
         : "";
 
@@ -131,51 +131,51 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
   );
 
   server.registerTool(
-    "reply_to_question",
+    "reply_to_note",
     {
-      title: "Reply to a review question",
+      title: "Reply to a review note",
       description:
-        "Add an agent reply to a review question. Use this for clarification, reasoning, or a response that should remain with the review. " +
-        "Replying does not address or resolve the question and does not change its lifecycle state.",
+        "Add an agent reply to a review note. Use this for clarification, reasoning, or a response that should remain with the review. " +
+        "Replying does not address or resolve the note and does not change its lifecycle state.",
       inputSchema: {
-        id: z.number().int().positive().describe("Question id from get_review_questions."),
-        text: z.string().trim().min(1).describe("The reply to add to the question thread."),
+        id: z.number().int().positive().describe("Note id from get_review_notes."),
+        text: z.string().trim().min(1).describe("The reply to add to the note thread."),
       },
     },
     async ({ id, text }) => {
       const added = storage.addAgentReply(id, { text });
       if (added === null) {
         return {
-          content: [{ type: "text", text: `Question ${id} does not exist.` }],
+          content: [{ type: "text", text: `Note ${id} does not exist.` }],
           isError: true,
         };
       }
-      return { content: [{ type: "text", text: `Reply added to question ${id}. Its state was not changed.` }] };
+      return { content: [{ type: "text", text: `Reply added to note ${id}. Its state was not changed.` }] };
     },
   );
 
   server.registerTool(
-    "mark_question_addressed",
+    "mark_note_addressed",
     {
-      title: "Mark a review question addressed",
+      title: "Mark a review note addressed",
       description:
-        "Record that a question has been acted on. Use it only once the work is actually done and committed. " +
-        "This does not resolve the question — the reviewer resolves it by re-reviewing the file.",
+        "Record that a note has been acted on. Use it only once the work is actually done and committed. " +
+        "This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
       inputSchema: {
-        id: z.number().int().positive().describe("Question id from get_review_questions."),
+        id: z.number().int().positive().describe("Note id from get_review_notes."),
         commitRef: z.string().optional().describe("Commit that addressed it."),
-        note: z.string().optional().describe("One line on what changed."),
+        summary: z.string().optional().describe("One line on what changed."),
       },
     },
-    async ({ id, commitRef, note }) => {
-      const marked = storage.markQuestionAddressed(id, { commitRef: commitRef ?? null, note: note ?? null });
+    async ({ id, commitRef, summary }) => {
+      const marked = storage.markNoteAddressed(id, { commitRef: commitRef ?? null, summary: summary ?? null });
       if (marked === null) {
         return {
-          content: [{ type: "text", text: `Question ${id} is not open — it does not exist, or it was already addressed or resolved.` }],
+          content: [{ type: "text", text: `Note ${id} is not open — it does not exist, or it was already addressed or resolved.` }],
           isError: true,
         };
       }
-      return { content: [{ type: "text", text: `Question ${id} marked addressed.` }] };
+      return { content: [{ type: "text", text: `Note ${id} marked addressed.` }] };
     },
   );
 

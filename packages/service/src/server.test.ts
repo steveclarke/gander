@@ -89,10 +89,10 @@ describe("service API", () => {
     expect(res.statusCode).toBeLessThan(500);
   });
 
-  describe("questions", () => {
-    const url = "/api/reviews/acme%2Fatlas/7/questions";
+  describe("notes", () => {
+    const url = "/api/reviews/acme%2Fatlas/7/notes";
 
-    it("creates, lists, and deletes a question", async () => {
+    it("creates, lists, and deletes a note", async () => {
       const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: 3, text: "Why?", headSha: "sha-1" } });
       expect(created.statusCode).toBe(201);
       const id = created.json().id as number;
@@ -105,9 +105,9 @@ describe("service API", () => {
       expect((await server.inject({ method: "GET", url, headers: AUTH })).json()).toEqual([]);
     });
 
-    it("lists a resolved question with the agent's commit and note", async () => {
-      const question = storage.addQuestion("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
-      storage.markQuestionAddressed(question.id, { commitRef: "abc1234", note: "Dropped the retry" });
+    it("lists a resolved note with the agent's commit and note", async () => {
+      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+      storage.markNoteAddressed(note.id, { commitRef: "abc1234", summary: "Dropped the retry" });
       storage.putFileState("acme/atlas", 7, {
         checked: true, path: "a.rb", baseHash: "base", headHash: "head",
         baseContent: "before", headContent: "after", machine: "studio",
@@ -116,17 +116,17 @@ describe("service API", () => {
       const listed = await server.inject({ method: "GET", url, headers: AUTH });
       expect(listed.json()).toEqual([
         expect.objectContaining({
-          id: question.id, state: "resolved", commitRef: "abc1234", note: "Dropped the retry",
+          id: note.id, state: "resolved", commitRef: "abc1234", summary: "Dropped the retry",
         }),
       ]);
     });
 
-    it("rejects an empty question rather than storing a blank note", async () => {
+    it("rejects an empty note rather than storing a blank note", async () => {
       const res = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: null, text: "", headSha: null } });
       expect(res.statusCode).toBe(400);
     });
 
-    it("adds a reviewer reply to the question thread without changing its state", async () => {
+    it("adds a reviewer reply to the note thread without changing its state", async () => {
       const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: 3, text: "Why?", headSha: "sha-1" } });
       const id = created.json().id as number;
       const reply = await server.inject({
@@ -144,10 +144,10 @@ describe("service API", () => {
       const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: null, text: "Why?", headSha: null } });
       const id = created.json().id as number;
       expect((await server.inject({ method: "POST", url: `${url}/${id}/replies`, headers: AUTH, payload: { text: "   " } })).statusCode).toBe(400);
-      expect((await server.inject({ method: "POST", url: `/api/reviews/acme%2Fatlas/8/questions/${id}/replies`, headers: AUTH, payload: { text: "Wrong review" } })).statusCode).toBe(404);
+      expect((await server.inject({ method: "POST", url: `/api/reviews/acme%2Fatlas/8/notes/${id}/replies`, headers: AUTH, payload: { text: "Wrong review" } })).statusCode).toBe(404);
     });
 
-    it("404s on deleting a question that is not there", async () => {
+    it("404s on deleting a note that is not there", async () => {
       expect((await server.inject({ method: "DELETE", url: `${url}/999`, headers: AUTH })).statusCode).toBe(404);
     });
 

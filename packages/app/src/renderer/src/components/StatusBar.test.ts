@@ -52,7 +52,7 @@ describe("StatusBar", () => {
   it("makes cached offline reads and both version-skew policies visible", async () => {
     const mutableStore = reactive({
       ...store,
-      view: { pr: { number: 1 }, files: [], questions: [] },
+      view: { pr: { number: 1 }, files: [], notes: [] },
       serviceStatus: { state: "unreachable", reason: "connection refused" },
     }) as unknown as Store;
     const wrapper = mount(StatusBar, {

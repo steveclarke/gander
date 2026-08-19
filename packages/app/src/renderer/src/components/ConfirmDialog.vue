@@ -6,7 +6,7 @@ import { ref, watch } from "vue";
  *
  * Built on the native `<dialog>` rather than a floating div: it brings the focus trap,
  * the backdrop, Escape, and the top layer with it, and none of those are worth
- * reimplementing for a two-button question.
+ * reimplementing for a two-button note.
  */
 
 const props = defineProps<{
@@ -46,10 +46,6 @@ watch(() => props.open, (open) => {
 
 <style scoped>
 .confirm {
-  /* The browser centres a modal dialog with `margin: auto`, and theme.css resets margin
-     to 0 on every element — so without this the dialog sits in the top-left corner, over
-     the window controls. */
-  inset: 0; margin: auto;
   min-width: 340px; max-width: 460px; padding: 18px 20px 16px;
   border: 1px solid var(--workbench-border); border-radius: var(--radius-lg);
   background: var(--panel-background); color: var(--workbench-foreground);

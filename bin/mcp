@@ -55,8 +55,8 @@ Commands:
 Examples:
   bin/mcp check
   bin/mcp tools
-  bin/mcp call get_review_questions repo=steveclarke/gander branch=master
-  bin/mcp call get_review_questions --json '{"repo":"steveclarke/gander","prNumber":4}'
+  bin/mcp call get_review_notes repo=steveclarke/gander branch=master
+  bin/mcp call get_review_notes --json '{"repo":"steveclarke/gander","prNumber":4}'
   bin/mcp tui
   bin/mcp inspect
 
@@ -140,7 +140,7 @@ cmd_check() {
     const fs = require("node:fs");
     const payload = JSON.parse(fs.readFileSync(0, "utf8"));
     const names = (payload.result?.tools ?? []).map((tool) => tool.name).sort();
-    const required = ["get_review_questions", "mark_question_addressed"];
+    const required = ["get_review_notes", "mark_note_addressed"];
     const missing = required.filter((name) => !names.includes(name));
     if (missing.length > 0) {
       console.error("Missing core MCP tools: " + missing.join(", "));

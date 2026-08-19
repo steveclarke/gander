@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import type { Question } from "@gander/shared";
+import type { Note } from "@gander/shared";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import {
   Check,
@@ -13,42 +13,42 @@ import {
 } from "lucide-vue-next";
 
 const props = defineProps<{
-  question: Question;
+  note: Note;
   current: boolean;
   submitting: boolean;
   copied: boolean;
 }>();
 const emit = defineEmits<{
-  navigate: [question: Question];
-  reply: [questionId: number];
-  copy: [question: Question];
-  delete: [questionId: number];
+  navigate: [note: Note];
+  reply: [noteId: number];
+  copy: [note: Note];
+  delete: [noteId: number];
 }>();
 const draft = defineModel<string>({ default: "" });
 
-// Deleting a question is the only thing here that cannot be taken back: the text, the
+// Deleting a note is the only thing here that cannot be taken back: the text, the
 // line it was captured against, and any reasoning an agent replied with all go together.
 const confirmingDelete = shallowRef(false);
 
 const deleteDetail = computed(() => {
-  const replies = props.question.replies.length;
+  const replies = props.note.replies.length;
   const thread = replies === 0
-    ? "The question"
-    : `The question and ${replies === 1 ? "its reply" : `its ${replies} replies`}`;
+    ? "The note"
+    : `The note and ${replies === 1 ? "its reply" : `its ${replies} replies`}`;
   return `${thread} will be removed from the review. This cannot be undone.`;
 });
 
 // A keyed thread instance survives service refreshes, so a reviewer's disclosure
-// choice remains stable even when a reply replaces the Question object.
-const expanded = shallowRef(props.question.state === "open");
-const bodyId = computed(() => `question-body-${props.question.id}`);
-const titleId = computed(() => `question-title-${props.question.id}`);
-const replyCount = computed(() => props.question.replies.length);
+// choice remains stable even when a reply replaces the Note object.
+const expanded = shallowRef(props.note.state === "open");
+const bodyId = computed(() => `note-body-${props.note.id}`);
+const titleId = computed(() => `note-title-${props.note.id}`);
+const replyCount = computed(() => props.note.replies.length);
 const replyCountLabel = computed(() => `${replyCount.value} ${replyCount.value === 1 ? "reply" : "replies"}`);
 const location = computed(() => {
-  if (props.question.path === null) return "This pull request";
-  const name = props.question.path.split("/").pop() ?? props.question.path;
-  return props.question.line === null ? name : `${name}:${props.question.line}`;
+  if (props.note.path === null) return "This pull request";
+  const name = props.note.path.split("/").pop() ?? props.note.path;
+  return props.note.line === null ? name : `${name}:${props.note.line}`;
 });
 
 const timestamp = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -62,26 +62,26 @@ function formatTimestamp(value: string): string {
 <template>
   <li
     class="thread"
-    :class="[{ current }, `state-${question.state}`]"
-    :data-question-id="question.id"
+    :class="[{ current }, `state-${note.state}`]"
+    :data-note-id="note.id"
     :aria-labelledby="titleId"
   >
     <div class="thread-header">
       <div class="identity">
         <button
           class="location"
-          data-question-location
-          :disabled="question.path === null"
-          :title="question.path ?? undefined"
-          @click="emit('navigate', question)"
+          data-note-location
+          :disabled="note.path === null"
+          :title="note.path ?? undefined"
+          @click="emit('navigate', note)"
         >
           {{ location }}
         </button>
-        <span class="state" :class="question.state">
-          <CircleHelp v-if="question.state === 'open'" :size="12" aria-hidden="true" />
-          <Check v-else-if="question.state === 'addressed'" :size="12" aria-hidden="true" />
+        <span class="state" :class="note.state">
+          <CircleHelp v-if="note.state === 'open'" :size="12" aria-hidden="true" />
+          <Check v-else-if="note.state === 'addressed'" :size="12" aria-hidden="true" />
           <CheckCheck v-else :size="12" aria-hidden="true" />
-          {{ question.state }}
+          {{ note.state }}
         </span>
       </div>
       <button
@@ -89,10 +89,10 @@ function formatTimestamp(value: string): string {
         type="button"
         :aria-expanded="expanded"
         :aria-controls="bodyId"
-        :aria-label="`${expanded ? 'Collapse' : 'Expand'} question ${question.id}`"
+        :aria-label="`${expanded ? 'Collapse' : 'Expand'} note ${note.id}`"
         @click="expanded = !expanded"
       >
-        <span :id="titleId" class="preview">{{ question.text }}</span>
+        <span :id="titleId" class="preview">{{ note.text }}</span>
         <span class="reply-count">
           <MessageSquare :size="12" aria-hidden="true" />
           {{ replyCountLabel }}
@@ -101,27 +101,27 @@ function formatTimestamp(value: string): string {
       </button>
     </div>
 
-    <section v-show="expanded" :id="bodyId" class="thread-body" data-question-body>
-      <div class="question-message">
+    <section v-show="expanded" :id="bodyId" class="thread-body" data-note-body>
+      <div class="note-message">
         <div class="message-heading">
-          <h3>Question</h3>
-          <time :datetime="question.createdAt">{{ formatTimestamp(question.createdAt) }}</time>
+          <h3>Note</h3>
+          <time :datetime="note.createdAt">{{ formatTimestamp(note.createdAt) }}</time>
         </div>
-        <p class="message-text">{{ question.text }}</p>
+        <p class="message-text">{{ note.text }}</p>
       </div>
 
-      <section v-if="question.note || question.commitRef" class="agent-update" aria-label="Agent update">
+      <section v-if="note.summary || note.commitRef" class="agent-update" aria-label="Agent update">
         <div class="message-heading">
           <h3>Agent update</h3>
-          <code v-if="question.commitRef">{{ question.commitRef }}</code>
+          <code v-if="note.commitRef">{{ note.commitRef }}</code>
         </div>
-        <p v-if="question.note" class="message-text">{{ question.note }}</p>
+        <p v-if="note.summary" class="message-text">{{ note.summary }}</p>
       </section>
 
-      <section v-if="question.replies.length > 0" class="replies" aria-label="Replies">
+      <section v-if="note.replies.length > 0" class="replies" aria-label="Replies">
         <h3>Replies</h3>
         <ol>
-          <li v-for="reply in question.replies" :key="reply.id" class="reply">
+          <li v-for="reply in note.replies" :key="reply.id" class="reply">
             <div class="message-heading">
               <span class="author" :class="reply.author">
                 {{ reply.author === "reviewer" ? "Reviewer" : "Agent" }}
@@ -133,13 +133,13 @@ function formatTimestamp(value: string): string {
         </ol>
       </section>
 
-      <form class="reply-form" @submit.prevent="emit('reply', question.id)">
-        <label :for="`question-reply-${question.id}`">Reply</label>
+      <form class="reply-form" @submit.prevent="emit('reply', note.id)">
+        <label :for="`note-reply-${note.id}`">Reply</label>
         <input
-          :id="`question-reply-${question.id}`"
+          :id="`note-reply-${note.id}`"
           v-model="draft"
           data-app-typing="true"
-          :aria-label="`Reply to question ${question.id}`"
+          :aria-label="`Reply to note ${note.id}`"
           placeholder="Reply…"
           :disabled="submitting"
         />
@@ -148,8 +148,8 @@ function formatTimestamp(value: string): string {
       <div class="thread-actions">
         <button
           type="button"
-          :aria-label="`Copy question ${question.id} thread`"
-          @click="emit('copy', question)"
+          :aria-label="`Copy note ${note.id} thread`"
+          @click="emit('copy', note)"
         >
           <Copy :size="13" aria-hidden="true" />
           {{ copied ? "Copied" : "Copy thread" }}
@@ -157,7 +157,7 @@ function formatTimestamp(value: string): string {
         <button
           class="delete"
           type="button"
-          :aria-label="`Delete question ${question.id}`"
+          :aria-label="`Delete note ${note.id}`"
           @click="confirmingDelete = true"
         >
           <Trash2 :size="13" aria-hidden="true" />
@@ -167,11 +167,11 @@ function formatTimestamp(value: string): string {
 
       <ConfirmDialog
         :open="confirmingDelete"
-        :title="`Delete this question?`"
+        :title="`Delete this note?`"
         :detail="deleteDetail"
         confirm-label="Delete"
         @cancel="confirmingDelete = false"
-        @confirm="confirmingDelete = false; emit('delete', question.id)"
+        @confirm="confirmingDelete = false; emit('delete', note.id)"
       />
     </section>
   </li>
@@ -209,8 +209,8 @@ function formatTimestamp(value: string): string {
 .chevron { color: var(--faint-foreground); transition: transform 120ms ease; }
 .chevron.expanded { transform: rotate(180deg); }
 .thread-body { padding: 1px 10px 11px; }
-.question-message, .agent-update, .replies { min-width: 0; border-radius: var(--radius-md); }
-.question-message { padding: 9px 10px; background: var(--input-background); border: 1px solid var(--workbench-border); }
+.note-message, .agent-update, .replies { min-width: 0; border-radius: var(--radius-md); }
+.note-message { padding: 9px 10px; background: var(--input-background); border: 1px solid var(--workbench-border); }
 .agent-update, .replies { margin: 8px 0 0 12px; padding: 9px 10px; border-left: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .replies { border-left-color: var(--workbench-border); background: transparent; }
 .message-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
@@ -225,7 +225,7 @@ function formatTimestamp(value: string): string {
 .reply-form { margin-top: 9px; }
 .reply-form label { display: block; margin-bottom: 4px; color: var(--muted-foreground); font: 600 9.5px var(--mono); letter-spacing: .4px; text-transform: uppercase; }
 .reply-form input { width: 100%; background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-md); color: var(--workbench-foreground); font: inherit; font-size: 12px; padding: 6px 8px; }
-.reply-form input:focus { outline: none; border-color: var(--accent); }
+.reply-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 .reply-form input:disabled { color: var(--faint-foreground); }
 .thread-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
 .thread-actions button { display: inline-flex; align-items: center; gap: 5px; border: 0; padding: 2px 0; background: none; color: var(--muted-foreground); font: inherit; font-size: 10.5px; cursor: pointer; }

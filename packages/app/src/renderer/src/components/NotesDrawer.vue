@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed, reactive, shallowRef } from "vue";
-import type { Question } from "@gander/shared";
+import type { Note } from "@gander/shared";
 import { Copy, MessageSquare, PanelBottom, PanelRight, Plus, X } from "lucide-vue-next";
 import type { Store } from "../store.js";
 import { revealLine } from "../selection.js";
-import QuestionThread from "./QuestionThread.vue";
+import NoteThread from "./NoteThread.vue";
 
 const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
-const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addQuestion: [] }>();
+const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addNote: [] }>();
 
-const questions = computed(() => props.store.view?.questions ?? []);
+const notes = computed(() => props.store.view?.notes ?? []);
 const drafts = reactive<Record<number, string>>({});
 const submitting = reactive(new Set<number>());
-const copiedQuestionId = shallowRef<number | null>(null);
+const copiedNoteId = shallowRef<number | null>(null);
 const copiedAll = shallowRef(false);
 
 function goTo(q: { path: string | null; line: number | null }): void {
@@ -21,70 +21,70 @@ function goTo(q: { path: string | null; line: number | null }): void {
   if (q.line !== null) revealLine(q.line);
 }
 
-async function reply(questionId: number): Promise<void> {
-  const text = drafts[questionId]?.trim() ?? "";
-  if (!text || submitting.has(questionId)) return;
-  const before = questions.value.find((q) => q.id === questionId)?.replies.length ?? 0;
-  submitting.add(questionId);
+async function reply(noteId: number): Promise<void> {
+  const text = drafts[noteId]?.trim() ?? "";
+  if (!text || submitting.has(noteId)) return;
+  const before = notes.value.find((q) => q.id === noteId)?.replies.length ?? 0;
+  submitting.add(noteId);
   try {
-    await props.store.addReviewerReply(questionId, text);
-    const after = questions.value.find((q) => q.id === questionId)?.replies.length ?? 0;
-    if (after > before) drafts[questionId] = "";
+    await props.store.addReviewerReply(noteId, text);
+    const after = notes.value.find((q) => q.id === noteId)?.replies.length ?? 0;
+    if (after > before) drafts[noteId] = "";
   } finally {
-    submitting.delete(questionId);
+    submitting.delete(noteId);
   }
 }
 
-function questionMarkdown(question: Question): string {
-  const location = question.path === null
+function noteMarkdown(note: Note): string {
+  const location = note.path === null
     ? "Pull request"
-    : `${question.path}${question.line === null ? "" : `:${question.line}`}`;
+    : `${note.path}${note.line === null ? "" : `:${note.line}`}`;
   const parts = [
-    `### ${location} — ${question.state}`,
+    `### ${location} — ${note.state}`,
     "",
-    `Reviewer: ${question.text}`,
+    `Reviewer: ${note.text}`,
   ];
-  if (question.note || question.commitRef) {
-    const commit = question.commitRef ? ` (${question.commitRef})` : "";
-    parts.push("", `Agent update${commit}: ${question.note ?? "Addressed"}`);
+  if (note.summary || note.commitRef) {
+    const commit = note.commitRef ? ` (${note.commitRef})` : "";
+    parts.push("", `Agent update${commit}: ${note.summary ?? "Addressed"}`);
   }
-  for (const threadReply of question.replies) {
+  for (const threadReply of note.replies) {
     parts.push("", `${threadReply.author === "reviewer" ? "Reviewer" : "Agent"}: ${threadReply.text}`);
   }
   return parts.join("\n");
 }
 
-async function copyText(text: string, questionId: number | null): Promise<void> {
+async function copyText(text: string, noteId: number | null): Promise<void> {
   try {
     if (!navigator.clipboard) throw new Error("Clipboard access is unavailable");
     await navigator.clipboard.writeText(text);
-    copiedQuestionId.value = questionId;
-    copiedAll.value = questionId === null;
+    copiedNoteId.value = noteId;
+    copiedAll.value = noteId === null;
   } catch (error) {
     props.store.error = (error as Error).message;
   }
 }
 
-async function copyQuestion(question: Question): Promise<void> {
-  await copyText(questionMarkdown(question), question.id);
+async function copyNote(note: Note): Promise<void> {
+  await copyText(noteMarkdown(note), note.id);
 }
 
 async function copyAll(): Promise<void> {
-  await copyText(questions.value.map(questionMarkdown).join("\n\n"), null);
+  await copyText(notes.value.map(noteMarkdown).join("\n\n"), null);
 }
 </script>
 
 <template>
-  <aside class="drawer" aria-label="Questions">
+  <aside class="drawer" aria-label="Notes">
     <header>
       <MessageSquare :size="15" />
-      <h2 class="title">Questions</h2>
-      <span class="count">{{ questions.length }}</span>
+      <h2 class="title">Notes</h2>
+      <span class="count">{{ notes.length }}</span>
       <button
-        v-if="questions.length > 0"
+        v-if="notes.length > 0"
         class="copy-all"
-        aria-label="Copy all question threads"
-        title="Copy all question threads"
+        aria-label="Copy all note threads"
+        title="Copy all note threads"
         @click="copyAll"
       >
         <Copy :size="13" aria-hidden="true" />
@@ -92,54 +92,54 @@ async function copyAll(): Promise<void> {
       </button>
       <button
         class="add"
-        aria-label="Add question (N)"
-        title="Add question (N)"
-        @click="emit('addQuestion')"
+        aria-label="Add note (N)"
+        title="Add note (N)"
+        @click="emit('addNote')"
       >
         <Plus :size="14" aria-hidden="true" />
         <span>Add</span>
       </button>
       <button
         class="close dockbtn"
-        :aria-label="dock === 'right' ? 'Dock questions below the diff' : 'Dock questions beside the diff'"
+        :aria-label="dock === 'right' ? 'Dock notes below the diff' : 'Dock notes beside the diff'"
         :title="dock === 'right' ? 'Dock below the diff' : 'Dock beside the diff'"
         @click="$emit('dock', dock === 'right' ? 'bottom' : 'right')"
       >
         <component :is="dock === 'right' ? PanelBottom : PanelRight" :size="15" />
       </button>
-      <button class="close" aria-label="Close questions" title="Close questions" @click="$emit('close')">
+      <button class="close" aria-label="Close notes" title="Close notes" @click="$emit('close')">
         <X :size="15" />
       </button>
     </header>
 
-    <div v-if="questions.length === 0" class="empty">
-      <p>Capture a question about the selected file or line.</p>
-      <button type="button" @click="emit('addQuestion')">
+    <div v-if="notes.length === 0" class="empty">
+      <p>Capture a note about the selected file or line.</p>
+      <button type="button" @click="emit('addNote')">
         <Plus :size="14" aria-hidden="true" />
-        Add question <kbd>N</kbd>
+        Add note <kbd>N</kbd>
       </button>
     </div>
 
-    <ul v-else aria-label="Review questions">
-      <QuestionThread
-        v-for="question in questions"
-        :key="question.id"
-        v-model="drafts[question.id]"
-        :question="question"
-        :current="question.path === store.selectedPath"
-        :submitting="submitting.has(question.id)"
-        :copied="copiedQuestionId === question.id"
+    <ul v-else aria-label="Review notes">
+      <NoteThread
+        v-for="note in notes"
+        :key="note.id"
+        v-model="drafts[note.id]"
+        :note="note"
+        :current="note.path === store.selectedPath"
+        :submitting="submitting.has(note.id)"
+        :copied="copiedNoteId === note.id"
         @navigate="goTo"
         @reply="reply"
-        @copy="copyQuestion"
-        @delete="store.deleteQuestion"
+        @copy="copyNote"
+        @delete="store.deleteNote"
       />
     </ul>
   </aside>
 </template>
 
 <style scoped>
-.drawer { container: questions / inline-size; display: flex; flex-direction: column; background: var(--panel-background); border-left: 1px solid var(--workbench-border); overflow: hidden auto; }
+.drawer { container: notes / inline-size; display: flex; flex-direction: column; background: var(--panel-background); border-left: 1px solid var(--workbench-border); overflow: hidden auto; }
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--workbench-border); color: var(--muted-foreground); flex: none; }
 .title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
 .count { font: 11px var(--mono); background: var(--badge-background); border-radius: var(--radius-pill); padding: 1px 7px; }
@@ -170,7 +170,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; borde
 kbd { font: 11px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-sm); padding: 1px 5px; }
 
 ul { list-style: none; margin: 0; padding: 0; }
-@container questions (max-width: 330px) {
+@container notes (max-width: 330px) {
   .copy-all span, .add span { display: none; }
 }
 </style>

@@ -7,15 +7,25 @@ to this file, so Claude Code, Codex, and Gemini CLI all read the same text.
 
 A desktop app for reviewing code in the agentic era: agents write the code, the
 human reviews it. One window over every repo and pull request, a Monaco diff,
-hierarchical file checkoff, and a question pipeline that carries the reviewer's
-notes to coding agents over MCP.
+hierarchical file checkoff, and a note pipeline that carries the reviewer's
+remarks to coding agents over MCP.
 
 `docs/deploy.md` covers running the service on a host.
 
-The approved design spec is binding and is kept outside this repository — on the
-maintainer's machines at `~/src/backstage/gander/specs/`. Read it before changing
-behaviour. `docs/STATE.md` says where the project stands. Interface work and the
-agent reply channel are GitHub issues.
+**This repository is public, so everything specific to the maintainer's instance
+lives outside it**, on the maintainer's machines at `~/src/backstage/gander/`.
+Look there first for anything this repository does not answer — a host name, a
+credential reference, a release step, the binding design.
+
+| Path | Holds |
+|---|---|
+| `specs/` | The approved design spec. Binding. Read it before changing behaviour. |
+| `infrastructure.md` | This deployment: host, path, container, volume, URL, proxy and DNS, the 1Password reference for the token, and per-machine setup |
+| `releasing.md` | The release procedure and what the signing machine provides |
+| `plans/`, `briefs/`, `mockups/` | Implementation plans, briefs, and the reference mockup |
+
+`docs/STATE.md` says where the project stands. Interface work and the agent reply
+channel are GitHub issues.
 
 Settings are validated strictly, so a config written by an earlier version stops
 the app from starting. While the shape is still settling there are no migrations:
@@ -49,7 +59,7 @@ in code, comments, commits, or issues.
 | Typecheck (all packages) | `pnpm typecheck` |
 | Open a review in the running app | `bin/gander --repo owner/name [--pr 42]` |
 | Repair a config the settings schema has outgrown | `bin/fix-config` |
-| Update the service on its host | `bin/deploy` |
+| Update the service on its host | `bin/deploy` (host and path in `~/src/backstage/gander/infrastructure.md`) |
 | Re-record the contract after changing it | `bin/contract-snapshot` |
 | Build an unsigned app | `pnpm --filter @gander/app run dist:unsigned` |
 | Isolated working copy | `bin/worktree add <name>` |
@@ -64,7 +74,7 @@ its port and token from the generated `.env`. `DEVSTACK.md` covers the stack,
 worktrees, and MCP registration.
 
 When Steve asks to open the current PR in Gander, dogfood a change, or respond
-to Gander review questions, read
+to Gander review notes, read
 `.agents/skills/review-with-gander/SKILL.md` and follow it. Use the CLI bridge
 from the current worktree; do not register its MCP endpoint globally or reuse
 another worktree's port, token, config, database, or process.
@@ -86,7 +96,7 @@ Three packages in a pnpm workspace, ESM-only, TypeScript strict with
 | Package | Owns |
 |---|---|
 | `@gander/shared` | Domain types as Zod schemas; both other packages validate against them |
-| `@gander/service` | Fastify + better-sqlite3. Everything the *reviewer authors*: checkoffs, snapshot content, questions, PR context. Bearer auth. Hosts `/mcp`. |
+| `@gander/service` | Fastify + better-sqlite3. Everything the *reviewer authors*: checkoffs, snapshot content, notes, PR context. Bearer auth. Hosts `/mcp`. |
 | `@gander/app` | Electron main (git, GitHub, review orchestration) + Vue renderer. Everything *derived* from repos: clones, diffs, rendering. Read-only cache of review state. |
 
 The service is the single source of truth for authored state; cross-machine
@@ -107,12 +117,12 @@ marker, and the snapshot becomes the base for the delta diff. An un-check
 deliberately *retains* the snapshot — absence of a snapshot means "never
 reviewed", not "unchanged".
 
-**Question lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
-over MCP, with optional commit ref and note) → `resolved` (reviewer re-checks
+**Note lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
+over MCP, with optional commit ref and summary) → `resolved` (reviewer re-checks
 the file). Resolution is always the reviewer's act; no MCP tool may resolve
 anything. Replies form a thread without changing that lifecycle. The MCP
-contract is deliberately three tools — `get_review_questions`,
-`reply_to_question`, and `mark_question_addressed`. Agents have `git` and `gh`
+contract is deliberately three tools — `get_review_notes`,
+`reply_to_note`, and `mark_note_addressed`. Agents have `git` and `gh`
 for code; this contract carries only the review conversation. Keep it small.
 
 `GANDER_SERVICE_URL` and `GANDER_TOKEN` override the config file at *connection*

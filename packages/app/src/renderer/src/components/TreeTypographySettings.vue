@@ -108,13 +108,13 @@ onBeforeUnmount(flushSave);
 </script>
 
 <template>
-  <section class="tree-typography" aria-labelledby="tree-typography-title">
-    <div class="section-heading">
+  <section class="settings-section tree-typography" aria-labelledby="tree-typography-title">
+    <div class="settings-section-heading">
       <div>
-        <h3 id="tree-typography-title">File tree typography</h3>
-        <p>Controls filenames and folders in the review tree.</p>
+        <h3 id="tree-typography-title" class="settings-section-title">File tree typography</h3>
+        <p class="settings-description">Controls filenames and folders in the review tree.</p>
       </div>
-      <button class="reset" type="button" :disabled="store.busy" @click="reset">Use default</button>
+      <button class="settings-reset" type="button" :disabled="store.busy" @click="reset">Use default</button>
     </div>
 
     <label class="inherit-setting">
@@ -127,15 +127,16 @@ onBeforeUnmount(flushSave);
       />
       <span>
         Inherit editor typography
-        <small>Use <code>editor.fontFamily</code> and <code>editor.fontSize</code> for the tree.</small>
+        <small>Use <code class="settings-code">editor.fontFamily</code> and <code class="settings-code">editor.fontSize</code> for the tree.</small>
       </span>
     </label>
 
-    <div class="setting">
-      <label for="tree-font-family">Font family</label>
-      <p>Controls <code>workbench.tree.fontFamily</code> when inheritance is off.</p>
+    <div class="settings-field">
+      <label class="settings-label" for="tree-font-family">Font family</label>
+      <p class="settings-description">Controls <code class="settings-code">workbench.tree.fontFamily</code> when inheritance is off.</p>
       <input
         id="tree-font-family"
+        class="settings-control settings-text-control"
         v-model="fontFamily"
         name="workbench.tree.fontFamily"
         spellcheck="false"
@@ -146,12 +147,13 @@ onBeforeUnmount(flushSave);
       />
     </div>
 
-    <div class="setting">
-      <label for="tree-font-size">Font size</label>
-      <p>Controls <code>workbench.tree.fontSize</code> in pixels when inheritance is off.</p>
+    <div class="settings-field">
+      <label class="settings-label" for="tree-font-size">Font size</label>
+      <p class="settings-description">Controls <code class="settings-code">workbench.tree.fontSize</code> in pixels when inheritance is off.</p>
       <div class="size-row">
         <input
           id="tree-font-size"
+          class="settings-control settings-text-control"
           v-model.number="fontSize"
           name="workbench.tree.fontSize"
           type="number"
@@ -166,42 +168,26 @@ onBeforeUnmount(flushSave);
       </div>
     </div>
 
-    <div class="setting preview-setting">
-      <p id="tree-preview-label" class="setting-label">Preview</p>
+    <div class="settings-field preview-setting">
+      <p id="tree-preview-label" class="settings-label">Preview</p>
       <div class="preview" aria-labelledby="tree-preview-label" :style="previewStyle">
         <span>src</span><span>components</span><span>FileTree.vue</span>
       </div>
     </div>
 
-    <p v-if="localError" class="error" role="alert">{{ localError }}</p>
+    <p v-if="localError" class="settings-error" role="alert">{{ localError }}</p>
   </section>
 </template>
 
+<style scoped src="../styles/settings.css"></style>
+
 <style scoped>
-.tree-typography { max-width: 820px; margin-top: 34px; padding-top: 28px; border-top: 1px solid var(--workbench-border); }
-.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
-.section-heading h3 { color: var(--workbench-foreground); font-size: 15px; line-height: 1.3; }
-.section-heading p, .setting > p { color: var(--faint-foreground); font-size: 12px; }
-.reset { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; white-space: nowrap; }
-.reset:disabled { cursor: default; opacity: .55; }
-.reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .inherit-setting { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 24px; color: var(--workbench-foreground); font-size: 13px; cursor: pointer; }
 .inherit-setting input { margin-top: 2px; accent-color: var(--accent); }
 .inherit-setting small { display: block; margin-top: 2px; color: var(--faint-foreground); font-size: 12px; }
-.tree-typography code { color: var(--muted-foreground); font: 11.5px var(--mono); }
-.setting { margin-bottom: 22px; }
-.setting label, .setting-label { display: block; color: var(--workbench-foreground); font-size: 13px; font-weight: 650; margin-bottom: 2px; }
-.setting > input, .size-row input {
-  width: 100%; min-width: 0; margin-top: 8px; padding: 8px 10px;
-  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
-  outline: none; background: var(--input-background); color: var(--workbench-foreground); font: 13px/1.4 var(--mono);
-}
-.setting input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
-.setting input:disabled { opacity: .65; }
 .size-row { display: flex; align-items: center; gap: 8px; width: 130px; color: var(--faint-foreground); }
 .preview-setting { margin-top: 28px; }
 .preview { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; margin-top: 8px; padding: 12px 14px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--input-background); color: var(--workbench-foreground); white-space: nowrap; }
 .preview span:nth-child(2) { padding-left: 16px; }
 .preview span:nth-child(3) { padding-left: 32px; }
-.error { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
 </style>

@@ -41,20 +41,20 @@ bin/dev
 
 See `DEVSTACK.md`. Config and review state are repo-local, under `.gander/`.
 
-## Questions
+## Notes
 
 Reviewing while an agent works elsewhere in the repository is what the app is
-for, so questions came in immediately after M1 rather than waiting for a
+for, so notes came in immediately after M1 rather than waiting for a
 milestone boundary.
 
-Pressing `n` over a file captures a question against it, stamped with the line
-being read. Questions carry three states: `open` when captured, `addressed` when
+Pressing `n` over a file captures a note against it, stamped with the line
+being read. Notes carry three states: `open` when captured, `addressed` when
 an agent has acted on one, and `resolved` when the reviewer re-checks the file.
 Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`
 for registration.
 
-Questions also carry reply threads. Reviewer and agent replies remain attached
-to the question and do not change its lifecycle state; agents add replies with
+Notes also carry reply threads. Reviewer and agent replies remain attached
+to the note and do not change its lifecycle state; agents add replies with
 the dedicated MCP reply tool.
 
 Each opened pull request records its own branch, which is how the service maps an
@@ -84,7 +84,7 @@ from the default-branch merge base through the current working tree;
 untracked files are included unless ignored by Git.
 
 Local views are read-only and machine-local. They do not expose or persist checkoffs,
-snapshots, changed-since state, or questions. One bounded poller follows the selected
+snapshots, changed-since state, or notes. One bounded poller follows the selected
 worktree's files, index, HEAD, and refs and refreshes both the diff and Explorer
 when derived content changes.
 

@@ -7,14 +7,14 @@ import { codeEditorOptions, diffEditorOptions, editorFontOptions } from "../edit
 import type { Store } from "../store.js";
 import type { EditorSettings } from "../../../settings.js";
 import { currentLine, pendingReveal } from "../selection.js";
-import type { QuestionTarget } from "../selection.js";
+import type { NoteTarget } from "../selection.js";
 import { Check, FileClock, FileDiff, FileText, TriangleAlert } from "lucide-vue-next";
 import ImageDiff from "./ImageDiff.vue";
 import type { ImagePreview } from "../../../api.js";
 import type { PrFile } from "@gander/shared";
 
 const props = defineProps<{ store: Store; editorSettings: EditorSettings }>();
-const emit = defineEmits<{ addQuestion: [target: QuestionTarget] }>();
+const emit = defineEmits<{ addNote: [target: NoteTarget] }>();
 const host = ref<HTMLElement | null>(null);
 const view = ref<"diff" | "full" | "since">("diff");
 
@@ -93,8 +93,8 @@ function showLineAction(ed: monaco.editor.ICodeEditor, line: number): void {
   lineAction.hidden = false;
   lineAction.style.top = `${position.top + Math.max(0, (position.height - 18) / 2)}px`;
   lineAction.style.left = `${ed.getLayoutInfo().glyphMarginLeft + 2}px`;
-  lineAction.setAttribute("aria-label", `Add question on line ${line} (N)`);
-  lineAction.title = `Add question on line ${line} (N)`;
+  lineAction.setAttribute("aria-label", `Add note on line ${line} (N)`);
+  lineAction.title = `Add note on line ${line} (N)`;
 }
 
 function installLineAction(ed: monaco.editor.ICodeEditor): void {
@@ -102,11 +102,11 @@ function installLineAction(ed: monaco.editor.ICodeEditor): void {
   if (!dom) return;
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "gander-line-question";
+  button.className = "gander-line-note";
   button.textContent = "+";
   button.addEventListener("click", () => {
     const path = current.value?.path;
-    if (path && lineActionLine !== null) emit("addQuestion", { path, line: lineActionLine });
+    if (path && lineActionLine !== null) emit("addNote", { path, line: lineActionLine });
   });
   dom.append(button);
   lineAction = button;
@@ -129,7 +129,7 @@ function dispose(): void {
   lineAction = null;
   lineActionLine = null;
   // A line number from a file that is no longer on screen would stamp the next
-  // question with a line the reader never looked at.
+  // note with a line the reader never looked at.
   currentLine.value = null;
   for (const model of models) model.dispose();
   models = [];
@@ -229,7 +229,7 @@ onMounted(() => {
 // flush: "post" — the binary/text split below is a v-if/v-else, so the `host` element is
 // created or destroyed by that same content change. The default pre-flush timing would run
 // render() before Vue patches the DOM, handing it a stale or absent host element.
-/** Jump to a line the reader picked in the questions drawer, unfolding it if it is hidden. */
+/** Jump to a line the reader picked in the notes drawer, unfolding it if it is hidden. */
 function reveal(): void {
   const line = pendingReveal.value;
   const ed = headEditor();
@@ -415,7 +415,7 @@ onBeforeUnmount(dispose);
   color: var(--faint-foreground);
   font-size: 13px;
 }
-:deep(.gander-line-question) {
+:deep(.gander-line-note) {
   position: absolute;
   z-index: 10;
   width: 18px;
@@ -431,11 +431,11 @@ onBeforeUnmount(dispose);
   font: 700 16px/1 var(--mono);
   cursor: pointer;
 }
-:deep(.gander-line-question:hover) {
+:deep(.gander-line-note:hover) {
   border-color: var(--accent);
   color: var(--accent);
 }
-:deep(.gander-line-question:focus-visible) {
+:deep(.gander-line-note:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
