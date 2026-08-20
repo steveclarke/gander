@@ -59,8 +59,24 @@ test("lets the reviewer edit a note and change its status", async ({ world }) =>
     await note.getByRole("button", { name: "Save" }).click();
     await expect(note).toContainText("Updated wording");
 
-    await note.getByRole("combobox", { name: "Status for note" }).selectOption("resolved");
-    await expect(note.getByRole("combobox", { name: "Status for note" })).toHaveValue("resolved");
+    const status = note.getByRole("combobox", { name: "Status for note" });
+    await status.focus();
+    const statusStyle = await status.evaluate((control) => {
+      const pill = control.closest("label");
+      if (!pill) throw new Error("status control is missing its pill");
+      const controlStyle = getComputedStyle(control);
+      const pillStyle = getComputedStyle(pill);
+      return {
+        height: pill.getBoundingClientRect().height,
+        controlOutline: controlStyle.outlineStyle,
+        pillOutline: pillStyle.outlineStyle,
+        textTransform: controlStyle.textTransform,
+      };
+    });
+    expect(statusStyle).toMatchObject({ controlOutline: "none", pillOutline: "solid", textTransform: "none" });
+    expect(statusStyle.height).toBeGreaterThanOrEqual(22);
+    await status.selectOption("resolved");
+    await expect(status).toHaveValue("resolved");
 
     const saved = await agent.notes(repository.repoId, "feature");
     expect(saved.noteCounts).toEqual({ open: 0, addressed: 0, resolved: 1 });

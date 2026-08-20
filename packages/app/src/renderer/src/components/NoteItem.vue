@@ -221,16 +221,17 @@ async function changeStatus(event: Event): Promise<void> {
 .location:disabled { color: var(--faint-foreground); cursor: default; }
 .state {
   display: inline-flex; align-items: center; gap: 3px; flex: none;
-  border: 1px solid var(--workbench-border); border-radius: var(--radius-pill); padding: 1px 5px;
-  color: var(--faint-foreground); font: 600 9px var(--mono); letter-spacing: .35px; text-transform: uppercase;
+  min-height: 22px; border: 1px solid var(--workbench-border); border-radius: var(--radius-pill); padding: 0 7px;
+  color: var(--faint-foreground); font-size: 11px; font-weight: 600;
 }
 .status-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .state select {
-  appearance: none; border: 0; padding: 0; background: transparent; color: inherit;
-  font: inherit; letter-spacing: inherit; text-transform: uppercase; cursor: pointer;
+  appearance: none; border: 0; outline: 0; padding: 0; background: transparent; color: inherit;
+  font: inherit; letter-spacing: normal; text-transform: none; cursor: pointer;
 }
 .state select:disabled { cursor: wait; opacity: .65; }
 .status-chevron { margin-left: -2px; pointer-events: none; }
+.state:focus-within { outline: 1px solid var(--accent); outline-offset: 1px; }
 .state.open { color: var(--accent); }
 .state.addressed { color: var(--warning); }
 .state.resolved { color: var(--success); }
@@ -265,7 +266,7 @@ async function changeStatus(event: Event): Promise<void> {
 .note-actions button { display: inline-flex; align-items: center; gap: 5px; border: 0; padding: 2px 0; background: none; color: var(--muted-foreground); font: inherit; font-size: 10.5px; cursor: pointer; }
 .note-actions .delete { margin-left: auto; color: var(--faint-foreground); }
 .note-actions .delete:hover { color: var(--danger); }
-.location:focus-visible, .state select:focus-visible, .disclosure:focus-visible, .edit-form textarea:focus-visible, .edit-actions button:focus-visible, .note-actions button:focus-visible {
+.location:focus-visible, .disclosure:focus-visible, .edit-form textarea:focus-visible, .edit-actions button:focus-visible, .note-actions button:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) { .chevron { transition: none; } }
