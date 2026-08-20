@@ -143,6 +143,55 @@ describe("NotesDrawer", () => {
     expect(wrapper.get("[data-note-id='4'] [aria-label='Waiting on reviewer']").text()).toContain("Choose whether this should retry.");
   });
 
+  it("filters note groups by lifecycle status while keeping both in-progress groups", async () => {
+    const inProgress = {
+      ...notes[0]!,
+      id: 3,
+      state: "in_progress" as const,
+      inProgressNote: null,
+    };
+    const waiting = {
+      ...notes[0]!,
+      id: 4,
+      state: "in_progress" as const,
+      inProgressNote: "Choose whether this should retry.",
+    };
+    const resolved = { ...notes[0]!, id: 5, state: "resolved" as const };
+    const wrapper = mount(NotesDrawer, {
+      props: { store: store([...notes, inProgress, waiting, resolved]), dock: "right" },
+    });
+    const filter = wrapper.get("select[aria-label='Filter notes by status']");
+
+    expect(filter.findAll("option").map((option) => option.text())).toEqual([
+      "All statuses (5)",
+      "Open (1)",
+      "In progress (2)",
+      "Addressed (1)",
+      "Resolved (1)",
+    ]);
+
+    await filter.setValue("in_progress");
+    expect(wrapper.findAll("[data-note-id]").map((note) => note.attributes("data-note-id"))).toEqual(["3", "4"]);
+    expect(wrapper.findAll(".group-heading").map((heading) => heading.text())).toEqual([
+      "In progress 1",
+      "Waiting on you 1",
+    ]);
+
+    await filter.setValue("resolved");
+    expect(wrapper.findAll("[data-note-id]").map((note) => note.attributes("data-note-id"))).toEqual(["5"]);
+    expect(wrapper.get(".group-heading").text()).toBe("Resolved 1");
+  });
+
+  it("keeps the toolbar available when a status has no notes", async () => {
+    const wrapper = mount(NotesDrawer, { props: { store: store(notes), dock: "right" } });
+    await wrapper.get("select[aria-label='Filter notes by status']").setValue("resolved");
+
+    expect(wrapper.get(".filtered-empty").text()).toContain("No notes have this status.");
+    await wrapper.get(".filtered-empty button").trigger("click");
+    expect((wrapper.get("select[aria-label='Filter notes by status']").element as HTMLSelectElement).value).toBe("all");
+    expect(wrapper.findAll("[data-note-id]")).toHaveLength(2);
+  });
+
   it("keeps a note expanded while its state moves between groups", async () => {
     const wrapper = mount(NotesDrawer, { props: { store: store([notes[0]!]), dock: "right" } });
     expect(wrapper.get("[data-note-id='1'] button[aria-expanded]").attributes("aria-expanded")).toBe("true");
