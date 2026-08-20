@@ -1,0 +1,49 @@
+name: Publish the Homebrew cask
+
+# bin/release renders the cask against the dmg it just signed and attaches it to the
+# release, so the tap only needs the file moved. Publishing here rather than by hand
+# keeps `brew upgrade` from lagging a release nobody remembered to copy across.
+on:
+  release:
+    types: [published]
+  # So a release whose publish failed, or one made before this workflow existed, can be
+  # given another one without re-tagging.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag whose cask to publish
+        required: true
+
+jobs:
+  cask:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Take the cask from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: gh release download "$TAG" --repo "${{ github.repository }}" --pattern gander.rb --dir cask
+
+      - name: Check out the tap
+        uses: actions/checkout@v5
+        with:
+          repository: steveclarke/homebrew-tap
+          # The default token cannot reach another repository.
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Publish it
+        env:
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        working-directory: tap
+        run: |
+          cp ../cask/gander.rb Casks/gander.rb
+          # A re-run of an already published release is a no-op, not a failed job.
+          if git diff --quiet -- Casks/gander.rb; then
+            echo "Casks/gander.rb already describes $TAG."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "gander $TAG" -- Casks/gander.rb
+          git push
