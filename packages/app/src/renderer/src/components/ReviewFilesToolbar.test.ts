@@ -19,8 +19,30 @@ describe("ReviewFilesToolbar", () => {
       ["Collapse fully reviewed folders", "collapseReviewed"],
       ["Show unreviewed files only", "toggleRemaining"],
     ] as const) {
-      const button = wrapper.get(`button[aria-label="${label}"]`);
+      const button = wrapper.get(`.toolbar-action[aria-label="${label}"]`);
       expect(button.text()).toBe("");
+      await button.trigger("click");
+      expect(wrapper.emitted(event)).toHaveLength(1);
+    }
+  });
+
+  it("offers folder actions from the compact overflow menu", async () => {
+    const wrapper = mount(ReviewFilesToolbar, {
+      props: {
+        remainingOnly: false,
+        hasDirectories: true,
+        hasFullyReviewedDirectories: true,
+        allDirectoriesCollapsed: false,
+      },
+    });
+
+    expect(wrapper.get('[aria-label="More review file actions"]').text()).toBe("");
+    for (const [label, event] of [
+      ["Collapse fully reviewed folders", "collapseReviewed"],
+      ["Collapse all folders", "toggleAll"],
+    ] as const) {
+      const button = wrapper.get(`.actions-menu [aria-label="${label}"]`);
+      expect(button.text()).toContain(label);
       await button.trigger("click");
       expect(wrapper.emitted(event)).toHaveLength(1);
     }
@@ -37,7 +59,8 @@ describe("ReviewFilesToolbar", () => {
     });
 
     expect(wrapper.get('[aria-label="Show unreviewed files only"]').attributes("aria-pressed")).toBe("true");
-    expect(wrapper.findAll("button:disabled")).toHaveLength(2);
+    expect(wrapper.findAll('[aria-label="Collapse fully reviewed folders"]:disabled')).toHaveLength(2);
+    expect(wrapper.findAll('[aria-label="Collapse all folders"]:disabled')).toHaveLength(2);
   });
 
   it("becomes an expand-all action when every folder is collapsed", async () => {
