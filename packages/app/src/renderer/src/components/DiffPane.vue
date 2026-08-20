@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import * as monaco from "monaco-editor";
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, onMounted, ref, shallowRef, watch } from "vue";
 import { languageForPath } from "../languages.js";
-import { setupMonacoWorkers } from "../monaco.js";
-import { codeEditorOptions, diffEditorOptions, editorFontOptions } from "../editor-options.js";
+import { basename, directoryPrefix } from "../paths.js";
+import { codeEditorOptions, diffEditorOptions } from "../editor-options.js";
+import { useMonacoSurface } from "../composables/use-monaco-surface.js";
 import type { Store } from "../store.js";
 import type { EditorSettings } from "../../../settings.js";
 import { currentLine, pendingReveal } from "../selection.js";
@@ -55,12 +56,8 @@ const currentReviewFile = computed(() => {
   return file && "checked" in file ? file as PrFile : null;
 });
 
-const dirName = computed(() => {
-  const parts = current.value?.path.split("/") ?? [];
-  parts.pop();
-  return parts.length ? `${parts.join("/")}/` : "";
-});
-const baseName = computed(() => current.value?.path.split("/").pop() ?? "");
+const dirName = computed(() => current.value === null ? "" : directoryPrefix(current.value.path));
+const baseName = computed(() => current.value === null ? "" : basename(current.value.path));
 // The branch the pull request targets — "master" as often as "main".
 const baseRef = computed(() => props.store.localView?.defaultBranch ?? props.store.view?.pr.baseRef ?? "the base branch");
 const headLabel = computed(() => props.store.localView ? "Working tree" : "Head");
@@ -234,10 +231,8 @@ watch(imageKey, async (key) => {
   }
 }, { immediate: true });
 
-onMounted(() => {
-  setupMonacoWorkers();
-  render();
-});
+useMonacoSurface({ settings: () => props.editorSettings, editor: () => editor, dispose });
+onMounted(render);
 // flush: "post" — the binary/text split below is a v-if/v-else, so the `host` element is
 // created or destroyed by that same content change. The default pre-flush timing would run
 // render() before Vue patches the DOM, handing it a stale or absent host element.
@@ -253,14 +248,9 @@ function reveal(): void {
 }
 
 watch(renderKey, render, { flush: "post" });
-watch(
-  () => [props.editorSettings.fontFamily, props.editorSettings.fontSize] as const,
-  () => editor?.updateOptions(editorFontOptions(props.editorSettings)),
-);
 // A jump into the file already on screen needs no rebuild; render() handles the case
 // where the drawer also switched files, by calling reveal() once the editor exists.
 watch(pendingReveal, (line) => { if (line !== null) reveal(); }, { flush: "post" });
-onBeforeUnmount(dispose);
 </script>
 
 <template>

@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { onBeforeUnmount, shallowRef, watch } from "vue";
+import { shallowRef, watch } from "vue";
 import type { EditorSettingsStore } from "../editor-settings-store.js";
 import { DEFAULT_APP_SETTINGS } from "../../../settings.js";
 import { ZOOM_LEVEL_MAX, ZOOM_LEVEL_MIN, zoomPercentage } from "../../../zoom.js";
+import { useDebouncedSave } from "../composables/use-debounced-save.js";
+import SettingsField from "./SettingsField.vue";
 
 const props = defineProps<{ store: EditorSettingsStore }>();
 const emit = defineEmits<{ saved: [success: boolean] }>();
 
 const zoomLevel = shallowRef<number | string>(props.store.settings.window.zoomLevel);
 const localError = shallowRef<string | null>(null);
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(
   () => props.store.settings.window.zoomLevel,
@@ -29,24 +30,10 @@ async function save(): Promise<void> {
   }));
 }
 
-function scheduleSave(): void {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    void save();
-  }, 400);
-}
-
-function flushSave(): void {
-  if (!saveTimer) return;
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  void save();
-}
+const autoSave = useDebouncedSave(save);
 
 async function reset(): Promise<void> {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = null;
+  autoSave.cancel();
   zoomLevel.value = DEFAULT_APP_SETTINGS.window.zoomLevel;
   localError.value = null;
   emit("saved", await props.store.update({
@@ -54,8 +41,6 @@ async function reset(): Promise<void> {
     window: DEFAULT_APP_SETTINGS.window,
   }));
 }
-
-onBeforeUnmount(flushSave);
 </script>
 
 <template>
@@ -68,38 +53,30 @@ onBeforeUnmount(flushSave);
       <button class="settings-reset" type="button" :disabled="store.busy" @click="reset">Use default</button>
     </div>
 
-    <div class="settings-field">
-      <label class="settings-label" for="window-zoom-level">Zoom level</label>
-      <p class="settings-description">
+    <SettingsField
+      id="window-zoom-level"
+      name="window.zoomLevel"
+      label="Zoom level"
+      type="number"
+      :min="ZOOM_LEVEL_MIN"
+      :max="ZOOM_LEVEL_MAX"
+      step="0.1"
+      :model-value="zoomLevel"
+      :disabled="store.busy"
+      described-by="window-zoom-percentage"
+      :unit-width="150"
+      @update:model-value="zoomLevel = $event; autoSave.schedule()"
+      @change="autoSave.flush"
+    >
+      <template #description>
         Controls <code class="settings-code">window.zoomLevel</code>. Each whole step changes the scale by 20%;
         decimals give finer control.
-      </p>
-      <div class="level-row">
-        <input
-          id="window-zoom-level"
-          class="settings-control settings-text-control"
-          v-model.number="zoomLevel"
-          name="window.zoomLevel"
-          type="number"
-          :min="ZOOM_LEVEL_MIN"
-          :max="ZOOM_LEVEL_MAX"
-          step="0.1"
-          :disabled="store.busy"
-          aria-describedby="window-zoom-percentage"
-          @input="scheduleSave"
-          @change="flushSave"
-        />
+      </template>
+      <template #unit>
         <span id="window-zoom-percentage">{{ zoomPercentage(Number(zoomLevel) || 0) }}%</span>
-      </div>
-    </div>
+      </template>
+    </SettingsField>
 
     <p v-if="localError" class="settings-error" role="alert">{{ localError }}</p>
   </section>
 </template>
-
-<style scoped src="../styles/settings.css"></style>
-
-<style scoped>
-.level-row { display: flex; align-items: center; gap: 9px; width: 150px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-.level-row span { margin-top: 8px; }
-</style>

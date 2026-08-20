@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import * as monaco from "monaco-editor";
-import { onBeforeUnmount, onMounted, useTemplateRef, watch } from "vue";
+import { onMounted, useTemplateRef, watch } from "vue";
 import type { EditorSettings } from "../../../settings.js";
 import { editorFontOptions } from "../editor-options.js";
-import { setupMonacoWorkers } from "../monaco.js";
+import { useMonacoSurface } from "../composables/use-monaco-surface.js";
 
 const props = defineProps<{ modelValue: string; editorSettings: EditorSettings }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
@@ -13,9 +13,17 @@ let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 let model: monaco.editor.ITextModel | null = null;
 let settingFromParent = false;
 
+function dispose(): void {
+  editor?.dispose();
+  model?.dispose();
+  editor = null;
+  model = null;
+}
+
+useMonacoSurface({ settings: () => props.editorSettings, editor: () => editor, dispose });
+
 onMounted(() => {
   if (!host.value) return;
-  setupMonacoWorkers();
   model = monaco.editor.createModel(
     props.modelValue,
     "json",
@@ -45,16 +53,6 @@ watch(
     settingFromParent = false;
   },
 );
-
-watch(
-  () => [props.editorSettings.fontFamily, props.editorSettings.fontSize] as const,
-  () => editor?.updateOptions(editorFontOptions(props.editorSettings)),
-);
-
-onBeforeUnmount(() => {
-  editor?.dispose();
-  model?.dispose();
-});
 </script>
 
 <template>

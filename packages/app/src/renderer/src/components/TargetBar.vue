@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { ChevronDown, FolderGit2, FolderOpen, FolderPlus, GitBranch, GitPullRequest, Trash2 } from "@lucide/vue";
 import type { Store } from "../store.js";
+import { basename } from "../paths.js";
+import { useDismissable } from "../composables/use-dismissable.js";
 
 const props = defineProps<{ store: Store; integratedTitleBar: boolean }>();
 const emit = defineEmits<{
@@ -17,7 +19,7 @@ const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 const selectedRepo = computed(() => props.store.repos.find((repo) => repo.repoId === props.store.targetRepoId) ?? null);
 const selectedWorktree = computed(() => props.store.worktrees.find((worktree) => worktree.path === props.store.targetWorktreePath) ?? null);
-const repoName = computed(() => selectedRepo.value?.repoId.split("/").at(-1) ?? "Open repository");
+const repoName = computed(() => selectedRepo.value === null ? "Open repository" : basename(selectedRepo.value.repoId));
 
 /**
  * The pull request open on each worktree's branch.
@@ -33,7 +35,7 @@ const openPr = computed(() => props.store.currentRepoId === props.store.targetRe
   ? props.store.view?.pr ?? null
   : null);
 const worktreeName = computed(() => selectedWorktree.value?.branch
-  ?? selectedWorktree.value?.path.split("/").at(-1)
+  ?? (selectedWorktree.value === null ? null : basename(selectedWorktree.value.path))
   ?? null);
 
 function close(): void { open.value = false; }
@@ -43,20 +45,7 @@ function choosePr(prNumber: number): void { emit("selectPr", prNumber); close();
 function openFolder(): void { emit("openFolder"); close(); }
 function locateRepo(repoId: string): void { emit("locateRepo", repoId); close(); }
 function removeRepo(repoId: string): void { emit("removeRepo", repoId); close(); }
-function onPointerDown(event: PointerEvent): void {
-  if (open.value && event.target instanceof Node && !root.value?.contains(event.target)) close();
-}
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape" && open.value) close();
-}
-onMounted(() => {
-  document.addEventListener("pointerdown", onPointerDown);
-  document.addEventListener("keydown", onKeydown);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener("pointerdown", onPointerDown);
-  document.removeEventListener("keydown", onKeydown);
-});
+useDismissable(() => open.value, root, close);
 </script>
 
 <template>
@@ -99,7 +88,7 @@ onBeforeUnmount(() => {
           @click="chooseRepo(repo.repoId)"
         >
           <FolderGit2 :size="15" />
-          <span>{{ repo.repoId.split('/').at(-1) }}</span>
+          <span>{{ basename(repo.repoId) }}</span>
           <small>{{ repo.repoId }}</small>
         </button>
       </section>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import {
   DEFAULT_APP_SETTINGS,
   effectiveTreeTypography,
 } from "../../../settings.js";
 import type { EditorSettingsStore } from "../editor-settings-store.js";
+import { useDebouncedSave } from "../composables/use-debounced-save.js";
+import SettingsField from "./SettingsField.vue";
 
 const props = defineProps<{ store: EditorSettingsStore }>();
 const emit = defineEmits<{ saved: [success: boolean] }>();
@@ -15,7 +17,6 @@ const inheritEditorTypography = shallowRef(
   props.store.settings.workbench.tree.inheritEditorTypography,
 );
 const localError = shallowRef<string | null>(null);
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(
   () => props.store.settings.workbench.tree,
@@ -69,30 +70,17 @@ async function save(): Promise<void> {
   }));
 }
 
-function scheduleSave(): void {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    void save();
-  }, 400);
-}
+const autoSave = useDebouncedSave(save);
 
-function flushSave(): void {
-  if (!saveTimer) return;
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  void save();
-}
-
+// The checkbox is one deliberate click, not a keystroke in a stream of them: it saves at
+// once, and takes any typing still waiting with it.
 async function saveInheritance(): Promise<void> {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = null;
+  autoSave.cancel();
   await save();
 }
 
 async function reset(): Promise<void> {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = null;
+  autoSave.cancel();
   const tree = DEFAULT_APP_SETTINGS.workbench.tree;
   fontFamily.value = tree.fontFamily;
   fontSize.value = tree.fontSize;
@@ -103,8 +91,6 @@ async function reset(): Promise<void> {
     workbench: { ...props.store.settings.workbench, tree },
   }));
 }
-
-onBeforeUnmount(flushSave);
 </script>
 
 <template>
@@ -124,49 +110,45 @@ onBeforeUnmount(flushSave);
         type="checkbox"
         :disabled="store.busy"
         @change="saveInheritance"
-      />
+      >
       <span>
         Inherit editor typography
         <small>Use <code class="settings-code">editor.fontFamily</code> and <code class="settings-code">editor.fontSize</code> for the tree.</small>
       </span>
     </label>
 
-    <div class="settings-field">
-      <label class="settings-label" for="tree-font-family">Font family</label>
-      <p class="settings-description">Controls <code class="settings-code">workbench.tree.fontFamily</code> when inheritance is off.</p>
-      <input
-        id="tree-font-family"
-        class="settings-control settings-text-control"
-        v-model="fontFamily"
-        name="workbench.tree.fontFamily"
-        spellcheck="false"
-        autocomplete="off"
-        :disabled="store.busy || inheritEditorTypography"
-        @input="scheduleSave"
-        @change="flushSave"
-      />
-    </div>
+    <SettingsField
+      id="tree-font-family"
+      name="workbench.tree.fontFamily"
+      label="Font family"
+      :model-value="fontFamily"
+      :disabled="store.busy || inheritEditorTypography"
+      @update:model-value="fontFamily = $event; autoSave.schedule()"
+      @change="autoSave.flush"
+    >
+      <template #description>
+        Controls <code class="settings-code">workbench.tree.fontFamily</code> when inheritance is off.
+      </template>
+    </SettingsField>
 
-    <div class="settings-field">
-      <label class="settings-label" for="tree-font-size">Font size</label>
-      <p class="settings-description">Controls <code class="settings-code">workbench.tree.fontSize</code> in pixels when inheritance is off.</p>
-      <div class="size-row">
-        <input
-          id="tree-font-size"
-          class="settings-control settings-text-control"
-          v-model.number="fontSize"
-          name="workbench.tree.fontSize"
-          type="number"
-          min="6"
-          max="100"
-          step="0.5"
-          :disabled="store.busy || inheritEditorTypography"
-          @input="scheduleSave"
-          @change="flushSave"
-        />
-        <span>px</span>
-      </div>
-    </div>
+    <SettingsField
+      id="tree-font-size"
+      name="workbench.tree.fontSize"
+      label="Font size"
+      type="number"
+      min="6"
+      max="100"
+      step="0.5"
+      :model-value="fontSize"
+      :disabled="store.busy || inheritEditorTypography"
+      @update:model-value="fontSize = $event; autoSave.schedule()"
+      @change="autoSave.flush"
+    >
+      <template #description>
+        Controls <code class="settings-code">workbench.tree.fontSize</code> in pixels when inheritance is off.
+      </template>
+      <template #unit>px</template>
+    </SettingsField>
 
     <div class="settings-field preview-setting">
       <p id="tree-preview-label" class="settings-label">Preview</p>
@@ -179,13 +161,10 @@ onBeforeUnmount(flushSave);
   </section>
 </template>
 
-<style scoped src="../styles/settings.css"></style>
-
 <style scoped>
 .inherit-setting { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 24px; color: var(--workbench-foreground); font-size: 13px; cursor: pointer; }
 .inherit-setting input { margin-top: 2px; accent-color: var(--accent); }
 .inherit-setting small { display: block; margin-top: 2px; color: var(--faint-foreground); font-size: 12px; }
-.size-row { display: flex; align-items: center; gap: 8px; width: 130px; color: var(--faint-foreground); }
 .preview-setting { margin-top: 28px; }
 .preview { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; margin-top: 8px; padding: 12px 14px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--input-background); color: var(--workbench-foreground); white-space: nowrap; }
 .preview span:nth-child(2) { padding-left: 16px; }

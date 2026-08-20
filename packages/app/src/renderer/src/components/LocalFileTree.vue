@@ -5,8 +5,9 @@ import { ChevronDown, ChevronRight, LoaderCircle } from "@lucide/vue";
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import type { EffectiveTreeTypography } from "../../../settings.js";
 import type { Store } from "../store.js";
-import { fileIconFor, folderIconFor, iconThemeShowsExplorerArrows } from "../icon-theme.js";
-import { languageForPath } from "../languages.js";
+import { iconThemeShowsExplorerArrows } from "../icon-theme.js";
+import { useTreeIcons, treeTypographyStyle } from "../composables/use-tree-icons.js";
+import { basename, parentDirectory } from "../paths.js";
 import FileIcon from "./FileIcon.vue";
 
 const props = withDefaults(defineProps<{
@@ -26,9 +27,8 @@ const children = computed(() => props.entries
   .sort((left, right) => left.kind === right.kind
     ? left.path.localeCompare(right.path)
     : left.kind === "directory" ? -1 : 1));
-const rootTypographyStyle = computed(() => props.depth === 0 && props.typography
-  ? { fontFamily: props.typography.fontFamily, fontSize: `${props.typography.fontSize}px` }
-  : undefined);
+const rootTypographyStyle = computed(() => treeTypographyStyle(props.depth, props.typography));
+const { fileIcon, folderIcon } = useTreeIcons(() => props.iconTheme);
 const worktreePath = computed(() => props.store.localView?.worktree.path ?? "");
 
 watch(worktreePath, () => {
@@ -51,26 +51,6 @@ async function toggleDirectory(path: string): Promise<void> {
   }
 }
 
-function parentDirectory(path: string): string {
-  const separator = path.lastIndexOf("/");
-  return separator < 0 ? "" : path.slice(0, separator);
-}
-
-function name(path: string): string {
-  return path.split("/").at(-1) ?? path;
-}
-
-function fileIcon(path: string) {
-  const languageId = languageForPath(path);
-  return fileIconFor(props.iconTheme, {
-    path,
-    languageId: languageId === "plaintext" ? undefined : languageId,
-  });
-}
-
-function folderIcon(entry: LocalFileEntry) {
-  return folderIconFor(props.iconTheme, { name: name(entry.path), expanded: expanded.has(entry.path) });
-}
 </script>
 
 <template>
@@ -85,7 +65,7 @@ function folderIcon(entry: LocalFileEntry) {
         :aria-busy="loading.has(entry.path) || undefined"
         @click="toggleDirectory(entry.path)"
       >
-        <LoaderCircle v-if="loading.has(entry.path)" class="hierarchy-slot loading" :size="13" aria-hidden="true" />
+        <LoaderCircle v-if="loading.has(entry.path)" class="hierarchy-slot loading spin" :size="13" aria-hidden="true" />
         <component
           :is="expanded.has(entry.path) ? ChevronDown : ChevronRight"
           v-else-if="iconThemeShowsExplorerArrows(iconTheme)"
@@ -95,8 +75,8 @@ function folderIcon(entry: LocalFileEntry) {
         />
         <span v-else class="hierarchy-slot" aria-hidden="true" />
         <span class="review-slot" aria-hidden="true" />
-        <FileIcon :src="folderIcon(entry).src" :data-icon-id="folderIcon(entry).id" />
-        <span class="fname">{{ name(entry.path) }}</span>
+        <FileIcon :icon="folderIcon(basename(entry.path), expanded.has(entry.path))" />
+        <span class="fname">{{ basename(entry.path) }}</span>
       </button>
       <LocalFileTree
         v-if="entry.kind === 'directory' && expanded.has(entry.path)"
@@ -117,8 +97,8 @@ function folderIcon(entry: LocalFileEntry) {
       >
         <span class="hierarchy-slot" aria-hidden="true" />
         <span class="review-slot" aria-hidden="true" />
-        <FileIcon :src="fileIcon(entry.path).src" :data-icon-id="fileIcon(entry.path).id" />
-        <span class="fname">{{ name(entry.path) }}</span>
+        <FileIcon :icon="fileIcon(entry.path)" />
+        <span class="fname">{{ basename(entry.path) }}</span>
       </button>
     </template>
   </div>
@@ -129,7 +109,5 @@ function folderIcon(entry: LocalFileEntry) {
 <style scoped>
 .local-tree.root { height: 100%; overflow: auto; padding: 8px 0; box-sizing: border-box; }
 .tnode { width: 100%; border: 0; background: none; color: var(--workbench-foreground); text-align: left; }
-.loading { color: var(--faint-foreground); animation: spin .8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .loading { animation: none; } }
+.loading { color: var(--faint-foreground); }
 </style>

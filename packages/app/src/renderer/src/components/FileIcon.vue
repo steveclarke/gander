@@ -1,9 +1,13 @@
 <script setup lang="ts">
-defineProps<{ src: string }>();
+import type { ResolvedFileIcon } from "../icon-theme.js";
+
+// The id rides along as an attribute because it names the icon the theme actually chose,
+// which is the only way a test can tell one 16px square from another.
+defineProps<{ icon: ResolvedFileIcon }>();
 </script>
 
 <template>
-  <img class="file-icon" :src="src" alt="" aria-hidden="true" draggable="false" />
+  <img class="file-icon" :src="icon.src" :data-icon-id="icon.id" alt="" aria-hidden="true" draggable="false">
 </template>
 
 <style scoped>

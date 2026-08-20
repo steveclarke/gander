@@ -3,14 +3,11 @@ import { computed, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
 import { collapsedDirs, cursor, toggleCollapsed } from "../tree-nav.js";
-import {
-  fileIconFor,
-  folderIconFor,
-  iconThemeShowsExplorerArrows,
-} from "../icon-theme.js";
+import { iconThemeShowsExplorerArrows } from "../icon-theme.js";
+import { useTreeIcons, treeTypographyStyle } from "../composables/use-tree-icons.js";
+import { basename } from "../paths.js";
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import type { EffectiveTreeTypography } from "../../../settings.js";
-import { languageForPath } from "../languages.js";
 import { Check, ChevronDown, ChevronRight, MessageSquare, Minus } from "@lucide/vue";
 import FileIcon from "./FileIcon.vue";
 import type { ChangedFile, PrFile } from "@gander/shared";
@@ -31,9 +28,8 @@ const depth = computed(() => props.depth ?? 0);
 const nodes = computed(() => props.nodes ?? buildTree(props.files ?? props.store.files()));
 const showStatus = computed(() => props.showStatus);
 const local = computed(() => props.store.isLocal());
-const rootTypographyStyle = computed(() => depth.value === 0 && props.typography
-  ? { fontFamily: props.typography.fontFamily, fontSize: `${props.typography.fontSize}px` }
-  : undefined);
+const rootTypographyStyle = computed(() => treeTypographyStyle(depth.value, props.typography));
+const { fileIcon, folderIcon } = useTreeIcons(() => props.iconTheme);
 
 // dirState flat-maps and sorts the whole subtree under a directory. The template calls it
 // twice per dir row (class binding + aria-checked) — memoize it once per node per render
@@ -84,22 +80,6 @@ function toggleFile(path: string, checked: boolean) {
   props.store.setChecked(path, !checked);
 }
 
-function fileName(path: string): string {
-  return path.split("/").pop() ?? path;
-}
-
-function fileIcon(path: string) {
-  const languageId = languageForPath(path);
-  return fileIconFor(props.iconTheme, {
-    path,
-    languageId: languageId === "plaintext" ? undefined : languageId,
-  });
-}
-
-function folderIcon(node: TreeNode & { type: "dir" }) {
-  return folderIconFor(props.iconTheme, { name: node.name, expanded: !collapsedDirs.has(node.path) });
-}
-
 function nameParts(path: string, name: string): { text: string; matched: boolean }[] {
   const matched = new Set(props.jumpTargets?.get(path)?.matchIndices ?? []);
   return [...name].map((text, index) => ({ text, matched: matched.has(index) }));
@@ -146,7 +126,7 @@ function jumpShortcut(path: string): string | undefined {
           <Check v-else :size="12" :stroke-width="3" />
         </span>
         <span v-else class="review-slot" aria-hidden="true" />
-        <FileIcon :src="folderIcon(node).src" :data-icon-id="folderIcon(node).id" />
+        <FileIcon :icon="folderIcon(node.name, !collapsedDirs.has(node.path))" />
         <span class="fname">
           <template v-for="(part, index) in nameParts(node.path, node.name)" :key="index">
             <mark v-if="part.matched" class="jump-match">{{ part.text }}</mark>
@@ -187,9 +167,9 @@ function jumpShortcut(path: string): string | undefined {
           @keydown.enter.space.stop.prevent="toggleFile(node.file.path, reviewFile(node)?.checked ?? false)"
         ><Check :size="12" :stroke-width="3" /></span>
         <span v-else class="review-slot" aria-hidden="true" />
-        <FileIcon :src="fileIcon(node.file.path).src" :data-icon-id="fileIcon(node.file.path).id" />
+        <FileIcon :icon="fileIcon(node.file.path)" />
         <span class="fname">
-          <template v-for="(part, index) in nameParts(node.file.path, fileName(node.file.path))" :key="index">
+          <template v-for="(part, index) in nameParts(node.file.path, basename(node.file.path))" :key="index">
             <mark v-if="part.matched" class="jump-match">{{ part.text }}</mark>
             <template v-else>{{ part.text }}</template>
           </template>

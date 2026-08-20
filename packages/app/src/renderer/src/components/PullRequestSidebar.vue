@@ -78,9 +78,6 @@ header span { margin-left: auto; color: var(--faint-foreground); font: 10px var(
 .reload:hover:not(:disabled) { color: var(--workbench-foreground); background: var(--elevated-background); }
 .reload:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .reload:disabled { opacity: .5; cursor: default; }
-.reload .spin { animation: spin .8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .reload .spin { animation: none; } }
 .empty { margin: 0; padding: 12px; color: var(--faint-foreground); font-size: 11px; }
 .files-section :deep(.tree.root) { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 .pull-sidebar :deep(.reviewing-list) { padding: 5px 0 8px; }
