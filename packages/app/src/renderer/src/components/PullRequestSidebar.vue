@@ -25,6 +25,9 @@ defineEmits<{ selectPr: [prNumber: number]; scroll: [] }>();
 
 const reloading = ref(false);
 const remainingCount = computed(() => props.store.view?.files.filter((file) => !file.checked).length ?? 0);
+const totalFileCount = computed(() => props.store.view?.files.length ?? 0);
+const reviewProgressDescription = computed(() =>
+  `${remainingCount.value} of ${totalFileCount.value} ${totalFileCount.value === 1 ? "file" : "files"} unchecked`);
 const hasDirectories = computed(() => reviewTreeFiles(props.store.view?.files ?? []).some((file) => file.path.includes("/")));
 const foldersCollapsed = computed(() => allDirectoriesCollapsed(props.store.view?.files ?? []));
 
@@ -64,7 +67,11 @@ async function reload(): Promise<void> {
     <section v-if="store.view && store.currentRepoId === store.targetRepoId" class="files-section">
       <header>
         <h2>Review Files</h2>
-        <span>{{ remainingCount }}/{{ store.view.files.length }} left</span>
+        <span
+          class="review-progress"
+          :title="reviewProgressDescription"
+          :aria-label="reviewProgressDescription"
+        >{{ remainingCount }}/{{ totalFileCount }} unchecked</span>
         <ReviewFilesToolbar
           :remaining-only="remainingOnly"
           :has-directories="hasDirectories"

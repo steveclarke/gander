@@ -11,7 +11,7 @@ describe("ReviewFilesToolbar", () => {
 
     for (const [label, event] of [
       ["Collapse all folders", "toggleAll"],
-      ["Show remaining files only", "toggleRemaining"],
+      ["Show unchecked files only", "toggleRemaining"],
     ] as const) {
       const button = wrapper.get(`button[aria-label="${label}"]`);
       expect(button.text()).toBe("");
@@ -25,7 +25,7 @@ describe("ReviewFilesToolbar", () => {
       props: { remainingOnly: true, hasDirectories: false, allDirectoriesCollapsed: false },
     });
 
-    expect(wrapper.get('[aria-label="Show remaining files only"]').attributes("aria-pressed")).toBe("true");
+    expect(wrapper.get('[aria-label="Show unchecked files only"]').attributes("aria-pressed")).toBe("true");
     expect(wrapper.findAll("button:disabled")).toHaveLength(1);
   });
 

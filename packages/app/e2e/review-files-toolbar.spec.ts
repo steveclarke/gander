@@ -24,7 +24,9 @@ test("review file toolbar controls folder disclosure and remaining files", async
   const toolbar = app.page.getByRole("toolbar", { name: "Review file display" });
   await expect(toolbar.getByRole("button")).toHaveCount(2);
   await expect(app.page.locator(".files-section header").getByRole("toolbar", { name: "Review file display" })).toBeVisible();
-  await expect(app.page.locator(".files-section header")).toContainText("6/6 left");
+  const progress = app.page.locator(".files-section header .review-progress");
+  await expect(progress).toHaveText("6/6 unchecked");
+  await expect(progress).toHaveAttribute("title", "6 of 6 files unchecked");
 
   await toolbar.getByRole("button", { name: "Collapse all folders" }).click();
   await expect(review.file("src/main.ts")).toHaveCount(0);
@@ -35,16 +37,16 @@ test("review file toolbar controls folder disclosure and remaining files", async
   // important behavior: Remaining filters files, rather than merely collapsing directories.
   await review.checkFile("a.rb");
 
-  const remaining = toolbar.getByRole("button", { name: "Show remaining files only" });
+  const remaining = toolbar.getByRole("button", { name: "Show unchecked files only" });
   await remaining.click();
   await expect(remaining).toHaveAttribute("aria-pressed", "true");
-  await expect(app.page.locator(".files-section header")).toContainText("5/6 left");
+  await expect(progress).toHaveText("5/6 unchecked");
   await expect(review.file("a.rb")).toHaveCount(0);
   await expect(review.file("src/main.ts")).toBeVisible();
 
   await review.file("src/main.ts").getByRole("checkbox").click();
   await expect(review.file("src/main.ts")).toHaveCount(0);
-  await expect(app.page.locator(".files-section header")).toContainText("4/6 left");
+  await expect(progress).toHaveText("4/6 unchecked");
 
   await remaining.click();
   await expect(remaining).toHaveAttribute("aria-pressed", "false");

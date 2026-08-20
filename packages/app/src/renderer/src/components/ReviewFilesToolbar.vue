@@ -24,8 +24,8 @@ const folderActionLabel = computed(() => props.allDirectoriesCollapsed
       type="button"
       :class="{ active: remainingOnly }"
       :aria-pressed="remainingOnly"
-      aria-label="Show remaining files only"
-      title="Show remaining files only"
+      aria-label="Show unchecked files only"
+      title="Show unchecked files only"
       @click="$emit('toggleRemaining')"
     ><ListFilter :size="16" /></button>
     <button
