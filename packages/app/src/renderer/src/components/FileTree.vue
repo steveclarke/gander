@@ -2,7 +2,7 @@
 import { computed, watch } from "vue";
 import type { Store } from "../store.js";
 import { buildTree, dirState, filesUnder, type TreeNode } from "../tree.js";
-import { collapsedDirs, cursor, toggleCollapsed } from "../tree-nav.js";
+import { collapsedDirs, cursor, reviewTreeFiles, toggleCollapsed } from "../tree-nav.js";
 import { iconThemeShowsExplorerArrows } from "../icon-theme.js";
 import { useTreeIcons, treeTypographyStyle } from "../composables/use-tree-icons.js";
 import { basename } from "../paths.js";
@@ -25,7 +25,7 @@ const props = withDefaults(defineProps<{
 }>(), { showStatus: true });
 
 const depth = computed(() => props.depth ?? 0);
-const nodes = computed(() => props.nodes ?? buildTree(props.files ?? props.store.files()));
+const nodes = computed(() => props.nodes ?? buildTree(reviewTreeFiles(props.files ?? props.store.files())));
 const showStatus = computed(() => props.showStatus);
 const local = computed(() => props.store.isLocal());
 const rootTypographyStyle = computed(() => treeTypographyStyle(depth.value, props.typography));

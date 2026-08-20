@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { RefreshCw } from "@lucide/vue";
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import type { EffectiveTreeTypography } from "../../../settings.js";
 import type { Store } from "../store.js";
 import FileTree from "./FileTree.vue";
+import ReviewFilesToolbar from "./ReviewFilesToolbar.vue";
 import ReviewingList from "./ReviewingList.vue";
 import type { JumpTarget } from "../tree-jump.js";
+import {
+  collapseAllDirectories,
+  collapseReviewedDirectories,
+  expandAllDirectories,
+  remainingOnly,
+} from "../tree-nav.js";
 
 const props = defineProps<{
   store: Store;
@@ -17,6 +24,9 @@ const props = defineProps<{
 defineEmits<{ selectPr: [prNumber: number]; scroll: [] }>();
 
 const reloading = ref(false);
+const remainingCount = computed(() => props.store.view?.files.filter((file) => !file.checked).length ?? 0);
+const hasDirectories = computed(() => props.store.view?.files.some((file) => file.path.includes("/")) ?? false);
+
 async function reload(): Promise<void> {
   reloading.value = true;
   try {
@@ -55,13 +65,25 @@ async function reload(): Promise<void> {
         <h2>Review Files</h2>
         <span>{{ store.view.files.length }}</span>
       </header>
+      <ReviewFilesToolbar
+        :remaining-only="remainingOnly"
+        :remaining-count="remainingCount"
+        :total-count="store.view.files.length"
+        :has-directories="hasDirectories"
+        @expand-all="expandAllDirectories"
+        @collapse-reviewed="collapseReviewedDirectories(store.view.files)"
+        @collapse-all="collapseAllDirectories(store.view.files)"
+        @toggle-remaining="remainingOnly = !remainingOnly"
+      />
       <FileTree
+        v-if="!remainingOnly || remainingCount > 0"
         :store="store"
         :icon-theme="iconTheme"
         :typography="typography"
         :jump-targets="jumpTargets"
         @scroll.passive="$emit('scroll')"
       />
+      <p v-else class="remaining-empty">All files reviewed.</p>
     </section>
   </aside>
 </template>
@@ -79,6 +101,7 @@ header span { margin-left: auto; color: var(--faint-foreground); font: 10px var(
 .reload:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .reload:disabled { opacity: .5; cursor: default; }
 .empty { margin: 0; padding: 12px; color: var(--faint-foreground); font-size: 11px; }
+.remaining-empty { margin: 0; padding: 16px 12px; color: var(--muted-foreground); font-size: 11px; text-align: center; }
 .files-section :deep(.tree.root) { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 .pull-sidebar :deep(.reviewing-list) { padding: 5px 0 8px; }
 </style>

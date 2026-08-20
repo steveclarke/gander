@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { PrFile, PrView } from "@gander/shared";
 import type { Store } from "../store.js";
 import FileTree from "./FileTree.vue";
-import { collapsedDirs } from "../tree-nav.js";
+import { collapsedDirs, remainingOnly } from "../tree-nav.js";
 import { jumpTargets } from "../tree-jump.js";
 
 const file = (path: string, checked = false): PrFile =>
@@ -97,7 +97,10 @@ function fileRow(wrapper: VueWrapper, path: string) {
 
 describe("FileTree", () => {
   // Collapse state is shared across the tree's recursive levels, so it outlives a mount.
-  beforeEach(() => collapsedDirs.clear());
+  beforeEach(() => {
+    collapsedDirs.clear();
+    remainingOnly.value = false;
+  });
 
   const treeFiles = [
     file("app/models/member.rb", false),
@@ -138,6 +141,20 @@ describe("FileTree", () => {
 
     expect(calls.setChecked).toEqual([]);
     expect(calls.setCheckedMany).toEqual([]);
+  });
+
+  it("removes reviewed files and empty folders in remaining-only mode", async () => {
+    const { store } = fakeStore(prView(1, treeFiles));
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
+
+    remainingOnly.value = true;
+    await nextTick();
+
+    expect(wrapper.text()).toContain("member.rb");
+    expect(wrapper.text()).toContain("other.rb");
+    expect(wrapper.text()).not.toContain("late_fee_calculator.rb");
+    expect(wrapper.text()).not.toContain("routes.rb");
+    expect(wrapper.text()).not.toContain("config");
   });
 
   it("resets collapse state when the reviewed PR changes, even though view is reassigned without an intermediate null", async () => {

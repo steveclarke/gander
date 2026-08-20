@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { ChangedFile, PrFile } from "@gander/shared";
 import {
   collapsedDirs,
+  collapseAllDirectories,
+  collapseReviewedDirectories,
   edge,
+  expandAllDirectories,
   filesAt,
   nextUnmarked,
   parentOf,
   pathOf,
   rows,
+  remainingOnly,
   step,
   visibleFiles,
 } from "./tree-nav.js";
@@ -24,7 +28,10 @@ const files = [
 
 const paths = (list: ChangedFile[]): string[] => list.map((f) => f.path);
 
-beforeEach(() => collapsedDirs.clear());
+beforeEach(() => {
+  collapsedDirs.clear();
+  remainingOnly.value = false;
+});
 
 describe("tree navigation", () => {
   // The cursor stops on directories as well as files, the way an explorer list does —
@@ -41,6 +48,36 @@ describe("tree navigation", () => {
       "src", "src/deep", "src/deep/inner.ts", "src/app.ts", "vendor", "README.md",
     ]);
     expect(paths(visibleFiles(files))).toEqual(["src/deep/inner.ts", "src/app.ts", "README.md"]);
+  });
+
+  it("expands and collapses every folder in one action", () => {
+    collapseAllDirectories(files);
+    expect([...collapsedDirs].sort()).toEqual(["src", "src/deep", "vendor"]);
+
+    expandAllDirectories();
+    expect([...collapsedDirs]).toEqual([]);
+  });
+
+  it("collapses reviewed folders while leaving unfinished branches open", () => {
+    const review = [
+      file("done/one.ts", true),
+      file("done/nested/two.ts", true),
+      file("working/checked.ts", true),
+      file("working/left.ts", false),
+    ];
+
+    collapseReviewedDirectories(review);
+
+    expect([...collapsedDirs]).toEqual(["done", "done/nested"]);
+  });
+
+  it("shows only unchecked files and the folders that contain them", () => {
+    remainingOnly.value = true;
+
+    expect(rows(files).map(pathOf)).toEqual([
+      "src/deep", "src/deep/inner.ts", "vendor", "vendor/bundle.js", "README.md",
+    ]);
+    expect(rows(files.map((entry) => file(entry.path, true)))).toEqual([]);
   });
 
   it("stops at the ends rather than wrapping", () => {
