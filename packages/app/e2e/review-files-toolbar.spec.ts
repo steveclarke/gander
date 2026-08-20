@@ -40,17 +40,25 @@ test("review file toolbar controls folder disclosure and remaining files", async
   // A reviewed top-level file cannot be hidden by folding a parent folder. This is the
   // important behavior: Remaining filters files, rather than merely collapsing directories.
   await review.checkFile("a.rb");
+  await review.file("src/main.ts").getByRole("checkbox").click();
+  const partialDirectory = review.file("src").getByRole("checkbox");
+  await expect(partialDirectory).toHaveAttribute("aria-checked", "mixed");
+  const warningColor = await app.page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--warning)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  expect(await partialDirectory.evaluate((element) => getComputedStyle(element).color)).toBe(warningColor);
 
   const remaining = toolbar.getByRole("button", { name: "Show unreviewed files only" });
   await remaining.click();
   await expect(remaining).toHaveAttribute("aria-pressed", "true");
-  await expect(progress).toHaveText("5/6 unreviewed");
-  await expect(review.file("a.rb")).toHaveCount(0);
-  await expect(review.file("src/main.ts")).toBeVisible();
-
-  await review.file("src/main.ts").getByRole("checkbox").click();
-  await expect(review.file("src/main.ts")).toHaveCount(0);
   await expect(progress).toHaveText("4/6 unreviewed");
+  await expect(review.file("a.rb")).toHaveCount(0);
+  await expect(review.file("src/main.ts")).toHaveCount(0);
 
   await remaining.click();
   await expect(remaining).toHaveAttribute("aria-pressed", "false");
