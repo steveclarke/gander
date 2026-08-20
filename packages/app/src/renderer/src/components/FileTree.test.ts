@@ -63,6 +63,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async reviewedSnapshot() { return null; },
     async imagePreview() { return null; },
     async addNote() {},
+    async updateNote() {},
     async deleteNote() {},
     async setChecked(path: string, checked: boolean) {
       calls.setChecked.push([path, checked]);

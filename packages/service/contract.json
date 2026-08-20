@@ -1,5 +1,5 @@
 {
-  "version": "0.4.0",
+  "version": "0.5.0",
   "routes": [
     "DELETE /api/reviews/:repoId/:prNumber/notes/:id",
     "DELETE /mcp",
@@ -10,6 +10,7 @@
     "GET /healthz",
     "GET /mcp",
     "OPTIONS /mcp",
+    "PATCH /api/reviews/:repoId/:prNumber/notes/:id",
     "PATCH /mcp",
     "POST /api/reviews/:repoId/:prNumber/notes",
     "POST /mcp",
@@ -528,6 +529,24 @@
         "prNumber",
         "files"
       ]
+    },
+    "UpdateNoteSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "open",
+            "addressed",
+            "resolved"
+          ]
+        }
+      }
     }
   },
   "mcpTools": [

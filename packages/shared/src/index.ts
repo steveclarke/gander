@@ -13,7 +13,7 @@ import { z } from "zod";
  *
  * Not the app's release version: releases happen far more often than the contract moves.
  */
-export const SERVICE_VERSION = "0.4.0";
+export const SERVICE_VERSION = "0.5.0";
 
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
@@ -78,6 +78,14 @@ export const NewNoteSchema = z.object({
   headSha: z.string().min(1).nullable(),
 });
 export type NewNote = z.infer<typeof NewNoteSchema>;
+
+export const UpdateNoteSchema = z.object({
+  text: z.string().min(1).optional(),
+  state: NoteStateSchema.optional(),
+}).refine((input) => input.text !== undefined || input.state !== undefined, {
+  message: "text or state is required",
+});
+export type UpdateNote = z.infer<typeof UpdateNoteSchema>;
 
 /** What the service remembers about a pull request, so agents can be told which one they are on. */
 export const PrContextSchema = z.object({
