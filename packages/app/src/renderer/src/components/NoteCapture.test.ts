@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import type { Store } from "../store.js";
 import NoteCapture from "./NoteCapture.vue";
@@ -41,6 +41,36 @@ describe("NoteCapture", () => {
 
     expect(addNote).toHaveBeenCalledWith("Keep this anchor", "reviewed-file.ts", 17);
     expect(wrapper.emitted("close")).toHaveLength(1);
+  });
+
+  it("offers mouse controls for saving and cancelling", async () => {
+    const addNote = vi.fn(async () => {});
+    const store = { addNote } as unknown as Store;
+    const wrapper = mount(NoteCapture, {
+      props: { store, target: { path: "src/review.ts", line: 12 } },
+      attachTo: document.body,
+    });
+
+    const save = wrapper.get("button.save");
+    expect(save.text()).toBe("Save");
+    expect(save.attributes("disabled")).toBeDefined();
+
+    await wrapper.get("textarea").setValue("Review this with a mouse");
+    expect(save.attributes("disabled")).toBeUndefined();
+    (save.element as HTMLButtonElement).click();
+    await flushPromises();
+
+    expect(addNote).toHaveBeenCalledWith("Review this with a mouse", "src/review.ts", 12);
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    wrapper.unmount();
+
+    const cancelWrapper = mount(NoteCapture, {
+      props: { store, target: { path: "src/review.ts", line: 12 } },
+    });
+    await cancelWrapper.get("button.cancel").trigger("click");
+
+    expect(cancelWrapper.emitted("close")).toHaveLength(1);
+    expect(addNote).toHaveBeenCalledTimes(1);
   });
 
   it("supports a pull-request-level target", async () => {
