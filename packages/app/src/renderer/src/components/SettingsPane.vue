@@ -28,7 +28,7 @@ const jsonSave = useDebouncedSave(async () => {
   const settings = pendingJsonSettings;
   pendingJsonSettings = null;
   if (settings === null) return;
-  const saving = ++revision;
+  const saving = revision;
   const success = await props.store.update(settings);
   if (saving === revision) saveState.value = success ? "saved" : "error";
 });
@@ -59,6 +59,9 @@ function onJsonChange(source: string): void {
 
   try {
     pendingJsonSettings = settingsFromJson(source);
+    // Every keystroke retires the save in flight: it is about to be answered by a newer
+    // one, and must not report "saved" over an edit that has not landed.
+    revision += 1;
     jsonError.value = null;
     saveState.value = "saving";
   } catch (error) {
