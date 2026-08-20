@@ -64,9 +64,9 @@ rm -rf packages/app/dist
 export APPLE_KEYCHAIN_PROFILE="${APPLE_KEYCHAIN_PROFILE:-outport-notarize}"
 pnpm --filter @gander/app run dist:mac
 
-# The tap is a separate repository and is updated manually after release verification.
-# Generate the exact, checksummed cask it needs as a release asset so that handoff does
-# not require reconstructing artifact names or trusting an unverified checksum.
+# The tap is a separate repository, updated by the publish-cask workflow once this
+# release is published. Render the exact, checksummed cask it needs as a release asset
+# so that handoff neither reconstructs artifact names nor trusts an unverified checksum.
 bin/render-homebrew-cask \
   "$VERSION" \
   "packages/app/dist/Gander-${VERSION}-arm64.dmg" \
@@ -82,4 +82,4 @@ gh release edit "$TAG" --draft=false
 
 echo "==> Published https://github.com/steveclarke/gander/releases/tag/${TAG}"
 echo "    The Linux AppImage follows from CI."
-echo "    After verifying the signed app, publish dist/gander.rb to steveclarke/homebrew-tap/Casks/gander.rb."
+echo "    The Homebrew cask follows from CI."
