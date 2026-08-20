@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { RefreshCw } from "@lucide/vue";
 import type { FileIconThemeId } from "../../../file-icon-themes.js";
 import type { EffectiveTreeTypography } from "../../../settings.js";
 import type { Store } from "../store.js";
 import FileTree from "./FileTree.vue";
+import ReviewFilesToolbar from "./ReviewFilesToolbar.vue";
 import ReviewingList from "./ReviewingList.vue";
 import type { JumpTarget } from "../tree-jump.js";
+import {
+  allDirectoriesCollapsed,
+  collapseFullyReviewedDirectories,
+  hasFullyReviewedDirectories,
+  remainingOnly,
+  reviewTreeFiles,
+  toggleAllDirectories,
+} from "../tree-nav.js";
 
 const props = defineProps<{
   store: Store;
@@ -17,6 +26,14 @@ const props = defineProps<{
 defineEmits<{ selectPr: [prNumber: number]; scroll: [] }>();
 
 const reloading = ref(false);
+const remainingCount = computed(() => props.store.view?.files.filter((file) => !file.checked).length ?? 0);
+const totalFileCount = computed(() => props.store.view?.files.length ?? 0);
+const reviewProgressDescription = computed(() =>
+  `${remainingCount.value} of ${totalFileCount.value} ${totalFileCount.value === 1 ? "file" : "files"} unreviewed`);
+const hasDirectories = computed(() => reviewTreeFiles(props.store.view?.files ?? []).some((file) => file.path.includes("/")));
+const hasReviewedDirectories = computed(() => hasFullyReviewedDirectories(props.store.view?.files ?? []));
+const foldersCollapsed = computed(() => allDirectoriesCollapsed(props.store.view?.files ?? []));
+
 async function reload(): Promise<void> {
   reloading.value = true;
   try {
@@ -52,16 +69,31 @@ async function reload(): Promise<void> {
     </section>
     <section v-if="store.view && store.currentRepoId === store.targetRepoId" class="files-section">
       <header>
-        <h2>Review Files</h2>
-        <span>{{ store.view.files.length }}</span>
+        <h2><span class="review-title-prefix">Review </span>Files</h2>
+        <span
+          class="review-progress"
+          :title="reviewProgressDescription"
+          :aria-label="reviewProgressDescription"
+        ><span>{{ remainingCount }}/{{ totalFileCount }}</span><span class="review-progress-label"> unreviewed</span></span>
+        <ReviewFilesToolbar
+          :remaining-only="remainingOnly"
+          :has-directories="hasDirectories"
+          :has-fully-reviewed-directories="hasReviewedDirectories"
+          :all-directories-collapsed="foldersCollapsed"
+          @collapse-reviewed="collapseFullyReviewedDirectories(store.view.files)"
+          @toggle-all="toggleAllDirectories(store.view.files)"
+          @toggle-remaining="remainingOnly = !remainingOnly"
+        />
       </header>
       <FileTree
+        v-if="!remainingOnly || remainingCount > 0"
         :store="store"
         :icon-theme="iconTheme"
         :typography="typography"
         :jump-targets="jumpTargets"
         @scroll.passive="$emit('scroll')"
       />
+      <p v-else class="remaining-empty">All files reviewed.</p>
     </section>
   </aside>
 </template>
@@ -70,15 +102,18 @@ async function reload(): Promise<void> {
 .pull-sidebar { height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--panel-background); }
 .pull-section { flex: 1; min-height: 100px; overflow: auto; }
 .has-review .pull-section { flex: 0 1 auto; max-height: 48%; border-bottom: 1px solid var(--workbench-border); }
-.files-section { flex: 1; min-height: 120px; display: flex; flex-direction: column; }
+.files-section { container: review-files / inline-size; flex: 1; min-height: 120px; display: flex; flex-direction: column; }
 header { position: sticky; inset-block-start: 0; z-index: 1; height: 35px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding-inline: 12px; background: var(--panel-background); border-bottom: 1px solid var(--workbench-border); }
-h1, h2 { margin: 0; color: var(--muted-foreground); font-size: 10px; font-weight: 700; letter-spacing: .55px; text-transform: uppercase; }
-header span { margin-left: auto; color: var(--faint-foreground); font: 10px var(--mono); }
+h1, h2 { flex: none; margin: 0; color: var(--muted-foreground); font-size: 10px; font-weight: 700; letter-spacing: .55px; text-transform: uppercase; white-space: nowrap; }
+.review-progress { margin-left: auto; color: var(--faint-foreground); font: 10px var(--mono); white-space: nowrap; }
 .reload { display: flex; padding: 2px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--faint-foreground); cursor: pointer; }
 .reload:hover:not(:disabled) { color: var(--workbench-foreground); background: var(--elevated-background); }
 .reload:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .reload:disabled { opacity: .5; cursor: default; }
 .empty { margin: 0; padding: 12px; color: var(--faint-foreground); font-size: 11px; }
+.remaining-empty { margin: 0; padding: 16px 12px; color: var(--muted-foreground); font-size: 11px; text-align: center; }
 .files-section :deep(.tree.root) { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 .pull-sidebar :deep(.reviewing-list) { padding: 5px 0 8px; }
+@container review-files (max-width: 250px) { .review-title-prefix { display: none; } }
+@container review-files (max-width: 205px) { .review-progress-label { display: none; } }
 </style>

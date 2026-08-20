@@ -1,4 +1,4 @@
-import { reactive, ref } from "vue";
+import { reactive, ref, shallowRef } from "vue";
 import type { ChangedFile } from "@gander/shared";
 import { buildTree, type TreeNode } from "./tree.js";
 
@@ -12,6 +12,9 @@ import { buildTree, type TreeNode } from "./tree.js";
  */
 export const collapsedDirs = reactive(new Set<string>());
 
+/** Whether the review tree omits files the reviewer has already checked. */
+export const remainingOnly = shallowRef(false);
+
 /**
  * The row the keyboard is on, which is a directory as often as a file. It is separate from
  * the reviewer's selected file because a directory has nothing to show in the diff: passing
@@ -24,6 +27,56 @@ export function toggleCollapsed(path: string): void {
   else collapsedDirs.add(path);
 }
 
+/** Files currently included in the review tree. Local files have no review state. */
+export function reviewTreeFiles(files: ChangedFile[]): ChangedFile[] {
+  if (!remainingOnly.value) return files;
+  return files.filter((file) => !("checked" in file) || !file.checked);
+}
+
+function directoryPaths(files: ChangedFile[]): string[] {
+  const walk = (nodes: TreeNode[]): string[] => nodes.flatMap((node) =>
+    node.type === "dir" ? [node.path, ...walk(node.children)] : [],
+  );
+  return walk(buildTree(files));
+}
+
+function fullyReviewedDirectoryPaths(files: ChangedFile[]): string[] {
+  const paths: string[] = [];
+  const reviewed = (node: TreeNode): boolean => {
+    if (node.type === "file") return "checked" in node.file && node.file.checked === true;
+
+    const childrenReviewed = node.children.map(reviewed).every(Boolean);
+    if (childrenReviewed) paths.push(node.path);
+    return childrenReviewed;
+  };
+
+  for (const node of buildTree(files)) reviewed(node);
+  return paths;
+}
+
+export function hasFullyReviewedDirectories(files: ChangedFile[]): boolean {
+  return fullyReviewedDirectoryPaths(files).length > 0;
+}
+
+export function collapseFullyReviewedDirectories(files: ChangedFile[]): void {
+  for (const path of fullyReviewedDirectoryPaths(files)) collapsedDirs.add(path);
+}
+
+export function allDirectoriesCollapsed(files: ChangedFile[]): boolean {
+  const paths = directoryPaths(files);
+  return paths.length > 0 && paths.every((path) => collapsedDirs.has(path));
+}
+
+export function toggleAllDirectories(files: ChangedFile[]): void {
+  if (allDirectoriesCollapsed(files)) {
+    collapsedDirs.clear();
+    return;
+  }
+
+  collapsedDirs.clear();
+  for (const path of directoryPaths(files)) collapsedDirs.add(path);
+}
+
 /** Every row the tree draws, in order, with the contents of a collapsed directory left out. */
 export function rows(files: ChangedFile[]): TreeNode[] {
   const walk = (nodes: TreeNode[]): TreeNode[] =>
@@ -31,7 +84,7 @@ export function rows(files: ChangedFile[]): TreeNode[] {
       if (node.type === "file") return [node];
       return collapsedDirs.has(node.path) ? [node] : [node, ...walk(node.children)];
     });
-  return walk(buildTree(files));
+  return walk(buildTree(reviewTreeFiles(files)));
 }
 
 export function pathOf(node: TreeNode): string {

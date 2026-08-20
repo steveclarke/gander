@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ChangedFile, PrFile } from "@gander/shared";
 import {
+  collapseFullyReviewedDirectories,
   collapsedDirs,
   edge,
   filesAt,
+  hasFullyReviewedDirectories,
   nextUnmarked,
   parentOf,
   pathOf,
   rows,
+  remainingOnly,
   step,
+  toggleAllDirectories,
   visibleFiles,
 } from "./tree-nav.js";
 
@@ -24,7 +28,10 @@ const files = [
 
 const paths = (list: ChangedFile[]): string[] => list.map((f) => f.path);
 
-beforeEach(() => collapsedDirs.clear());
+beforeEach(() => {
+  collapsedDirs.clear();
+  remainingOnly.value = false;
+});
 
 describe("tree navigation", () => {
   // The cursor stops on directories as well as files, the way an explorer list does —
@@ -41,6 +48,45 @@ describe("tree navigation", () => {
       "src", "src/deep", "src/deep/inner.ts", "src/app.ts", "vendor", "README.md",
     ]);
     expect(paths(visibleFiles(files))).toEqual(["src/deep/inner.ts", "src/app.ts", "README.md"]);
+  });
+
+  it("toggles every folder closed and open", () => {
+    toggleAllDirectories(files);
+    expect([...collapsedDirs].sort()).toEqual(["src", "src/deep", "vendor"]);
+
+    toggleAllDirectories(files);
+    expect([...collapsedDirs]).toEqual([]);
+  });
+
+  it("collapses fully reviewed folders without changing unrelated folders", () => {
+    const reviewState = [
+      file("reviewed/done.ts", true),
+      file("mixed/done.ts", true),
+      file("mixed/todo.ts"),
+      file("vendor/bundle.js"),
+    ];
+    collapsedDirs.add("vendor");
+
+    expect(hasFullyReviewedDirectories(reviewState)).toBe(true);
+    collapseFullyReviewedDirectories(reviewState);
+
+    expect([...collapsedDirs].sort()).toEqual(["reviewed", "vendor"]);
+    expect(rows(reviewState).map(pathOf)).toEqual([
+      "mixed", "mixed/done.ts", "mixed/todo.ts", "reviewed", "vendor",
+    ]);
+  });
+
+  it("has no fully reviewed folder when every folder contains unreviewed work", () => {
+    expect(hasFullyReviewedDirectories(files.map((entry) => file(entry.path)))).toBe(false);
+  });
+
+  it("shows only unreviewed files and the folders that contain them", () => {
+    remainingOnly.value = true;
+
+    expect(rows(files).map(pathOf)).toEqual([
+      "src/deep", "src/deep/inner.ts", "vendor", "vendor/bundle.js", "README.md",
+    ]);
+    expect(rows(files.map((entry) => file(entry.path, true)))).toEqual([]);
   });
 
   it("stops at the ends rather than wrapping", () => {
