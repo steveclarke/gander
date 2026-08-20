@@ -35,8 +35,14 @@ test("carries a reviewer note through MCP addressing and reviewer resolution", a
     await expect(note.getByRole("region", { name: "Agent update" })).toContainText("The reviewer confirmed the branch is required");
     await expect(note.getByRole("region", { name: "Waiting on reviewer" })).toHaveCount(0);
 
+    const noteFilter = app.page.getByRole("combobox", { name: "Filter notes by status" });
+    await noteFilter.selectOption("addressed");
+    await expect(note).toBeVisible();
+
     await app.page.getByRole("button", { name: "Mark reviewed" }).click();
     await review.fetchOrigin();
+    await expect(app.page.getByText("No notes have this status.")).toBeVisible();
+    await noteFilter.selectOption("resolved");
     await expect(note.getByRole("combobox", { name: "Status for note" })).toHaveValue("resolved");
 
     const completed = await agent.notes(repository.repoId, "feature");

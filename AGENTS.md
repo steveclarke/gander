@@ -84,6 +84,14 @@ to Gander review notes, read
 from the current worktree; do not register its MCP endpoint globally or reuse
 another worktree's port, token, config, database, or process.
 
+For user-requested code or product changes, create a feature branch, commit and
+push the work, create a pull request, and open that exact pull request in this
+checkout's Gander app. The pull-request review is also Steve's QA session: leave
+the app open on the PR so he can inspect the code and exercise the behavior in one
+flow. Run `bin/mcp check` before handing it back. Stop before publication only
+when Steve explicitly asks not to create a PR or when a concrete blocker requires
+his decision.
+
 **Electron install trap:** Electron 33's extract-zip silently truncates under
 Node 24, leaving a `node_modules/electron/dist` of a few hundred KB while the
 install script exits 0. Electron then fails to launch. The root `postinstall` hook runs
