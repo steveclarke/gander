@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import type { OpenTarget } from "@gander/shared";
-import { MessageSquare, Plus, RefreshCw, X } from "@lucide/vue";
+import { MessageSquare, Plus, X } from "@lucide/vue";
 import { api } from "./api.js";
 import { createStore } from "./store.js";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
 import { notesDock, notesHeight, notesWidth, treeWidth } from "./layout.js";
 import { effectiveTreeTypography } from "../../settings.js";
+import { basename } from "./paths.js";
 import { currentLine } from "./selection.js";
 import type { NoteTarget } from "./selection.js";
 import type { PrFile } from "@gander/shared";
@@ -16,7 +17,9 @@ import { useTreeJump } from "./tree-jump.js";
 import { DEFAULT_ZOOM_LEVEL, clampZoomLevel } from "../../zoom.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
+import ContextToolbar from "./components/ContextToolbar.vue";
 import DiffPane from "./components/DiffPane.vue";
+import EmptyState from "./components/EmptyState.vue";
 import FullFilePane from "./components/FullFilePane.vue";
 import LocalSidebar from "./components/LocalSidebar.vue";
 import PullRequestSidebar from "./components/PullRequestSidebar.vue";
@@ -54,6 +57,7 @@ let treeScrollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const treeTypography = computed(() => effectiveTreeTypography(editorSettings.settings));
 const noteCount = computed(() => store.view?.notes.length ?? 0);
+const repoName = computed(() => store.currentRepoId === null ? "" : basename(store.currentRepoId));
 const hasLoadedView = computed(() => store.view !== null || store.localView !== null);
 const notesSize = computed({
   get: () => (notesDock.value === "right" ? notesWidth.value : notesHeight.value),
@@ -485,27 +489,33 @@ onBeforeUnmount(() => {
         />
 
         <template v-if="surfaceMode === 'explorer' || surfaceMode === 'changes'">
-          <div v-if="store.localView" class="context-toolbar">
-            <div class="context-title">
-              <strong>{{ store.currentRepoId?.split('/').at(-1) }}</strong>
-              <span>{{ store.localView.worktree.branch ?? store.localView.worktree.headSha.slice(0, 8) }}</span>
-            </div>
-            <button :disabled="store.busy" aria-label="Refresh local changes" title="Refresh local changes" @click="store.fetchNow()"><RefreshCw :size="15" :class="{ spin: store.busy }" /></button>
-            <span class="progress local-progress">{{ store.localView.files.length }} changed</span>
-          </div>
+          <ContextToolbar
+            v-if="store.localView"
+            :title="repoName"
+            refresh-label="Refresh local changes"
+            :busy="store.busy"
+            :progress="`${store.localView.files.length} changed`"
+            @refresh="store.fetchNow()"
+          >
+            <template #subtitle>{{ store.localView.worktree.branch ?? store.localView.worktree.headSha.slice(0, 8) }}</template>
+          </ContextToolbar>
           <section class="work-surface">
-            <p v-if="store.busy && !store.localView" class="empty working"><span class="spinner" />Opening worktree…</p>
-            <div v-else-if="!store.targetRepoId" class="welcome">
-              <h1>Open a repository from disk</h1>
-              <p>Gander will discover its linked worktrees and pull requests from one local checkout.</p>
+            <p v-if="store.busy && !store.localView" class="empty working"><span class="spinner spin" />Opening worktree…</p>
+            <EmptyState
+              v-else-if="!store.targetRepoId"
+              title="Open a repository from disk"
+              detail="Gander will discover its linked worktrees and pull requests from one local checkout."
+            >
               <button type="button" @click="chooseRepo()">Open repository folder…</button>
               <button v-if="unconfigured" class="text-action" type="button" @click="openSettings('connection')">Connect a review service for pull requests</button>
-            </div>
-            <div v-else-if="!store.targetWorktreePath" class="empty-state">
-              <h1>Checkout unavailable</h1>
-              <p>Gander cannot read the registered checkout for this repository.</p>
+            </EmptyState>
+            <EmptyState
+              v-else-if="!store.targetWorktreePath"
+              title="Checkout unavailable"
+              detail="Gander cannot read the registered checkout for this repository."
+            >
               <button type="button" @click="store.targetRepoId && chooseRepo(store.targetRepoId)">Locate checkout…</button>
-            </div>
+            </EmptyState>
             <div v-else-if="!store.localView" class="empty">Select the target again to load this worktree.</div>
             <FullFilePane v-else-if="surfaceMode === 'explorer'" :file="store.localFile" :editor-settings="editorSettings.settings.editor" class="diff" />
             <DiffPane v-else :store="store" :editor-settings="editorSettings.settings.editor" class="diff" />
@@ -513,27 +523,34 @@ onBeforeUnmount(() => {
         </template>
 
         <template v-else>
-          <div v-if="store.view && store.currentRepoId === store.targetRepoId" class="context-toolbar">
-            <div class="context-title">
-              <strong>{{ store.currentRepoId?.split('/').at(-1) }}</strong>
-              <span><StackPosition v-if="store.view.pr.stack" class="header-stack-position" :position="store.view.pr.stack.position" :size="store.view.pr.stack.size" /> #{{ store.view.pr.number }} {{ store.view.pr.title }}</span>
-            </div>
+          <ContextToolbar
+            v-if="store.view && store.currentRepoId === store.targetRepoId"
+            :title="repoName"
+            refresh-label="Fetch origin"
+            :busy="store.busy"
+            :progress="`${store.progress().done}/${store.progress().total} reviewed`"
+            @refresh="store.fetchNow()"
+          >
+            <template #subtitle>
+              <StackPosition v-if="store.view.pr.stack" class="header-stack-position" :position="store.view.pr.stack.position" :size="store.view.pr.stack.size" /> #{{ store.view.pr.number }} {{ store.view.pr.title }}
+            </template>
             <button aria-label="Add note (N)" title="Add note (N)" @click="openNote()"><Plus :size="14" /> Note</button>
             <button aria-label="Notes" :title="`Notes (${noteCount})`" @click="drawerOpen = !drawerOpen"><MessageSquare :size="15" /><span v-if="noteCount">{{ noteCount }}</span></button>
-            <button :disabled="store.busy" aria-label="Fetch origin" title="Fetch origin" @click="store.fetchNow()"><RefreshCw :size="15" :class="{ spin: store.busy }" /></button>
-            <span class="progress">{{ store.progress().done }}/{{ store.progress().total }} reviewed</span>
-          </div>
+          </ContextToolbar>
           <section class="work-surface">
-            <p v-if="store.busy && !store.view" class="empty working"><span class="spinner" />Opening pull request…</p>
-            <div v-else-if="!store.targetRepoId" class="welcome">
-              <h1>Open a repository from disk</h1>
-              <p>Pull requests belong to the repository you choose as your target.</p>
+            <p v-if="store.busy && !store.view" class="empty working"><span class="spinner spin" />Opening pull request…</p>
+            <EmptyState
+              v-else-if="!store.targetRepoId"
+              title="Open a repository from disk"
+              detail="Pull requests belong to the repository you choose as your target."
+            >
               <button type="button" @click="chooseRepo()">Open repository folder…</button>
-            </div>
-            <div v-else-if="!store.view || store.currentRepoId !== store.targetRepoId" class="empty-state">
-              <h1>Select a pull request</h1>
-              <p>Choose a pull request or stack from the sidebar to begin reviewing.</p>
-            </div>
+            </EmptyState>
+            <EmptyState
+              v-else-if="!store.view || store.currentRepoId !== store.targetRepoId"
+              title="Select a pull request"
+              detail="Choose a pull request or stack from the sidebar to begin reviewing."
+            />
             <div v-else class="workspace" :class="notesDock">
               <DiffPane ref="diffPane" :store="store" :editor-settings="editorSettings.settings.editor" class="diff" @add-note="openNote" />
               <template v-if="drawerOpen">
@@ -587,15 +604,6 @@ onBeforeUnmount(() => {
 .content > .settings-pane { position: absolute; inset: 0; z-index: 5; background: var(--workbench-background); }
 .view-sidebar { --scrollbar-thumb: transparent; --scrollbar-track: transparent; flex: none; min-height: 0; border-right: 1px solid var(--workbench-border); scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; transition: scrollbar-color 120ms cubic-bezier(0.16, 1, 0.3, 1); }
 .view-sidebar:hover, .view-sidebar:focus-within, .view-sidebar.scrolling { --scrollbar-thumb: color-mix(in srgb, var(--faint-foreground) 45%, transparent); }
-.context-toolbar { height: 35px; flex: none; display: flex; align-items: center; gap: 6px; padding-inline: 12px 7px; border-bottom: 1px solid var(--workbench-border); background: var(--panel-background); }
-.context-title { min-width: 0; display: flex; align-items: baseline; gap: 7px; margin-right: auto; }
-.context-title strong { font-size: 12px; }
-.context-title span { min-width: 0; display: flex; align-items: center; gap: 5px; color: var(--muted-foreground); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.context-toolbar button { min-height: 26px; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--elevated-background); color: var(--muted-foreground); font: inherit; cursor: pointer; }
-.context-toolbar button:hover { color: var(--workbench-foreground); border-color: var(--faint-foreground); }
-.context-toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.context-toolbar button:disabled { opacity: .55; cursor: default; }
-.progress { padding-inline: 4px; color: var(--faint-foreground); font-size: 11px; white-space: nowrap; }
 .work-surface { flex: 1; min-width: 0; min-height: 0; display: flex; background: var(--workbench-background); }
 .workspace { flex: 1; display: flex; min-width: 0; min-height: 0; }
 .workspace.right { flex-direction: row; }
@@ -605,15 +613,8 @@ onBeforeUnmount(() => {
 .diff { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .empty { margin: auto; color: var(--faint-foreground); padding: 2rem; }
 .working { display: flex; align-items: center; gap: 10px; }
-.spinner { width: 14px; height: 14px; border: 2px solid var(--workbench-border); border-top-color: var(--faint-foreground); border-radius: 50%; animation: spin .8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.welcome, .empty-state { margin: auto; max-width: 460px; padding: 40px; text-align: center; color: var(--muted-foreground); }
-.welcome h1, .empty-state h1 { margin: 0 0 10px; color: var(--workbench-foreground); font-size: 22px; letter-spacing: -.02em; }
-.welcome p, .empty-state p { margin: 0 0 22px; line-height: 1.55; }
-.welcome button, .empty-state button { min-height: 32px; padding: 6px 13px; border: 1px solid var(--accent); border-radius: var(--radius-md); background: var(--accent); color: var(--accent-foreground); font: inherit; cursor: pointer; }
-.welcome .text-action { display: block; margin: 14px auto 0; border: 0; background: none; color: var(--accent); }
-.welcome button:focus-visible, .empty-state button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .view-sidebar { transition: none; } }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--workbench-border); border-top-color: var(--faint-foreground); border-radius: 50%; }
+@media (prefers-reduced-motion: reduce) { .view-sidebar { transition: none; } }
 @media (prefers-contrast: more) { .view-sidebar:hover, .view-sidebar:focus-within, .view-sidebar.scrolling { --scrollbar-thumb: var(--workbench-foreground); } }
 @media (forced-colors: active) { .view-sidebar { scrollbar-color: auto; } }
 </style>

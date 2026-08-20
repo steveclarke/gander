@@ -1,6 +1,7 @@
 import { computed, shallowRef, type ComputedRef } from "vue";
 import type { ChangedFile } from "@gander/shared";
 import { pathOf, rows } from "./tree-nav.js";
+import { basename } from "./paths.js";
 
 // Flash's crucial trick: labels come from ordinary keys that cannot extend the current
 // search on any target. A key can therefore mean "keep typing" or "jump" without a mode
@@ -32,15 +33,11 @@ export function matchName(name: string, query: string): number[] | null {
   return indices;
 }
 
-function rowName(path: string): string {
-  return path.split("/").pop() ?? path;
-}
-
 /** Targets in draw order. `rows` deliberately excludes children of collapsed directories. */
 export function jumpTargets(files: ChangedFile[], query: string): JumpTarget[] {
   const matches = rows(files).flatMap((node) => {
     const path = pathOf(node);
-    const name = node.type === "dir" ? node.name : rowName(path);
+    const name = node.type === "dir" ? node.name : basename(path);
     const matchIndices = matchName(name, query);
     return matchIndices === null ? [] : [{ path, name, matchIndices }];
   });

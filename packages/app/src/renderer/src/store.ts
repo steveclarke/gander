@@ -4,6 +4,7 @@ import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, 
 import type { GanderApi } from "./api.js";
 import type { ImagePreview } from "../../api.js";
 import type { ServiceStatus } from "../../api.js";
+import { parentDirectory } from "./paths.js";
 
 export interface Store {
   repos: RepoEntry[];
@@ -422,11 +423,6 @@ export function createStore(api: GanderApi): Store {
 
   function firstLocalFilePath(): string | null {
     return store.localFiles.find((entry) => entry.kind === "file")?.path ?? null;
-  }
-
-  function parentDirectory(path: string): string {
-    const separator = path.lastIndexOf("/");
-    return separator < 0 ? "" : path.slice(0, separator);
   }
 
   async function loadContexts(repoId: string): Promise<void> {

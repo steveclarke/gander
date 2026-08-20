@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { Braces, Palette, Plug, Settings2, SlidersHorizontal, Type, X } from "@lucide/vue";
 import type { EditorSettingsStore } from "../editor-settings-store.js";
+import { useDebouncedSave } from "../composables/use-debounced-save.js";
 import { settingsFromJson, settingsToJson, type AppSettings } from "../../../settings.js";
 import EditorSettings from "./EditorSettings.vue";
 import SettingsJsonEditor from "./SettingsJsonEditor.vue";
@@ -18,9 +19,19 @@ const category = shallowRef<Category>(props.initialCategory ?? "workbench");
 const saveState = shallowRef<"idle" | "saving" | "saved" | "error">("idle");
 const jsonSource = shallowRef(settingsToJson(props.store.settings));
 const jsonError = shallowRef<string | null>(null);
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingJsonSettings: AppSettings | null = null;
+// A save that started before the reviewer typed again must not report its result over the
+// newer one's.
 let revision = 0;
+
+const jsonSave = useDebouncedSave(async () => {
+  const settings = pendingJsonSettings;
+  pendingJsonSettings = null;
+  if (settings === null) return;
+  const saving = ++revision;
+  const success = await props.store.update(settings);
+  if (saving === revision) saveState.value = success ? "saved" : "error";
+});
 
 const status = computed(() => {
   if (props.store.error) return props.store.error;
@@ -31,7 +42,7 @@ const status = computed(() => {
 });
 
 async function setMode(next: "ui" | "json"): Promise<void> {
-  if (mode.value === "json" && next === "ui") await flushJsonSave();
+  if (mode.value === "json" && next === "ui") await jsonSave.flush();
   mode.value = next;
   jsonError.value = null;
   saveState.value = "idle";
@@ -44,13 +55,10 @@ function onUiSaved(success: boolean): void {
 
 function onJsonChange(source: string): void {
   jsonSource.value = source;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = null;
-  const currentRevision = ++revision;
+  jsonSave.cancel();
 
-  let settings;
   try {
-    settings = settingsFromJson(source);
+    pendingJsonSettings = settingsFromJson(source);
     jsonError.value = null;
     saveState.value = "saving";
   } catch (error) {
@@ -60,23 +68,7 @@ function onJsonChange(source: string): void {
     return;
   }
 
-  pendingJsonSettings = settings;
-  saveTimer = setTimeout(async () => {
-    saveTimer = null;
-    pendingJsonSettings = null;
-    const success = await props.store.update(settings);
-    if (currentRevision === revision) saveState.value = success ? "saved" : "error";
-  }, 400);
-}
-
-async function flushJsonSave(): Promise<void> {
-  if (!saveTimer || !pendingJsonSettings) return;
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  const settings = pendingJsonSettings;
-  pendingJsonSettings = null;
-  const success = await props.store.update(settings);
-  saveState.value = success ? "saved" : "error";
+  jsonSave.schedule();
 }
 
 watch(
@@ -85,10 +77,6 @@ watch(
     if (mode.value === "ui") jsonSource.value = settingsToJson(settings);
   },
 );
-
-onBeforeUnmount(() => {
-  void flushJsonSave();
-});
 </script>
 
 <template>

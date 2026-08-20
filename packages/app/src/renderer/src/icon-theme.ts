@@ -1,5 +1,6 @@
 import catppuccinMochaThemeJson from "./icon-themes/catppuccin-mocha/theme.json";
 import type { FileIconThemeId } from "../../file-icon-themes.js";
+import { basename } from "./paths.js";
 
 export interface FileIconTheme {
   hidesExplorerArrows?: boolean;
@@ -39,10 +40,6 @@ const catppuccinMochaAssets = import.meta.glob(
 
 export const CATPPUCCIN_MOCHA_THEME = catppuccinMochaThemeJson as FileIconTheme;
 
-function baseName(path: string): string {
-  return path.split("/").pop() ?? path;
-}
-
 function normalizedLookup(map: Record<string, string> | undefined, key: string): string | undefined {
   return map?.[key.toLowerCase()];
 }
@@ -56,7 +53,7 @@ function existingIcon(theme: FileIconTheme, candidates: Array<string | undefined
 
 /** Resolve a file icon id using the useful VS Code theme precedence subset. */
 export function resolveFileIconId(theme: FileIconTheme, input: FileIconInput): string {
-  const name = baseName(input.path).toLowerCase();
+  const name = basename(input.path).toLowerCase();
 
   const exact = normalizedLookup(theme.fileNames, name);
   if (exact && theme.iconDefinitions[exact]?.iconPath) return exact;
@@ -80,7 +77,7 @@ export function resolveFolderIconId(theme: FileIconTheme, input: FolderIconInput
       : [theme.rootFolder, theme.folder]);
   }
 
-  const name = baseName(input.name).toLowerCase();
+  const name = basename(input.name).toLowerCase();
   return existingIcon(theme, input.expanded
     ? [normalizedLookup(theme.folderNamesExpanded, name), normalizedLookup(theme.folderNames, name), theme.folderExpanded, theme.folder]
     : [normalizedLookup(theme.folderNames, name), theme.folder]);

@@ -4,6 +4,7 @@ import type { EditorSettingsStore } from "../editor-settings-store.js";
 import { DEFAULT_APP_SETTINGS, type FileIconThemeId, type ThemeId } from "../../../settings.js";
 import { THEME_IDS, themeFor } from "../../../themes.js";
 import { FILE_ICON_THEME_IDS, fileIconThemeFor } from "../../../file-icon-themes.js";
+import SettingsField from "./SettingsField.vue";
 import TreeTypographySettings from "./TreeTypographySettings.vue";
 import WindowZoomSettings from "./WindowZoomSettings.vue";
 
@@ -49,37 +50,47 @@ async function reset(): Promise<void> {
       <button class="settings-reset" type="button" :disabled="store.busy" @click="reset">Use default</button>
     </header>
 
-    <div class="settings-field">
-      <label class="settings-label" for="workbench-color-theme">Color theme</label>
-      <p class="settings-description">Controls <code class="settings-code">workbench.colorTheme</code>. Themes are bundled with Gander.</p>
-      <select
-        id="workbench-color-theme"
-        class="settings-control settings-select"
-        name="workbench.colorTheme"
-        :value="store.settings.workbench.colorTheme"
-        :disabled="store.busy"
-        @change="selectTheme"
-      >
-        <option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
-      </select>
-      <p class="settings-description source">Source: {{ activeTheme.source }}</p>
-    </div>
+    <SettingsField id="workbench-color-theme" label="Color theme">
+      <template #description>
+        Controls <code class="settings-code">workbench.colorTheme</code>. Themes are bundled with Gander.
+      </template>
+      <template #control>
+        <select
+          id="workbench-color-theme"
+          class="settings-control settings-select"
+          name="workbench.colorTheme"
+          :value="store.settings.workbench.colorTheme"
+          :disabled="store.busy"
+          @change="selectTheme"
+        >
+          <option v-for="theme in themes" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
+        </select>
+      </template>
+      <template #footer>
+        <p class="settings-description source">Source: {{ activeTheme.source }}</p>
+      </template>
+    </SettingsField>
 
-    <div class="settings-field">
-      <label class="settings-label" for="workbench-icon-theme">File icon theme</label>
-      <p class="settings-description">Controls <code class="settings-code">workbench.iconTheme</code>. Icon themes are bundled with Gander.</p>
-      <select
-        id="workbench-icon-theme"
-        class="settings-control settings-select"
-        name="workbench.iconTheme"
-        :value="store.settings.workbench.iconTheme"
-        :disabled="store.busy"
-        @change="selectIconTheme"
-      >
-        <option v-for="theme in iconThemes" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
-      </select>
-      <p class="settings-description source">Source: {{ activeIconTheme.source }}</p>
-    </div>
+    <SettingsField id="workbench-icon-theme" label="File icon theme">
+      <template #description>
+        Controls <code class="settings-code">workbench.iconTheme</code>. Icon themes are bundled with Gander.
+      </template>
+      <template #control>
+        <select
+          id="workbench-icon-theme"
+          class="settings-control settings-select"
+          name="workbench.iconTheme"
+          :value="store.settings.workbench.iconTheme"
+          :disabled="store.busy"
+          @change="selectIconTheme"
+        >
+          <option v-for="theme in iconThemes" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
+        </select>
+      </template>
+      <template #footer>
+        <p class="settings-description source">Source: {{ activeIconTheme.source }}</p>
+      </template>
+    </SettingsField>
 
     <div class="swatches" role="img" :aria-label="`${activeTheme.label} color palette`">
       <span v-for="(color, token) in activeTheme.workbench" :key="token" :style="{ backgroundColor: color }" />
@@ -89,8 +100,6 @@ async function reset(): Promise<void> {
     <TreeTypographySettings :store="store" @saved="emit('saved', $event)" />
   </section>
 </template>
-
-<style scoped src="../styles/settings.css"></style>
 
 <style scoped>
 .settings-select {

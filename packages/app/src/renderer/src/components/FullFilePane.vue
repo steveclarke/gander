@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import * as monaco from "monaco-editor";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import type { LocalFile } from "@gander/shared";
 import type { EditorSettings } from "../../../settings.js";
 import { languageForPath } from "../languages.js";
-import { setupMonacoWorkers } from "../monaco.js";
-import { codeEditorOptions, editorFontOptions } from "../editor-options.js";
+import { basename, directoryPrefix } from "../paths.js";
+import { codeEditorOptions } from "../editor-options.js";
+import { useMonacoSurface } from "../composables/use-monaco-surface.js";
 
 const props = defineProps<{ file: LocalFile | null; editorSettings: EditorSettings }>();
 const host = ref<HTMLElement | null>(null);
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 let model: monaco.editor.ITextModel | null = null;
-const fileName = computed(() => props.file?.path.split("/").at(-1) ?? "");
-const directory = computed(() => props.file?.path.slice(0, -(fileName.value.length)) ?? "");
+const fileName = computed(() => props.file === null ? "" : basename(props.file.path));
+const directory = computed(() => props.file === null ? "" : directoryPrefix(props.file.path));
 function dispose(): void { editor?.dispose(); model?.dispose(); editor = null; model = null; }
 function render(): void {
   dispose();
@@ -20,10 +21,11 @@ function render(): void {
   model = monaco.editor.createModel(props.file.content ?? "", languageForPath(props.file.path));
   editor = monaco.editor.create(host.value, { model, ...codeEditorOptions(props.editorSettings) });
 }
-onMounted(() => { setupMonacoWorkers(); render(); });
+useMonacoSurface({ settings: () => props.editorSettings, editor: () => editor, dispose });
+onMounted(render);
+// flush: "post" — the template swaps the `host` element in and out with the file itself,
+// so render() has to run after Vue has patched the DOM.
 watch(() => props.file ? `${props.file.path}#${props.file.hash}` : null, render, { flush: "post" });
-watch(() => [props.editorSettings.fontFamily, props.editorSettings.fontSize] as const, () => editor?.updateOptions(editorFontOptions(props.editorSettings)));
-onBeforeUnmount(dispose);
 </script>
 
 <template>

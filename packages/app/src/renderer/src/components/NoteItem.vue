@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import type { Note } from "@gander/shared";
+import { basename } from "../paths.js";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import {
   Check,
@@ -34,7 +35,7 @@ const bodyId = computed(() => `note-body-${props.note.id}`);
 const titleId = computed(() => `note-title-${props.note.id}`);
 const location = computed(() => {
   if (props.note.path === null) return "This pull request";
-  const name = props.note.path.split("/").pop() ?? props.note.path;
+  const name = basename(props.note.path);
   return props.note.line === null ? name : `${name}:${props.note.line}`;
 });
 

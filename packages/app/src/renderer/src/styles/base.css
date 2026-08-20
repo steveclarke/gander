@@ -15,3 +15,10 @@ code, pre { font-family: var(--editor-font-family); font-size: var(--editor-font
 /* The surfaces the browser draws for us still belong to the theme. */
 ::selection { background: var(--selection-background); }
 :root { caret-color: var(--accent); }
+
+/* Anything that turns while the app is waiting on git, GitHub, or the service. Global
+   because four components spin something, and a keyframe per component is four answers
+   to one question. */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
