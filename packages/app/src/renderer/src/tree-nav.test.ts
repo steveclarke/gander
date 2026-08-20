@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { ChangedFile, PrFile } from "@gander/shared";
 import {
   collapsedDirs,
-  collapseAllDirectories,
   edge,
   filesAt,
   nextUnmarked,
@@ -11,6 +10,7 @@ import {
   rows,
   remainingOnly,
   step,
+  toggleAllDirectories,
   visibleFiles,
 } from "./tree-nav.js";
 
@@ -48,9 +48,12 @@ describe("tree navigation", () => {
     expect(paths(visibleFiles(files))).toEqual(["src/deep/inner.ts", "src/app.ts", "README.md"]);
   });
 
-  it("collapses every folder in one action", () => {
-    collapseAllDirectories(files);
+  it("toggles every folder closed and open", () => {
+    toggleAllDirectories(files);
     expect([...collapsedDirs].sort()).toEqual(["src", "src/deep", "vendor"]);
+
+    toggleAllDirectories(files);
+    expect([...collapsedDirs]).toEqual([]);
   });
 
   it("shows only unchecked files and the folders that contain them", () => {

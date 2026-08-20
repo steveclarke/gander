@@ -40,7 +40,17 @@ function directoryPaths(files: ChangedFile[]): string[] {
   return walk(buildTree(files));
 }
 
-export function collapseAllDirectories(files: ChangedFile[]): void {
+export function allDirectoriesCollapsed(files: ChangedFile[]): boolean {
+  const paths = directoryPaths(files);
+  return paths.length > 0 && paths.every((path) => collapsedDirs.has(path));
+}
+
+export function toggleAllDirectories(files: ChangedFile[]): void {
+  if (allDirectoriesCollapsed(files)) {
+    collapsedDirs.clear();
+    return;
+  }
+
   collapsedDirs.clear();
   for (const path of directoryPaths(files)) collapsedDirs.add(path);
 }

@@ -28,7 +28,7 @@ test("review file toolbar controls folder disclosure and remaining files", async
 
   await toolbar.getByRole("button", { name: "Collapse all folders" }).click();
   await expect(review.file("src/main.ts")).toHaveCount(0);
-  await app.page.locator(".tnode.isdir").filter({ hasText: "src" }).click();
+  await toolbar.getByRole("button", { name: "Expand all folders" }).click();
   await expect(review.file("src/main.ts")).toBeVisible();
 
   // A reviewed top-level file cannot be hidden by folding a parent folder. This is the

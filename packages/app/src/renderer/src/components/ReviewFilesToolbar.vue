@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { ListChevronsDownUp, ListFilter } from "@lucide/vue";
+import { computed } from "vue";
+import { ListChevronsDownUp, ListChevronsUpDown, ListFilter } from "@lucide/vue";
 
-defineProps<{
+const props = defineProps<{
   remainingOnly: boolean;
   hasDirectories: boolean;
+  allDirectoriesCollapsed: boolean;
 }>();
 
 defineEmits<{
-  collapseAll: [];
+  toggleAll: [];
   toggleRemaining: [];
 }>();
+
+const folderActionLabel = computed(() => props.allDirectoriesCollapsed
+  ? "Expand all folders"
+  : "Collapse all folders");
 </script>
 
 <template>
@@ -25,10 +31,13 @@ defineEmits<{
     <button
       type="button"
       :disabled="!hasDirectories"
-      aria-label="Collapse all folders"
-      title="Collapse all folders"
-      @click="$emit('collapseAll')"
-    ><ListChevronsDownUp :size="16" /></button>
+      :aria-label="folderActionLabel"
+      :title="folderActionLabel"
+      @click="$emit('toggleAll')"
+    >
+      <ListChevronsUpDown v-if="allDirectoriesCollapsed" :size="16" />
+      <ListChevronsDownUp v-else :size="16" />
+    </button>
   </div>
 </template>
 
