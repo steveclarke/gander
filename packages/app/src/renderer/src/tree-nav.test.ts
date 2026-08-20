@@ -3,7 +3,6 @@ import type { ChangedFile, PrFile } from "@gander/shared";
 import {
   collapsedDirs,
   collapseAllDirectories,
-  collapseReviewedDirectories,
   edge,
   expandAllDirectories,
   filesAt,
@@ -56,19 +55,6 @@ describe("tree navigation", () => {
 
     expandAllDirectories();
     expect([...collapsedDirs]).toEqual([]);
-  });
-
-  it("collapses reviewed folders while leaving unfinished branches open", () => {
-    const review = [
-      file("done/one.ts", true),
-      file("done/nested/two.ts", true),
-      file("working/checked.ts", true),
-      file("working/left.ts", false),
-    ];
-
-    collapseReviewedDirectories(review);
-
-    expect([...collapsedDirs]).toEqual(["done", "done/nested"]);
   });
 
   it("shows only unchecked files and the folders that contain them", () => {

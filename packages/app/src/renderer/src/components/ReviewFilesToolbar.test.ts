@@ -6,13 +6,11 @@ import ReviewFilesToolbar from "./ReviewFilesToolbar.vue";
 describe("ReviewFilesToolbar", () => {
   it("exposes every tree action as a mouse-friendly button", async () => {
     const wrapper = mount(ReviewFilesToolbar, {
-      props: { remainingOnly: false, remainingCount: 3, totalCount: 5, hasDirectories: true },
+      props: { remainingOnly: false, hasDirectories: true },
     });
 
-    expect(wrapper.text()).toContain("3 of 5 remaining");
     for (const [label, event] of [
       ["Expand all folders", "expandAll"],
-      ["Collapse reviewed folders", "collapseReviewed"],
       ["Collapse all folders", "collapseAll"],
       ["Show remaining files only", "toggleRemaining"],
     ] as const) {
@@ -23,10 +21,10 @@ describe("ReviewFilesToolbar", () => {
 
   it("shows the remaining filter as pressed and disables folder actions when unavailable", () => {
     const wrapper = mount(ReviewFilesToolbar, {
-      props: { remainingOnly: true, remainingCount: 0, totalCount: 1, hasDirectories: false },
+      props: { remainingOnly: true, hasDirectories: false },
     });
 
     expect(wrapper.get('[aria-label="Show remaining files only"]').attributes("aria-pressed")).toBe("true");
-    expect(wrapper.findAll("button:disabled")).toHaveLength(3);
+    expect(wrapper.findAll("button:disabled")).toHaveLength(2);
   });
 });

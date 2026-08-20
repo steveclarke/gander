@@ -10,9 +10,9 @@ import ReviewingList from "./ReviewingList.vue";
 import type { JumpTarget } from "../tree-jump.js";
 import {
   collapseAllDirectories,
-  collapseReviewedDirectories,
   expandAllDirectories,
   remainingOnly,
+  reviewTreeFiles,
 } from "../tree-nav.js";
 
 const props = defineProps<{
@@ -25,7 +25,7 @@ defineEmits<{ selectPr: [prNumber: number]; scroll: [] }>();
 
 const reloading = ref(false);
 const remainingCount = computed(() => props.store.view?.files.filter((file) => !file.checked).length ?? 0);
-const hasDirectories = computed(() => props.store.view?.files.some((file) => file.path.includes("/")) ?? false);
+const hasDirectories = computed(() => reviewTreeFiles(props.store.view?.files ?? []).some((file) => file.path.includes("/")));
 
 async function reload(): Promise<void> {
   reloading.value = true;
@@ -63,15 +63,12 @@ async function reload(): Promise<void> {
     <section v-if="store.view && store.currentRepoId === store.targetRepoId" class="files-section">
       <header>
         <h2>Review Files</h2>
-        <span>{{ store.view.files.length }}</span>
+        <span>{{ remainingCount }}/{{ store.view.files.length }} left</span>
       </header>
       <ReviewFilesToolbar
         :remaining-only="remainingOnly"
-        :remaining-count="remainingCount"
-        :total-count="store.view.files.length"
         :has-directories="hasDirectories"
         @expand-all="expandAllDirectories"
-        @collapse-reviewed="collapseReviewedDirectories(store.view.files)"
         @collapse-all="collapseAllDirectories(store.view.files)"
         @toggle-remaining="remainingOnly = !remainingOnly"
       />
