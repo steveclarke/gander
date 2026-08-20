@@ -12,6 +12,8 @@ defineProps<{
   refreshLabel: string;
   busy: boolean;
   progress: string;
+  /** The end-to-end suite waits on `local-progress` to know the local view has arrived. */
+  progressClass?: string;
 }>();
 defineEmits<{ refresh: [] }>();
 </script>
@@ -26,7 +28,7 @@ defineEmits<{ refresh: [] }>();
     <button :disabled="busy" :aria-label="refreshLabel" :title="refreshLabel" @click="$emit('refresh')">
       <RefreshCw :size="15" :class="{ spin: busy }" />
     </button>
-    <span class="progress">{{ progress }}</span>
+    <span class="progress" :class="progressClass">{{ progress }}</span>
   </div>
 </template>
 

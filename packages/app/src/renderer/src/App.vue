@@ -495,6 +495,7 @@ onBeforeUnmount(() => {
             refresh-label="Refresh local changes"
             :busy="store.busy"
             :progress="`${store.localView.files.length} changed`"
+            progress-class="local-progress"
             @refresh="store.fetchNow()"
           >
             <template #subtitle>{{ store.localView.worktree.branch ?? store.localView.worktree.headSha.slice(0, 8) }}</template>
