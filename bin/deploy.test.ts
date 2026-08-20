@@ -35,7 +35,12 @@ beforeEach(() => {
 set -euo pipefail
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_LOG"
 if [[ "$1 $2" == "compose port" ]]; then printf '0.0.0.0:%s\\n' "$FAKE_PORT"; fi
-if [[ "$*" == *"migrate-0.6.0.ts"* && "\${FAKE_MIGRATION_FAIL:-0}" == "1" ]]; then exit 1; fi
+if [[ "$*" == *"migrate-0.6.0.ts"* ]]; then
+  # A real docker compose run inherits stdin. Consume it here so this test
+  # proves the remote deployment script protects its remaining commands.
+  while IFS= read -r _; do :; done
+  if [[ "\${FAKE_MIGRATION_FAIL:-0}" == "1" ]]; then exit 1; fi
+fi
 `);
   executable(join(fakeBin, "curl"), `#!/usr/bin/env bash
 set -euo pipefail
