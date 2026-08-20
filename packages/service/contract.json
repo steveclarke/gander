@@ -1,5 +1,5 @@
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "routes": [
     "DELETE /api/reviews/:repoId/:prNumber/notes/:id",
     "DELETE /mcp",
@@ -124,6 +124,26 @@
         "summary"
       ]
     },
+    "MarkInProgressSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "note": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "note"
+      ]
+    },
     "NewNoteSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -165,13 +185,42 @@
               "type": "null"
             }
           ]
+        },
+        "sourceContext": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "startLine": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "lines": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "startLine",
+                "lines"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "path",
         "line",
         "text",
-        "headSha"
+        "headSha",
+        "sourceContext"
       ]
     },
     "NoteSchema": {
@@ -213,11 +262,50 @@
           "type": "string",
           "enum": [
             "open",
+            "in_progress",
             "addressed",
             "resolved"
           ]
         },
         "headSha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceContext": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "startLine": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "lines": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "startLine",
+                "lines"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inProgressNote": {
           "anyOf": [
             {
               "type": "string"
@@ -258,9 +346,33 @@
         "text",
         "state",
         "headSha",
+        "sourceContext",
+        "inProgressNote",
         "commitRef",
         "summary",
         "createdAt"
+      ]
+    },
+    "NoteSourceContextSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "startLine": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lines": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "startLine",
+        "lines"
       ]
     },
     "NoteStateSchema": {
@@ -268,6 +380,7 @@
       "type": "string",
       "enum": [
         "open",
+        "in_progress",
         "addressed",
         "resolved"
       ]
@@ -542,6 +655,7 @@
           "type": "string",
           "enum": [
             "open",
+            "in_progress",
             "addressed",
             "resolved"
           ]
@@ -552,7 +666,7 @@
   "mcpTools": [
     {
       "name": "get_review_notes",
-      "description": "Notes the reviewer has left on a pull request, with the file and line each one is about. Derive repo and branch from the working directory. Returns open notes by default — those are the ones still needing work. The response always counts open, addressed, and resolved notes so hidden states are visible. The response names the branch, title, and stack position of the pull request the notes belong to: check it matches the checkout being worked in, because a stacked pull request's sibling is a different branch with different notes.",
+      "description": "Notes the reviewer has left on a pull request, with the file and line each one is about. Derive repo and branch from the working directory. Returns open and in-progress notes by default — those are the ones still needing work. The response always counts open, in-progress, addressed, and resolved notes so hidden states are visible. The response names the branch, title, and stack position of the pull request the notes belong to: check it matches the checkout being worked in, because a stacked pull request's sibling is a different branch with different notes.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -577,6 +691,12 @@
           "includeResolved": {
             "description": "Also return notes the reviewer has resolved. Defaults to false.",
             "type": "boolean"
+          },
+          "since": {
+            "description": "Return only notes with an id greater than this last-seen note id.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [
@@ -587,7 +707,7 @@
     },
     {
       "name": "mark_note_addressed",
-      "description": "Record that a note has been acted on. Use it only once the work is actually done and committed. This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
+      "description": "Record the outcome after an in-progress note has been acted on. A code change can name its commit; an answered question has no commit. This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -598,12 +718,39 @@
             "description": "Note id from get_review_notes."
           },
           "commitRef": {
-            "description": "Commit that addressed it.",
-            "type": "string"
+            "description": "Commit that addressed it, when the outcome changed code.",
+            "type": "string",
+            "minLength": 1
           },
           "summary": {
-            "description": "One line on what changed.",
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "description": "One line recording the outcome."
+          }
+        },
+        "required": [
+          "id",
+          "summary"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "mark_note_in_progress",
+      "description": "Claim a note when work starts. Pass note when work is waiting on a reviewer decision; omit it while work is active.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Note id from get_review_notes."
+          },
+          "note": {
+            "description": "Why this work is waiting on the reviewer.",
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [

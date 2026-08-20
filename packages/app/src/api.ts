@@ -59,7 +59,7 @@ export interface GanderApi {
   localImagePreview(path: string): Promise<ImagePreview>;
   closeLocal(): Promise<void>;
   onLocalViewChanged(listener: (update: LocalViewUpdate) => void): () => void;
-  addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha">): Promise<PrView>;
+  addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha" | "sourceContext">): Promise<PrView>;
   updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Promise<PrView>;
   deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
   getSettings(): Promise<AppSettings>;

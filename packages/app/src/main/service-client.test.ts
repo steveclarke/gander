@@ -84,12 +84,13 @@ describe("a request with no body", () => {
         seen.push(req.headers["content-type"]);
         return reply.code(201).send({
           id: 1, path: "a.rb", line: null, text: "why?", state: "open",
-          headSha: null, commitRef: null, summary: null, createdAt: new Date().toISOString(),
+          headSha: null, sourceContext: null, inProgressNote: null,
+          commitRef: null, summary: null, createdAt: new Date().toISOString(),
         });
       });
     });
     const client = createServiceClient(() => ({ url, token: "t" }));
-    await client.addNote("acme/atlas", 1, { path: "a.rb", line: null, text: "why?", headSha: null });
+    await client.addNote("acme/atlas", 1, { path: "a.rb", line: null, text: "why?", headSha: null, sourceContext: null });
     expect(seen).toEqual(["application/json"]);
   });
 
@@ -97,7 +98,8 @@ describe("a request with no body", () => {
     const url = await serve((app) => {
       app.patch("/api/reviews/:repoId/:prNumber/notes/:id", async (req) => ({
         id: 2, path: "a.rb", line: null, text: (req.body as { text: string }).text, state: "resolved",
-        headSha: null, commitRef: null, summary: null, createdAt: new Date().toISOString(),
+        headSha: null, sourceContext: null, inProgressNote: null,
+        commitRef: null, summary: null, createdAt: new Date().toISOString(),
       }));
     });
     const client = createServiceClient(() => ({ url, token: "t" }));

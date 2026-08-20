@@ -106,32 +106,61 @@ describe("storage", () => {
 
   describe("notes", () => {
     it("stores a note against a file and reads it back as open", () => {
-      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null });
-      expect(q).toMatchObject({ path: "a.rb", line: 12, text: "Why the retry here?", state: "open" });
+      const q = storage.addNote("acme/atlas", 7, {
+        path: "a.rb", line: 12, text: "Why the retry here?", headSha: null,
+        sourceContext: { startLine: 10, lines: ["before", "near", "target", "after"] },
+      });
+      expect(q).toMatchObject({
+        path: "a.rb", line: 12, text: "Why the retry here?", state: "open",
+        sourceContext: { startLine: 10, lines: ["before", "near", "target", "after"] },
+      });
       expect(storage.listNotes("acme/atlas", 7)).toEqual([q]);
     });
 
     it("keeps a pull-request-level note, which has no file", () => {
-      const q = storage.addNote("acme/atlas", 7, { path: null, line: null, text: "Squash before merge", headSha: null });
+      const q = storage.addNote("acme/atlas", 7, { path: null, line: null, text: "Squash before merge", headSha: null, sourceContext: null });
       expect(q.path).toBeNull();
       expect(storage.listNotes("acme/atlas", 7)).toHaveLength(1);
     });
 
     it("scopes notes to one review", () => {
-      storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "on seven", headSha: null });
-      storage.addNote("acme/atlas", 8, { path: "a.rb", line: null, text: "on eight", headSha: null });
+      storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "on seven", headSha: null, sourceContext: null });
+      storage.addNote("acme/atlas", 8, { path: "a.rb", line: null, text: "on eight", headSha: null, sourceContext: null });
       expect(storage.listNotes("acme/atlas", 7).map((q) => q.text)).toEqual(["on seven"]);
       expect(storage.listNotes("acme/atlas", 8).map((q) => q.text)).toEqual(["on eight"]);
     });
 
     it("an agent marks a note addressed with a commit and note", () => {
-      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?", headSha: null });
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?", headSha: null, sourceContext: null });
+      expect(storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" })).toBeNull();
+      storage.markNoteInProgress(q.id, { note: null });
       const marked = storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" });
       expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", summary: "Dropped the retry" });
     });
 
+    it("claims a note, records why it is waiting, then addresses it without a commit", () => {
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Which behavior?", headSha: null, sourceContext: null });
+
+      expect(storage.markNoteInProgress(q.id, { note: null })).toMatchObject({ state: "in_progress", inProgressNote: null });
+      expect(storage.markNoteInProgress(q.id, { note: "Need the reviewer to choose A or B" })).toMatchObject({
+        state: "in_progress",
+        inProgressNote: "Need the reviewer to choose A or B",
+      });
+      expect(storage.markNoteInProgress(q.id, { note: null })).toMatchObject({
+        state: "in_progress",
+        inProgressNote: null,
+      });
+      storage.markNoteInProgress(q.id, { note: "Need the reviewer to choose A or B" });
+      expect(storage.markNoteAddressed(q.id, { commitRef: null, summary: "The reviewer chose A." })).toMatchObject({
+        state: "addressed",
+        inProgressNote: null,
+        commitRef: null,
+        summary: "The reviewer chose A.",
+      });
+    });
+
     it("lets the reviewer edit note text and correct its state within one review", () => {
-      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Old text", headSha: null });
+      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Old text", headSha: null, sourceContext: null });
 
       expect(storage.updateNote("acme/atlas", 8, note.id, { text: "Wrong review" })).toBeNull();
       expect(storage.updateNote("acme/atlas", 7, note.id, { text: "Updated text", state: "resolved" })).toMatchObject({
@@ -143,7 +172,8 @@ describe("storage", () => {
     });
 
     it("refuses to re-address a note the reviewer already resolved", () => {
-      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null, sourceContext: null });
+      storage.markNoteInProgress(q.id, { note: null });
       storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" });
       storage.putFileState("acme/atlas", 7, {
         checked: true, path: "a.rb", baseHash: "b", headHash: "h",
@@ -156,9 +186,11 @@ describe("storage", () => {
     });
 
     it("re-checking a file resolves its addressed notes and leaves open ones alone", () => {
-      const answered = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "answered", headSha: null });
-      const unanswered = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "still open", headSha: null });
-      const elsewhere = storage.addNote("acme/atlas", 7, { path: "b.rb", line: null, text: "other file", headSha: null });
+      const answered = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "answered", headSha: null, sourceContext: null });
+      const unanswered = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "still open", headSha: null, sourceContext: null });
+      const elsewhere = storage.addNote("acme/atlas", 7, { path: "b.rb", line: null, text: "other file", headSha: null, sourceContext: null });
+      storage.markNoteInProgress(answered.id, { note: null });
+      storage.markNoteInProgress(elsewhere.id, { note: null });
       storage.markNoteAddressed(answered.id, { commitRef: "c1", summary: null });
       storage.markNoteAddressed(elsewhere.id, { commitRef: "c2", summary: null });
 
@@ -187,7 +219,7 @@ describe("storage", () => {
     });
 
     it("deletes only within its own review", () => {
-      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "keep me", headSha: null });
+      const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "keep me", headSha: null, sourceContext: null });
       // The same id offered against a different pull request must not delete it.
       expect(storage.deleteNote("acme/atlas", 8, q.id)).toBe(false);
       expect(storage.listNotes("acme/atlas", 7)).toHaveLength(1);

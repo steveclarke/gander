@@ -102,6 +102,22 @@ describe("review pipeline", () => {
     expect(a.changedSince).toBe(false);
   });
 
+  it("captures source around the selected line when a note is created", async () => {
+    await reviewer.openPr("acme/atlas", 1);
+
+    const view = await reviewer.addNote("acme/atlas", 1, { path: "a.rb", line: 2, text: "Why this method?" });
+
+    expect(view.notes[0]).toMatchObject({
+      path: "a.rb",
+      line: 2,
+      headSha: view.pr.headSha,
+      sourceContext: {
+        startLine: 1,
+        lines: ["class A", "  def go; end", "end", ""],
+      },
+    });
+  });
+
   it("setChecked persists through the service and survives re-open", async () => {
     await reviewer.openPr("acme/atlas", 1);
     const view = await reviewer.setChecked("acme/atlas", 1, "a.rb", true);

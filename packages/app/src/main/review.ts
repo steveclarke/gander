@@ -16,7 +16,7 @@ export interface Reviewer {
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
-  addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha">): Promise<PrView>;
+  addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha" | "sourceContext">): Promise<PrView>;
   updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Promise<PrView>;
   deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
   /** The file as it stood when the reviewer last checked it — the base for the delta view. */
@@ -263,7 +263,19 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     async addNote(repoId, prNumber, input) {
       const entry = requireWritable(repoId, prNumber);
       const { view } = entry;
-      const note = await writeServiceState(entry, () => deps.service.addNote(repoId, prNumber, { ...input, headSha: view.pr.headSha }));
+      const file = input.path === null ? undefined : view.files.find((candidate) => candidate.path === input.path);
+      const lines = file?.headContent?.split("\n") ?? [];
+      const sourceContext = input.line === null || input.line > lines.length
+        ? null
+        : {
+            startLine: Math.max(1, input.line - 2),
+            lines: lines.slice(Math.max(0, input.line - 3), input.line + 2),
+          };
+      const note = await writeServiceState(entry, () => deps.service.addNote(repoId, prNumber, {
+        ...input,
+        headSha: view.pr.headSha,
+        sourceContext,
+      }));
       view.notes = [...view.notes, note];
       return view;
     },

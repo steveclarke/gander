@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, MarkAddressed, NewNote, PrContext, PutFileState, Note, ReviewState, UpdateNote } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, MarkInProgress, NewNote, PrContext, PutFileState, Note, ReviewState, UpdateNote } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS notes (
   text TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'open',
   head_sha TEXT,
+  source_context TEXT,
+  in_progress_note TEXT,
   commit_ref TEXT,
   summary TEXT,
   addressed_at TEXT,
@@ -54,6 +56,7 @@ export interface Storage {
   /** Every pull request recorded as part of the same stack, with how many open notes each holds. */
   listStackMembers(repoId: string, stackId: number): Array<{ prNumber: number; headRef: string | null; title: string | null; position: number | null; openNotes: number }>;
   findPrByHeadRef(repoId: string, headRef: string): number | null;
+  markNoteInProgress(id: number, input: MarkInProgress): Note | null;
   markNoteAddressed(id: number, input: MarkAddressed): Note | null;
   listNotes(repoId: string, prNumber: number): Note[];
   addNote(repoId: string, prNumber: number, input: NewNote): Note;
@@ -62,7 +65,7 @@ export interface Storage {
   close(): void;
 }
 
-interface NoteRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; commit_ref: string | null; summary: string | null; created_at: string }
+interface NoteRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; source_context: string | null; in_progress_note: string | null; commit_ref: string | null; summary: string | null; created_at: string }
 interface FileStateRow { path: string; checked: number; base_hash: string | null; head_hash: string | null; checked_at: string | null; machine: string | null }
 
 const rowToCheckoff = (r: FileStateRow): FileCheckoff => ({
@@ -75,11 +78,13 @@ const rowToNote = (r: NoteRow): Note => ({
   id: r.id, path: r.path, line: r.line, text: r.text,
   state: r.state as Note["state"],
   headSha: r.head_sha,
+  sourceContext: r.source_context === null ? null : JSON.parse(r.source_context) as Note["sourceContext"],
+  inProgressNote: r.in_progress_note,
   commitRef: r.commit_ref, summary: r.summary,
   createdAt: r.created_at,
 });
 
-const NOTE_COLUMNS = "id, path, line, text, state, head_sha, commit_ref, summary, created_at";
+const NOTE_COLUMNS = "id, path, line, text, state, head_sha, source_context, in_progress_note, commit_ref, summary, created_at";
 const FILE_STATE_COLUMNS = "path, checked, base_hash, head_hash, checked_at, machine";
 
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
@@ -192,13 +197,25 @@ export function openStorage(dbPath: string): Storage {
       return row?.pr_number ?? null;
     },
 
+    markNoteInProgress(id, input) {
+      // Calling the claim tool again updates whether already-started work is active or
+      // waiting, without manufacturing another state transition.
+      const changed = db.prepare(`
+        UPDATE notes
+        SET state = 'in_progress', in_progress_note = ?
+        WHERE id = ? AND state IN ('open', 'in_progress')
+      `).run(input.note, id).changes;
+      if (changed === 0) return null;
+      return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow);
+    },
+
     markNoteAddressed(id, input) {
-      // Only an open note can be addressed. Re-addressing a resolved one would
+      // Only claimed work can be addressed. Re-addressing a resolved one would
       // undo the reviewer's own act, and the spec puts resolution solely in their hands.
       const changed = db.prepare(`
         UPDATE notes
-        SET state = 'addressed', commit_ref = ?, summary = ?, addressed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-        WHERE id = ? AND state = 'open'
+        SET state = 'addressed', in_progress_note = NULL, commit_ref = ?, summary = ?, addressed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE id = ? AND state = 'in_progress'
       `).run(input.commitRef, input.summary, id).changes;
       if (changed === 0) return null;
       return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow);
@@ -213,8 +230,8 @@ export function openStorage(dbPath: string): Storage {
     addNote(repoId, prNumber, input) {
       const rid = reviewId(repoId, prNumber);
       const { lastInsertRowid } = db
-        .prepare("INSERT INTO notes (review_id, path, line, text, head_sha) VALUES (?, ?, ?, ?, ?)")
-        .run(rid, input.path, input.line, input.text, input.headSha);
+        .prepare("INSERT INTO notes (review_id, path, line, text, head_sha, source_context) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(rid, input.path, input.line, input.text, input.headSha, input.sourceContext === null ? null : JSON.stringify(input.sourceContext));
       const row = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(lastInsertRowid) as NoteRow;
       return rowToNote(row);
     },
@@ -230,6 +247,7 @@ export function openStorage(dbPath: string): Storage {
       if (input.state !== undefined) {
         assignments.push("state = ?");
         values.push(input.state);
+        if (input.state !== "in_progress") assignments.push("in_progress_note = NULL");
       }
       if (assignments.length === 0) return null;
       const changed = db.prepare(`UPDATE notes SET ${assignments.join(", ")} WHERE id = ? AND review_id = ?`)

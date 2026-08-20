@@ -52,13 +52,13 @@ describe("MCP endpoint", () => {
   it("offers only the note pickup and completion tools", async () => {
     const client = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["get_review_notes", "mark_note_addressed"]);
+    expect(names).toEqual(["get_review_notes", "mark_note_addressed", "mark_note_in_progress"]);
     await client.close();
   });
 
   it("returns the reviewer's open notes for a branch", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null });
+    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why the retry here?", headSha: null, sourceContext: null });
 
     const client = await connect();
     const result = await client.callTool({
@@ -72,15 +72,16 @@ describe("MCP endpoint", () => {
     expect(payload.title).toBe("Feature");
     expect(payload.notes).toEqual([{
       id: expect.any(Number), file: "a.rb", line: 12, text: "Why the retry here?", state: "open",
-      capturedAtSha: null, lineMayHaveMoved: false,
+      capturedAtSha: null, sourceContext: null, lineMayHaveMoved: false,
     }]);
     await client.close();
   });
 
   it("hides addressed notes unless they are asked for", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    const done = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null });
-    storage.addNote("acme/atlas", 7, { path: "b.rb", line: null, text: "still open", headSha: null });
+    const done = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null, sourceContext: null });
+    storage.addNote("acme/atlas", 7, { path: "b.rb", line: null, text: "still open", headSha: null, sourceContext: null });
+    storage.markNoteInProgress(done.id, { note: null });
     storage.markNoteAddressed(done.id, { commitRef: "abc", summary: null });
 
     const client = await connect();
@@ -88,11 +89,11 @@ describe("MCP endpoint", () => {
       name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
     })) as { content?: unknown })) as {
-      noteCounts: { open: number; addressed: number; resolved: number };
+      noteCounts: { open: number; in_progress: number; addressed: number; resolved: number };
       notes: unknown[];
     };
     expect(openOnly.notes).toHaveLength(1);
-    expect(openOnly.noteCounts).toEqual({ open: 1, addressed: 1, resolved: 0 });
+    expect(openOnly.noteCounts).toEqual({ open: 1, in_progress: 0, addressed: 1, resolved: 0 });
 
     const both = JSON.parse(textOf((await client.callTool({
       name: "get_review_notes",
@@ -104,7 +105,8 @@ describe("MCP endpoint", () => {
 
   it("explains when resolved notes are hidden and returns them when asked", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    const resolved = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null });
+    const resolved = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "handled", headSha: null, sourceContext: null });
+    storage.markNoteInProgress(resolved.id, { note: null });
     storage.markNoteAddressed(resolved.id, { commitRef: "abc1234", summary: "Dropped the retry" });
     storage.putFileState("acme/atlas", 7, {
       checked: true, path: "a.rb", baseHash: "base", headHash: "head",
@@ -116,13 +118,13 @@ describe("MCP endpoint", () => {
       name: "get_review_notes",
       arguments: { repo: "acme/atlas", branch: "feat/thing" },
     })) as { content?: unknown })) as {
-      noteCounts: { open: number; addressed: number; resolved: number };
+      noteCounts: { open: number; in_progress: number; addressed: number; resolved: number };
       message: string;
       notes: unknown[];
     };
     expect(openOnly.notes).toEqual([]);
-    expect(openOnly.noteCounts).toEqual({ open: 0, addressed: 0, resolved: 1 });
-    expect(openOnly.message).toBe("No open notes returned. 1 resolved note is hidden; pass includeResolved: true to retrieve it.");
+    expect(openOnly.noteCounts).toEqual({ open: 0, in_progress: 0, addressed: 0, resolved: 1 });
+    expect(openOnly.message).toBe("No open or in-progress notes returned. 1 resolved note is hidden; pass includeResolved: true to retrieve it.");
 
     const withResolved = JSON.parse(textOf((await client.callTool({
       name: "get_review_notes",
@@ -130,16 +132,17 @@ describe("MCP endpoint", () => {
     })) as { content?: unknown })) as { notes: Array<Record<string, unknown>> };
     expect(withResolved.notes).toEqual([{
       id: resolved.id, file: "a.rb", line: null, text: "handled", state: "resolved",
-      commitRef: "abc1234", summary: "Dropped the retry", capturedAtSha: null, lineMayHaveMoved: false,
+      commitRef: "abc1234", summary: "Dropped the retry", capturedAtSha: null, sourceContext: null, lineMayHaveMoved: false,
     }]);
     await client.close();
   });
 
   it("marks a note addressed, and the state is really in storage", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
-    const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+    const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null, sourceContext: null });
 
     const client = await connect();
+    await client.callTool({ name: "mark_note_in_progress", arguments: { id: q.id } });
     await client.callTool({
       name: "mark_note_addressed",
       arguments: { id: q.id, commitRef: "abc1234", summary: "Dropped the retry" },
@@ -150,11 +153,64 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
-  it("refuses to mark a note that is not open", async () => {
+  it("claims a note, exposes a reviewer blocker, and addresses a question without a commit", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const q = storage.addNote("acme/atlas", 7, {
+      path: "a.rb", line: 2, text: "Which behavior?", headSha: "sha-1",
+      sourceContext: { startLine: 1, lines: ["one", "two", "three"] },
+    });
+
     const client = await connect();
-    const result = await client.callTool({ name: "mark_note_addressed", arguments: { id: 999 } });
+    await client.callTool({
+      name: "mark_note_in_progress",
+      arguments: { id: q.id, note: "Need the reviewer to choose A or B" },
+    });
+    const claimed = JSON.parse(textOf((await client.callTool({
+      name: "get_review_notes", arguments: { repo: "acme/atlas", branch: "feat/thing" },
+    })) as { content?: unknown })) as { noteCounts: Record<string, number>; notes: Array<Record<string, unknown>> };
+    expect(claimed.noteCounts).toEqual({ open: 0, in_progress: 1, addressed: 0, resolved: 0 });
+    expect(claimed.notes[0]).toMatchObject({
+      id: q.id,
+      state: "in_progress",
+      inProgressNote: "Need the reviewer to choose A or B",
+      sourceContext: { startLine: 1, lines: ["one", "two", "three"] },
+    });
+
+    await client.callTool({
+      name: "mark_note_addressed",
+      arguments: { id: q.id, summary: "The reviewer chose A." },
+    });
+    expect(storage.listNotes("acme/atlas", 7)[0]).toMatchObject({
+      state: "addressed", commitRef: null, summary: "The reviewer chose A.", inProgressNote: null,
+    });
+    await client.close();
+  });
+
+  it("returns only notes after the last-seen id", async () => {
+    storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
+    const first = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 1, text: "First", headSha: null, sourceContext: null });
+    const second = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 2, text: "Second", headSha: null, sourceContext: null });
+
+    const client = await connect();
+    const incremental = JSON.parse(textOf((await client.callTool({
+      name: "get_review_notes", arguments: { repo: "acme/atlas", branch: "feat/thing", since: first.id },
+    })) as { content?: unknown })) as { lastNoteId: number; notes: Array<{ id: number }> };
+    expect(incremental.lastNoteId).toBe(second.id);
+    expect(incremental.notes.map((note) => note.id)).toEqual([second.id]);
+
+    const none = JSON.parse(textOf((await client.callTool({
+      name: "get_review_notes", arguments: { repo: "acme/atlas", branch: "feat/thing", since: second.id },
+    })) as { content?: unknown })) as { message: string; notes: unknown[] };
+    expect(none.notes).toEqual([]);
+    expect(none.message).toBe(`No new open or in-progress notes after note ${second.id}.`);
+    await client.close();
+  });
+
+  it("refuses to mark a note that is not in progress", async () => {
+    const client = await connect();
+    const result = await client.callTool({ name: "mark_note_addressed", arguments: { id: 999, summary: "Nothing to change" } });
     expect(result.isError).toBe(true);
-    expect(textOf(result as { content?: unknown })).toContain("not open");
+    expect(textOf(result as { content?: unknown })).toContain("not in progress");
     await client.close();
   });
 
@@ -196,7 +252,7 @@ describe("MCP endpoint", () => {
     storage.setPrContext("acme/atlas", 8, {
       headRef: "feat/frontend", title: "Frontend", headSha: "sha-2", stackId: 99, stackSize: 2, stackPosition: 2,
     });
-    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1" });
+    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Why?", headSha: "sha-1", sourceContext: null });
 
     const client = await connect();
     const text = textOf((await client.callTool({
@@ -218,8 +274,8 @@ describe("MCP endpoint", () => {
     storage.setPrContext("acme/atlas", 8, {
       headRef: "feat/frontend", title: "Frontend", headSha: "sha-2", stackId: 99, stackSize: 2, stackPosition: 2,
     });
-    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 1, text: "on backend", headSha: null });
-    storage.addNote("acme/atlas", 8, { path: "b.ts", line: 1, text: "on frontend", headSha: null });
+    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 1, text: "on backend", headSha: null, sourceContext: null });
+    storage.addNote("acme/atlas", 8, { path: "b.ts", line: 1, text: "on frontend", headSha: null, sourceContext: null });
 
     const client = await connect();
     const text = textOf((await client.callTool({
@@ -235,7 +291,7 @@ describe("MCP endpoint", () => {
     storage.setPrContext("acme/atlas", 7, {
       headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null,
     });
-    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "captured at sha-1", headSha: "sha-1" });
+    storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "captured at sha-1", headSha: "sha-1", sourceContext: null });
 
     const client = await connect();
     const stillCurrent = JSON.parse(textOf((await client.callTool({

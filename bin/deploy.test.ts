@@ -35,6 +35,7 @@ beforeEach(() => {
 set -euo pipefail
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_LOG"
 if [[ "$1 $2" == "compose port" ]]; then printf '0.0.0.0:%s\\n' "$FAKE_PORT"; fi
+if [[ "$*" == *"migrate-0.6.0.ts"* && "\${FAKE_MIGRATION_FAIL:-0}" == "1" ]]; then exit 1; fi
 `);
   executable(join(fakeBin, "curl"), `#!/usr/bin/env bash
 set -euo pipefail
@@ -53,6 +54,7 @@ function deploy(): ReturnType<typeof spawnSync> {
       PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
       GANDER_DEPLOY_HOST: "local-test",
       GANDER_DEPLOY_PATH: remote,
+      GANDER_BACKUP_PATH: join(dir, "backups"),
       FAKE_CURL_LOG: curlLog,
       FAKE_DOCKER_LOG: dockerLog,
       FAKE_PORT: "19420",
@@ -68,6 +70,34 @@ describe("bin/deploy", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("Serving contract version 0.1.0");
     expect(readFileSync(curlLog, "utf8")).toContain("http://127.0.0.1:19420/healthz");
+    expect(readFileSync(dockerLog, "utf8").trim().split("\n")).toEqual([
+      "compose build gander",
+      "compose stop gander",
+      expect.stringMatching(/^compose run --rm --no-deps -v .+\/backups:\/backup gander node_modules\/\.bin\/tsx src\/migrate-0\.6\.0\.ts \/data\/gander\.db \/backup\/gander-\d{8}T\d{6}Z-[a-f0-9]+\.db$/),
+      "compose up -d gander",
+      "compose port gander 8390",
+    ]);
+  });
+
+  it("leaves the service stopped when the backup or migration fails", () => {
+    const result = spawnSync(command, ["--ref", "v0.1.0"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        GANDER_DEPLOY_HOST: "local-test",
+        GANDER_DEPLOY_PATH: remote,
+        GANDER_BACKUP_PATH: join(dir, "backups"),
+        FAKE_CURL_LOG: curlLog,
+        FAKE_DOCKER_LOG: dockerLog,
+        FAKE_PORT: "19420",
+        FAKE_SERVICE_VERSION: "0.1.0",
+        FAKE_MIGRATION_FAIL: "1",
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(readFileSync(dockerLog, "utf8")).not.toContain("compose up -d gander");
   });
 
   it("refuses to build a remote checkout with local changes", () => {

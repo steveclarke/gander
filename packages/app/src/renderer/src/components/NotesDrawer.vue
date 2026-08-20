@@ -10,6 +10,20 @@ const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
 const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addNote: [] }>();
 
 const notes = computed(() => props.store.view?.notes ?? []);
+const noteGroups = computed(() => [
+  { key: "open", label: "Open", notes: notes.value.filter((note) => note.state === "open") },
+  { key: "in-progress", label: "In progress", notes: notes.value.filter((note) => note.state === "in_progress" && note.inProgressNote === null) },
+  { key: "waiting", label: "Waiting on you", notes: notes.value.filter((note) => note.state === "in_progress" && note.inProgressNote !== null) },
+  { key: "addressed", label: "Addressed", notes: notes.value.filter((note) => note.state === "addressed") },
+  { key: "resolved", label: "Resolved", notes: notes.value.filter((note) => note.state === "resolved") },
+].filter((group) => group.notes.length > 0));
+type NoteRow =
+  | { key: string; kind: "heading"; label: string; count: number }
+  | { key: string; kind: "note"; note: Note };
+const noteRows = computed<NoteRow[]>(() => noteGroups.value.flatMap((group) => [
+  { key: `heading-${group.key}`, kind: "heading" as const, label: group.label, count: group.notes.length },
+  ...group.notes.map((note) => ({ key: `note-${note.id}`, kind: "note" as const, note })),
+]));
 const copiedNoteId = shallowRef<number | null>(null);
 const copiedAll = shallowRef(false);
 
@@ -31,6 +45,14 @@ function noteMarkdown(note: Note): string {
   if (note.summary || note.commitRef) {
     const commit = note.commitRef ? ` (${note.commitRef})` : "";
     parts.push("", `Agent update${commit}: ${note.summary ?? "Addressed"}`);
+  }
+  if (note.state === "in_progress" && note.inProgressNote) parts.push("", `Waiting on reviewer: ${note.inProgressNote}`);
+  if (note.sourceContext) {
+    const { startLine, lines } = note.sourceContext;
+    const source = lines
+      .map((line, index) => `${startLine + index}: ${line}`)
+      .join("\n");
+    parts.push("", "```", source, "```");
   }
   return parts.join("\n");
 }
@@ -102,17 +124,19 @@ async function copyAll(): Promise<void> {
     </div>
 
     <ul v-else aria-label="Review notes">
-      <NoteItem
-        v-for="note in notes"
-        :key="note.id"
-        :note="note"
-        :current="note.path === store.selectedPath"
-        :copied="copiedNoteId === note.id"
-        :update-note="store.updateNote"
-        @navigate="goTo"
-        @copy="copyNote"
-        @delete="store.deleteNote"
-      />
+      <template v-for="row in noteRows" :key="row.key">
+        <li v-if="row.kind === 'heading'" class="group-heading" role="presentation">{{ row.label }} <span>{{ row.count }}</span></li>
+        <NoteItem
+          v-else
+          :note="row.note"
+          :current="row.note.path === store.selectedPath"
+          :copied="copiedNoteId === row.note.id"
+          :update-note="store.updateNote"
+          @navigate="goTo"
+          @copy="copyNote"
+          @delete="store.deleteNote"
+        />
+      </template>
     </ul>
   </aside>
 </template>
@@ -149,6 +173,13 @@ header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; borde
 kbd { font: 11px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-sm); padding: 1px 5px; }
 
 ul { list-style: none; margin: 0; padding: 0; }
+.group-heading {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px; border-bottom: 1px solid var(--workbench-border);
+  background: var(--input-background); color: var(--muted-foreground);
+  font: 600 9.5px var(--mono); letter-spacing: .4px; text-transform: uppercase;
+}
+.group-heading span { color: var(--faint-foreground); }
 @container notes (max-width: 330px) {
   .copy-all span, .add span { display: none; }
 }
