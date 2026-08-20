@@ -23,7 +23,7 @@ test("review file toolbar controls folder disclosure and remaining files", async
   await review.open(repository.title);
   const toolbar = app.page.getByRole("toolbar", { name: "Review file display" });
   await expect(toolbar.getByRole("button")).toHaveCount(2);
-  await expect(toolbar.getByRole("button", { name: "Show remaining files only" })).toHaveText("Remaining");
+  await expect(app.page.locator(".files-section header").getByRole("toolbar", { name: "Review file display" })).toBeVisible();
   await expect(app.page.locator(".files-section header")).toContainText("6/6 left");
 
   await toolbar.getByRole("button", { name: "Collapse all folders" }).click();

@@ -13,7 +13,9 @@ describe("ReviewFilesToolbar", () => {
       ["Collapse all folders", "collapseAll"],
       ["Show remaining files only", "toggleRemaining"],
     ] as const) {
-      await wrapper.get(`button[aria-label="${label}"]`).trigger("click");
+      const button = wrapper.get(`button[aria-label="${label}"]`);
+      expect(button.text()).toBe("");
+      await button.trigger("click");
       expect(wrapper.emitted(event)).toHaveLength(1);
     }
   });

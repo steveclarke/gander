@@ -63,13 +63,13 @@ async function reload(): Promise<void> {
       <header>
         <h2>Review Files</h2>
         <span>{{ remainingCount }}/{{ store.view.files.length }} left</span>
+        <ReviewFilesToolbar
+          :remaining-only="remainingOnly"
+          :has-directories="hasDirectories"
+          @collapse-all="collapseAllDirectories(store.view.files)"
+          @toggle-remaining="remainingOnly = !remainingOnly"
+        />
       </header>
-      <ReviewFilesToolbar
-        :remaining-only="remainingOnly"
-        :has-directories="hasDirectories"
-        @collapse-all="collapseAllDirectories(store.view.files)"
-        @toggle-remaining="remainingOnly = !remainingOnly"
-      />
       <FileTree
         v-if="!remainingOnly || remainingCount > 0"
         :store="store"
