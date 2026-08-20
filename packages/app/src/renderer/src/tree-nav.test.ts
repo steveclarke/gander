@@ -4,7 +4,6 @@ import {
   collapsedDirs,
   collapseAllDirectories,
   edge,
-  expandAllDirectories,
   filesAt,
   nextUnmarked,
   parentOf,
@@ -49,12 +48,9 @@ describe("tree navigation", () => {
     expect(paths(visibleFiles(files))).toEqual(["src/deep/inner.ts", "src/app.ts", "README.md"]);
   });
 
-  it("expands and collapses every folder in one action", () => {
+  it("collapses every folder in one action", () => {
     collapseAllDirectories(files);
     expect([...collapsedDirs].sort()).toEqual(["src", "src/deep", "vendor"]);
-
-    expandAllDirectories();
-    expect([...collapsedDirs]).toEqual([]);
   });
 
   it("shows only unchecked files and the folders that contain them", () => {

@@ -10,7 +10,6 @@ import ReviewingList from "./ReviewingList.vue";
 import type { JumpTarget } from "../tree-jump.js";
 import {
   collapseAllDirectories,
-  expandAllDirectories,
   remainingOnly,
   reviewTreeFiles,
 } from "../tree-nav.js";
@@ -68,7 +67,6 @@ async function reload(): Promise<void> {
       <ReviewFilesToolbar
         :remaining-only="remainingOnly"
         :has-directories="hasDirectories"
-        @expand-all="expandAllDirectories"
         @collapse-all="collapseAllDirectories(store.view.files)"
         @toggle-remaining="remainingOnly = !remainingOnly"
       />

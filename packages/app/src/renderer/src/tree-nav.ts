@@ -40,10 +40,6 @@ function directoryPaths(files: ChangedFile[]): string[] {
   return walk(buildTree(files));
 }
 
-export function expandAllDirectories(): void {
-  collapsedDirs.clear();
-}
-
 export function collapseAllDirectories(files: ChangedFile[]): void {
   collapsedDirs.clear();
   for (const path of directoryPaths(files)) collapsedDirs.add(path);

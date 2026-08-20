@@ -22,12 +22,13 @@ test("review file toolbar controls folder disclosure and remaining files", async
 
   await review.open(repository.title);
   const toolbar = app.page.getByRole("toolbar", { name: "Review file display" });
-  await expect(toolbar.getByRole("button")).toHaveText(["Expand", "Collapse", "Remaining"]);
+  await expect(toolbar.getByRole("button")).toHaveCount(2);
+  await expect(toolbar.getByRole("button", { name: "Show remaining files only" })).toHaveText("Remaining");
   await expect(app.page.locator(".files-section header")).toContainText("6/6 left");
 
   await toolbar.getByRole("button", { name: "Collapse all folders" }).click();
   await expect(review.file("src/main.ts")).toHaveCount(0);
-  await toolbar.getByRole("button", { name: "Expand all folders" }).click();
+  await app.page.locator(".tnode.isdir").filter({ hasText: "src" }).click();
   await expect(review.file("src/main.ts")).toBeVisible();
 
   // A reviewed top-level file cannot be hidden by folding a parent folder. This is the

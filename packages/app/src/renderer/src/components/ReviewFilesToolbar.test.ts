@@ -10,7 +10,6 @@ describe("ReviewFilesToolbar", () => {
     });
 
     for (const [label, event] of [
-      ["Expand all folders", "expandAll"],
       ["Collapse all folders", "collapseAll"],
       ["Show remaining files only", "toggleRemaining"],
     ] as const) {
@@ -25,6 +24,6 @@ describe("ReviewFilesToolbar", () => {
     });
 
     expect(wrapper.get('[aria-label="Show remaining files only"]').attributes("aria-pressed")).toBe("true");
-    expect(wrapper.findAll("button:disabled")).toHaveLength(2);
+    expect(wrapper.findAll("button:disabled")).toHaveLength(1);
   });
 });
