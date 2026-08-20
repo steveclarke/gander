@@ -78,7 +78,7 @@ allocated per-checkout by outport. Don't start packages by hand — the app read
 its port and token from the generated `.env`. `DEVSTACK.md` covers the stack,
 worktrees, and MCP registration.
 
-When Steve asks to open the current PR in Gander, dogfood a change, or respond
+When the user asks to open the current PR in Gander, dogfood a change, or respond
 to Gander review notes, read
 `.agents/skills/review-with-gander/SKILL.md` and follow it. Use the CLI bridge
 from the current worktree; do not register its MCP endpoint globally or reuse
@@ -86,11 +86,11 @@ another worktree's port, token, config, database, or process.
 
 For user-requested code or product changes, create a feature branch, commit and
 push the work, create a pull request, and open that exact pull request in this
-checkout's Gander app. The pull-request review is also Steve's QA session: leave
-the app open on the PR so he can inspect the code and exercise the behavior in one
+checkout's Gander app. The pull-request review is also the user's QA session: leave
+the app open on the PR so they can inspect the code and exercise the behavior in one
 flow. Run `bin/mcp check` before handing it back. Stop before publication only
-when Steve explicitly asks not to create a PR or when a concrete blocker requires
-his decision.
+when the user explicitly asks not to create a PR or when a concrete blocker requires
+their decision.
 
 Do not hand back an empty review when the changed UI depends on authored state.
 Populate this checkout's disposable local review with representative, clearly
@@ -161,7 +161,7 @@ saving config would write a machine-specific allocated port into
 
 App config is intentionally not backward-compatible while its shape remains in
 major flux and there is only one maintainer install. Keep validation strict; when
-Steve asks to repair a stale local config, update that file directly instead of
+the user asks to repair a stale local config, update that file directly instead of
 adding migrations or compatibility branches. Add explicit schema versions and
 migrations only when backward compatibility becomes a product requirement.
 
