@@ -131,10 +131,12 @@ separate from the selected file, because a directory has nothing to show in the 
 passing over one leaves the reader on the file they were already reading.
 
 **Note lifecycle:** `open` (reviewer captures with `n`) → `in_progress` (agent
-claims it over MCP) → `addressed` (agent records the outcome, with an optional
-commit ref) → `resolved` (reviewer re-checks the file). An in-progress note can
-name the reviewer decision blocking it. Resolution is always the reviewer's act;
-no MCP tool may resolve anything. The MCP contract is deliberately three tools —
+claims work that spans time over MCP) → `addressed` (agent records the outcome,
+with an optional commit ref) → `resolved` (reviewer re-checks the file). Work
+completed in one exchange can move directly from `open` to `addressed`. An
+in-progress note can name the reviewer decision blocking it. Resolution is
+always the reviewer's act; no MCP tool may resolve anything. The MCP contract is
+deliberately three tools —
 `get_review_notes`, `mark_note_in_progress`, and `mark_note_addressed`. Agents
 discuss notes with the reviewer in their active session; MCP carries the
 reviewer's notes and the durable work state. Agents have `git` and `gh` for code.
