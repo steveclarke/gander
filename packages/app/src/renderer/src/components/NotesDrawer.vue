@@ -54,7 +54,7 @@ function noteMarkdown(note: Note): string {
     ? "Pull request"
     : `${note.path}${note.line === null ? "" : `:${note.line}`}`;
   const parts = [
-    `### ${location} — ${note.state}`,
+    `### Note ${note.number} — ${location} — ${note.state}`,
     "",
     `Reviewer: ${note.text}`,
   ];

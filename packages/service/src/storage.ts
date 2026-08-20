@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, MarkAddressed, MarkInProgress, NewNote, NoteState, PrContext, PutFileState, Note, ReviewState, UpdateNote } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, MarkInProgress, NewNote, PrContext, PutFileState, Note, ReviewState, UpdateNote } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   stack_id INTEGER,
   stack_size INTEGER,
   stack_position INTEGER,
+  next_note_number INTEGER NOT NULL DEFAULT 1,
   UNIQUE(repo_id, pr_number)
 );
 CREATE TABLE IF NOT EXISTS file_states (
@@ -27,8 +28,9 @@ CREATE TABLE IF NOT EXISTS file_states (
   UNIQUE(review_id, path)
 );
 CREATE TABLE IF NOT EXISTS notes (
-  id INTEGER PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   review_id INTEGER NOT NULL REFERENCES reviews(id),
+  review_number INTEGER NOT NULL,
   path TEXT,
   line INTEGER,
   text TEXT NOT NULL,
@@ -42,6 +44,7 @@ CREATE TABLE IF NOT EXISTS notes (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS notes_by_review ON notes(review_id);
+CREATE UNIQUE INDEX IF NOT EXISTS note_numbers_by_review ON notes(review_id, review_number);
 `;
 
 export interface Storage {
@@ -56,7 +59,7 @@ export interface Storage {
   /** Every pull request recorded as part of the same stack, with how many open notes each holds. */
   listStackMembers(repoId: string, stackId: number): Array<{ prNumber: number; headRef: string | null; title: string | null; position: number | null; openNotes: number }>;
   findPrByHeadRef(repoId: string, headRef: string): number | null;
-  getNoteState(id: number): NoteState | null;
+  getNote(id: number): Note | null;
   markNoteInProgress(id: number, input: MarkInProgress): Note | null;
   markNoteAddressed(id: number, input: MarkAddressed): Note | null;
   listNotes(repoId: string, prNumber: number): Note[];
@@ -66,7 +69,7 @@ export interface Storage {
   close(): void;
 }
 
-interface NoteRow { id: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; source_context: string | null; in_progress_note: string | null; commit_ref: string | null; summary: string | null; created_at: string }
+interface NoteRow { id: number; review_number: number; path: string | null; line: number | null; text: string; state: string; head_sha: string | null; source_context: string | null; in_progress_note: string | null; commit_ref: string | null; summary: string | null; created_at: string }
 interface FileStateRow { path: string; checked: number; base_hash: string | null; head_hash: string | null; checked_at: string | null; machine: string | null }
 
 const rowToCheckoff = (r: FileStateRow): FileCheckoff => ({
@@ -76,7 +79,7 @@ const rowToCheckoff = (r: FileStateRow): FileCheckoff => ({
 });
 
 const rowToNote = (r: NoteRow): Note => ({
-  id: r.id, path: r.path, line: r.line, text: r.text,
+  id: r.id, number: r.review_number, path: r.path, line: r.line, text: r.text,
   state: r.state as Note["state"],
   headSha: r.head_sha,
   sourceContext: r.source_context === null ? null : JSON.parse(r.source_context) as Note["sourceContext"],
@@ -85,7 +88,7 @@ const rowToNote = (r: NoteRow): Note => ({
   createdAt: r.created_at,
 });
 
-const NOTE_COLUMNS = "id, path, line, text, state, head_sha, source_context, in_progress_note, commit_ref, summary, created_at";
+const NOTE_COLUMNS = "id, review_number, path, line, text, state, head_sha, source_context, in_progress_note, commit_ref, summary, created_at";
 const FILE_STATE_COLUMNS = "path, checked, base_hash, head_hash, checked_at, machine";
 
 const pack = (s: string | null): Buffer | null => (s === null ? null : gzipSync(Buffer.from(s, "utf8")));
@@ -198,9 +201,9 @@ export function openStorage(dbPath: string): Storage {
       return row?.pr_number ?? null;
     },
 
-    getNoteState(id) {
-      const row = db.prepare("SELECT state FROM notes WHERE id = ?").get(id) as { state: NoteState } | undefined;
-      return row?.state ?? null;
+    getNote(id) {
+      const row = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow | undefined;
+      return row === undefined ? null : rowToNote(row);
     },
 
     markNoteInProgress(id, input) {
@@ -229,17 +232,21 @@ export function openStorage(dbPath: string): Storage {
 
     listNotes(repoId, prNumber) {
       const rid = reviewId(repoId, prNumber);
-      const rows = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE review_id = ? ORDER BY id`).all(rid) as NoteRow[];
+      const rows = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE review_id = ? ORDER BY review_number`).all(rid) as NoteRow[];
       return rows.map(rowToNote);
     },
 
     addNote(repoId, prNumber, input) {
       const rid = reviewId(repoId, prNumber);
-      const { lastInsertRowid } = db
-        .prepare("INSERT INTO notes (review_id, path, line, text, head_sha, source_context) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(rid, input.path, input.line, input.text, input.headSha, input.sourceContext === null ? null : JSON.stringify(input.sourceContext));
-      const row = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(lastInsertRowid) as NoteRow;
-      return rowToNote(row);
+      return db.transaction(() => {
+        const counter = db.prepare("SELECT next_note_number FROM reviews WHERE id = ?").get(rid) as { next_note_number: number };
+        db.prepare("UPDATE reviews SET next_note_number = next_note_number + 1 WHERE id = ?").run(rid);
+        const { lastInsertRowid } = db
+          .prepare("INSERT INTO notes (review_id, review_number, path, line, text, head_sha, source_context) VALUES (?, ?, ?, ?, ?, ?, ?)")
+          .run(rid, counter.next_note_number, input.path, input.line, input.text, input.headSha, input.sourceContext === null ? null : JSON.stringify(input.sourceContext));
+        const row = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(lastInsertRowid) as NoteRow;
+        return rowToNote(row);
+      })();
     },
 
     updateNote(repoId, prNumber, id, input) {

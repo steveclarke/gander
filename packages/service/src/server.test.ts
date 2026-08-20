@@ -99,6 +99,7 @@ describe("service API", () => {
       });
       expect(created.statusCode).toBe(201);
       const id = created.json().id as number;
+      expect(created.json().number).toBe(1);
       expect(created.json().sourceContext).toEqual({ startLine: 1, lines: ["one", "two", "three"] });
 
       const listed = await server.inject({ method: "GET", url, headers: AUTH });
@@ -121,7 +122,7 @@ describe("service API", () => {
       const listed = await server.inject({ method: "GET", url, headers: AUTH });
       expect(listed.json()).toEqual([
         expect.objectContaining({
-          id: note.id, state: "resolved", commitRef: "abc1234", summary: "Dropped the retry",
+          id: note.id, number: 1, state: "resolved", commitRef: "abc1234", summary: "Dropped the retry",
         }),
       ]);
     });

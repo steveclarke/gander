@@ -56,6 +56,9 @@ blockers from active work. Work completed in one exchange can move directly
 from `open` to `addressed`.
 The notes drawer lets the reviewer correct note text or explicitly change a
 note's state when the recorded workflow state needs correcting.
+Each note also has an immutable number scoped to its pull request, shown in the
+drawer and returned over MCP so the reviewer and agent can both refer to "Note
+4". The service keeps a separate global id for writes and incremental cursors.
 Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`
 for registration.
 
