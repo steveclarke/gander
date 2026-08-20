@@ -6,12 +6,18 @@ import ReviewFilesToolbar from "./ReviewFilesToolbar.vue";
 describe("ReviewFilesToolbar", () => {
   it("exposes every tree action as a mouse-friendly button", async () => {
     const wrapper = mount(ReviewFilesToolbar, {
-      props: { remainingOnly: false, hasDirectories: true, allDirectoriesCollapsed: false },
+      props: {
+        remainingOnly: false,
+        hasDirectories: true,
+        hasFullyReviewedDirectories: true,
+        allDirectoriesCollapsed: false,
+      },
     });
 
     for (const [label, event] of [
       ["Collapse all folders", "toggleAll"],
-      ["Show unchecked files only", "toggleRemaining"],
+      ["Collapse fully reviewed folders", "collapseReviewed"],
+      ["Show unreviewed files only", "toggleRemaining"],
     ] as const) {
       const button = wrapper.get(`button[aria-label="${label}"]`);
       expect(button.text()).toBe("");
@@ -20,18 +26,28 @@ describe("ReviewFilesToolbar", () => {
     }
   });
 
-  it("shows the remaining filter as pressed and disables folder actions when unavailable", () => {
+  it("shows the unreviewed filter as pressed and disables unavailable folder actions", () => {
     const wrapper = mount(ReviewFilesToolbar, {
-      props: { remainingOnly: true, hasDirectories: false, allDirectoriesCollapsed: false },
+      props: {
+        remainingOnly: true,
+        hasDirectories: false,
+        hasFullyReviewedDirectories: false,
+        allDirectoriesCollapsed: false,
+      },
     });
 
-    expect(wrapper.get('[aria-label="Show unchecked files only"]').attributes("aria-pressed")).toBe("true");
-    expect(wrapper.findAll("button:disabled")).toHaveLength(1);
+    expect(wrapper.get('[aria-label="Show unreviewed files only"]').attributes("aria-pressed")).toBe("true");
+    expect(wrapper.findAll("button:disabled")).toHaveLength(2);
   });
 
   it("becomes an expand-all action when every folder is collapsed", async () => {
     const wrapper = mount(ReviewFilesToolbar, {
-      props: { remainingOnly: false, hasDirectories: true, allDirectoriesCollapsed: false },
+      props: {
+        remainingOnly: false,
+        hasDirectories: true,
+        hasFullyReviewedDirectories: false,
+        allDirectoriesCollapsed: false,
+      },
     });
 
     expect(wrapper.find('[aria-label="Collapse all folders"]').exists()).toBe(true);

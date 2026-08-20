@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ListChevronsDownUp, ListChevronsUpDown, ListFilter } from "@lucide/vue";
+import { FolderCheck, ListChevronsDownUp, ListChevronsUpDown, ListFilter } from "@lucide/vue";
 
 const props = defineProps<{
   remainingOnly: boolean;
   hasDirectories: boolean;
+  hasFullyReviewedDirectories: boolean;
   allDirectoriesCollapsed: boolean;
 }>();
 
 defineEmits<{
+  collapseReviewed: [];
   toggleAll: [];
   toggleRemaining: [];
 }>();
@@ -24,10 +26,17 @@ const folderActionLabel = computed(() => props.allDirectoriesCollapsed
       type="button"
       :class="{ active: remainingOnly }"
       :aria-pressed="remainingOnly"
-      aria-label="Show unchecked files only"
-      title="Show unchecked files only"
+      aria-label="Show unreviewed files only"
+      title="Show unreviewed files only"
       @click="$emit('toggleRemaining')"
     ><ListFilter :size="16" /></button>
+    <button
+      type="button"
+      :disabled="!hasFullyReviewedDirectories"
+      aria-label="Collapse fully reviewed folders"
+      title="Collapse fully reviewed folders"
+      @click="$emit('collapseReviewed')"
+    ><FolderCheck :size="16" /></button>
     <button
       type="button"
       :disabled="!hasDirectories"

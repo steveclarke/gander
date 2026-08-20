@@ -40,6 +40,28 @@ function directoryPaths(files: ChangedFile[]): string[] {
   return walk(buildTree(files));
 }
 
+function fullyReviewedDirectoryPaths(files: ChangedFile[]): string[] {
+  const paths: string[] = [];
+  const reviewed = (node: TreeNode): boolean => {
+    if (node.type === "file") return "checked" in node.file && node.file.checked === true;
+
+    const childrenReviewed = node.children.map(reviewed).every(Boolean);
+    if (childrenReviewed) paths.push(node.path);
+    return childrenReviewed;
+  };
+
+  for (const node of buildTree(files)) reviewed(node);
+  return paths;
+}
+
+export function hasFullyReviewedDirectories(files: ChangedFile[]): boolean {
+  return fullyReviewedDirectoryPaths(files).length > 0;
+}
+
+export function collapseFullyReviewedDirectories(files: ChangedFile[]): void {
+  for (const path of fullyReviewedDirectoryPaths(files)) collapsedDirs.add(path);
+}
+
 export function allDirectoriesCollapsed(files: ChangedFile[]): boolean {
   const paths = directoryPaths(files);
   return paths.length > 0 && paths.every((path) => collapsedDirs.has(path));
