@@ -140,7 +140,7 @@ cmd_check() {
     const fs = require("node:fs");
     const payload = JSON.parse(fs.readFileSync(0, "utf8"));
     const names = (payload.result?.tools ?? []).map((tool) => tool.name).sort();
-    const required = ["get_review_notes", "mark_note_addressed"];
+    const required = ["get_review_notes", "mark_note_in_progress", "mark_note_addressed"];
     const missing = required.filter((name) => !names.includes(name));
     if (missing.length > 0) {
       console.error("Missing core MCP tools: " + missing.join(", "));

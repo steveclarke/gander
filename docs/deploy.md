@@ -34,10 +34,13 @@ curl -s http://127.0.0.1:8390/healthz     # {"ok":true,"version":"..."}
 
 The database is a SQLite file on the `gander-data` volume, at `/data/gander.db`.
 It is the only state; back up the volume and you have backed up every review.
+Local databases are disposable, but never delete or recreate the hosted database.
+When a release changes its schema, `bin/deploy` stops the service, writes a timestamped
+backup outside the checkout, runs that release's explicit migration, and only then
+starts the new service. Set `GANDER_BACKUP_PATH` to choose the host backup directory;
+it defaults to a `gander-backups` directory beside the deployed checkout.
 
-To update by hand: `git pull && docker compose up -d --build`.
-
-`bin/deploy` does the same over ssh, then waits for the container and checks that
+Use `bin/deploy` to update the hosted service. It also waits for the container and checks that
 what came back answers the contract version the deployed ref declares — a service left
 behind the app is the failure worth catching at deploy time rather than mid-review:
 

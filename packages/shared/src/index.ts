@@ -13,7 +13,7 @@ import { z } from "zod";
  *
  * Not the app's release version: releases happen far more often than the contract moves.
  */
-export const SERVICE_VERSION = "0.5.0";
+export const SERVICE_VERSION = "0.6.0";
 
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
@@ -49,8 +49,16 @@ export const PutFileStateSchema = z.discriminatedUnion("checked", [
 ]);
 export type PutFileState = z.infer<typeof PutFileStateSchema>;
 
-export const NoteStateSchema = z.enum(["open", "addressed", "resolved"]);
+export const NoteStateSchema = z.enum(["open", "in_progress", "addressed", "resolved"]);
 export type NoteState = z.infer<typeof NoteStateSchema>;
+
+export const NoteSourceContextSchema = z.object({
+  /** 1-based line number of the first captured line. */
+  startLine: z.number().int().positive(),
+  /** Immutable lines from the head revision the reviewer was reading. */
+  lines: z.array(z.string()).min(1),
+});
+export type NoteSourceContext = z.infer<typeof NoteSourceContextSchema>;
 
 export const NoteSchema = z.object({
   id: z.number().int().positive(),
@@ -62,6 +70,10 @@ export const NoteSchema = z.object({
   state: NoteStateSchema,
   /** Head the branch was at when the note was captured. */
   headSha: z.string().nullable(),
+  /** Source surrounding the selected line, captured before the branch can move. */
+  sourceContext: NoteSourceContextSchema.nullable(),
+  /** Why an in-progress note is waiting for the reviewer. */
+  inProgressNote: z.string().nullable(),
   /** Commit an agent named when it marked the note addressed. */
   commitRef: z.string().nullable(),
   /** One-line summary an agent left when it marked the note addressed. */
@@ -76,6 +88,8 @@ export const NewNoteSchema = z.object({
   text: z.string().min(1),
   /** Head the branch was at when this was captured, so a moved line can be spotted later. */
   headSha: z.string().min(1).nullable(),
+  /** Source surrounding the selected line, captured from the same head revision. */
+  sourceContext: NoteSourceContextSchema.nullable(),
 });
 export type NewNote = z.infer<typeof NewNoteSchema>;
 
@@ -104,6 +118,11 @@ export const MarkAddressedSchema = z.object({
   summary: z.string().min(1).nullable(),
 });
 export type MarkAddressed = z.infer<typeof MarkAddressedSchema>;
+
+export const MarkInProgressSchema = z.object({
+  note: z.string().min(1).nullable(),
+});
+export type MarkInProgress = z.infer<typeof MarkInProgressSchema>;
 
 export interface PrSummary {
   number: number;

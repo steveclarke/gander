@@ -48,10 +48,19 @@ worktree's endpoint and bearer token from `.env`.
 Treat a note as work, not as a checkbox:
 
 1. Inspect the named file, line, and current diff.
-2. Make the requested change or explain why it should not change.
-3. Run the verification appropriate to the change.
-4. Commit and push the result when code changed.
-5. Mark the note addressed with a concrete summary:
+2. Claim it before starting:
+
+```bash
+bin/mcp call mark_note_in_progress id=NOTE_ID
+```
+
+3. Make the requested change or explain why it should not change. If work needs a
+   reviewer decision, call `mark_note_in_progress` again with
+   `note="DECISION NEEDED"`.
+4. Run the verification appropriate to the change.
+5. Commit and push the result when code changed.
+6. Mark the note addressed with a concrete summary. Include `commitRef` only when
+   the outcome produced a commit:
 
 ```bash
 bin/mcp call mark_note_addressed id=NOTE_ID commitRef=COMMIT_SHA summary="WHAT CHANGED"
@@ -64,7 +73,7 @@ file; the MCP contract has no reply tool.
 
 ## Diagnose the bridge
 
-- `bin/mcp check` verifies health, authentication, MCP negotiation, and the two
+- `bin/mcp check` verifies health, authentication, MCP negotiation, and the three
   required tools.
 - `bin/mcp tools` lists the live contract.
 - `bin/mcp tui` opens MCP Inspector's terminal UI.

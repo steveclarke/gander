@@ -2,8 +2,16 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 interface NotePayload {
-  noteCounts: { open: number; addressed: number; resolved: number };
-  notes: Array<{ id: number; file: string | null; line: number | null; text: string; state: string }>;
+  lastNoteId: number | null;
+  noteCounts: { open: number; in_progress: number; addressed: number; resolved: number };
+  notes: Array<{
+    id: number;
+    file: string | null;
+    line: number | null;
+    text: string;
+    state: string;
+    sourceContext: { startLine: number; lines: string[] } | null;
+  }>;
 }
 
 function textOf(result: { content?: unknown }): string {
@@ -23,18 +31,25 @@ export class McpDriver {
     return this;
   }
 
-  async notes(repo: string, branch: string): Promise<NotePayload> {
+  async notes(repo: string, branch: string, since?: number): Promise<NotePayload> {
     const result = await this.client.callTool({
       name: "get_review_notes",
-      arguments: { repo, branch, includeAddressed: true, includeResolved: true },
+      arguments: { repo, branch, includeAddressed: true, includeResolved: true, ...(since === undefined ? {} : { since }) },
     });
     return JSON.parse(textOf(result as { content?: unknown })) as NotePayload;
   }
 
-  async markAddressed(id: number, commitRef: string, summary: string): Promise<void> {
+  async markInProgress(id: number, note?: string): Promise<void> {
+    await this.client.callTool({
+      name: "mark_note_in_progress",
+      arguments: { id, ...(note === undefined ? {} : { note }) },
+    });
+  }
+
+  async markAddressed(id: number, summary: string, commitRef?: string): Promise<void> {
     await this.client.callTool({
       name: "mark_note_addressed",
-      arguments: { id, commitRef, summary },
+      arguments: { id, summary, ...(commitRef === undefined ? {} : { commitRef }) },
     });
   }
 

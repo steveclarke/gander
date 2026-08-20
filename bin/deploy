@@ -20,6 +20,7 @@ cd "$(dirname "$0")/.."
 
 HOST="${GANDER_DEPLOY_HOST:?set GANDER_DEPLOY_HOST to the ssh destination running the service}"
 REMOTE_PATH="${GANDER_DEPLOY_PATH:-/home/deploy/docker/gander}"
+BACKUP_PATH="${GANDER_BACKUP_PATH:-${REMOTE_PATH%/*}/gander-backups}"
 REF="master"
 
 while [[ $# -gt 0 ]]; do
@@ -30,9 +31,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "==> Deploying ${REF} to ${HOST}:${REMOTE_PATH}"
-ssh "$HOST" bash -euo pipefail -s -- "$REMOTE_PATH" "$REF" <<'REMOTE'
+ssh "$HOST" bash -euo pipefail -s -- "$REMOTE_PATH" "$REF" "$BACKUP_PATH" <<'REMOTE'
 REMOTE_PATH="$1"
 REF="$2"
+BACKUP_PATH="$3"
 cd "$REMOTE_PATH"
 if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
   echo "Refusing to deploy from a checkout with local changes: ${REMOTE_PATH}" >&2
@@ -47,7 +49,14 @@ if git symbolic-ref -q HEAD >/dev/null; then
   git merge --quiet --ff-only "origin/${REF}"
 fi
 echo "    now at $(git log --oneline -1)"
-docker compose up -d --build
+docker compose build gander
+docker compose stop gander
+mkdir -p "$BACKUP_PATH"
+BACKUP_FILE="gander-$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short HEAD).db"
+docker compose run --rm --no-deps \
+  -v "${BACKUP_PATH}:/backup" \
+  gander node_modules/.bin/tsx src/migrate-0.6.0.ts /data/gander.db "/backup/${BACKUP_FILE}"
+docker compose up -d gander
 REMOTE
 
 # Read both facts from the deployed checkout and Compose project. This keeps tag

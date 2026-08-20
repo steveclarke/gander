@@ -4,8 +4,8 @@ import { z } from "zod";
 import type { Storage } from "./storage.js";
 
 /**
- * The MCP contract is deliberately tiny: agents read the reviewer's notes and say when
- * they have acted on one. Nothing here reads diffs, lists files, touches
+ * The MCP contract is deliberately tiny: agents read the reviewer's notes, claim the
+ * ones they start, and say when they have acted on one. Nothing here reads diffs, lists files, touches
  * checkoffs, or resolves a note — resolution is the reviewer's act alone, made in
  * the app by re-checking the file. Agents already have git and gh for code; this carries
  * only the reviewer's notes and their durable completion state.
@@ -30,8 +30,8 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       title: "Get review notes",
       description:
         "Notes the reviewer has left on a pull request, with the file and line each one is about. " +
-        "Derive repo and branch from the working directory. Returns open notes by default — those are the ones still needing work. " +
-        "The response always counts open, addressed, and resolved notes so hidden states are visible. " +
+        "Derive repo and branch from the working directory. Returns open and in-progress notes by default — those are the ones still needing work. " +
+        "The response always counts open, in-progress, addressed, and resolved notes so hidden states are visible. " +
         "The response names the branch, title, and stack position of the pull request the notes belong to: check it matches the checkout being worked in, " +
         "because a stacked pull request's sibling is a different branch with different notes.",
       inputSchema: {
@@ -40,30 +40,33 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         prNumber: z.number().int().positive().optional().describe("Pull request number, if known."),
         includeAddressed: z.boolean().optional().describe("Also return notes already marked addressed. Defaults to false."),
         includeResolved: z.boolean().optional().describe("Also return notes the reviewer has resolved. Defaults to false."),
+        since: z.number().int().nonnegative().optional().describe("Return only notes with an id greater than this last-seen note id."),
       },
     },
-    async ({ repo, branch, prNumber, includeAddressed, includeResolved }) => {
+    async ({ repo, branch, prNumber, includeAddressed, includeResolved, since }) => {
       const resolved = resolvePr(repo, prNumber, branch);
       if (typeof resolved === "string") return { content: [{ type: "text", text: resolved }], isError: true };
 
       const context = storage.getPrContext(repo, resolved);
       const members = context?.stackId == null ? [] : storage.listStackMembers(repo, context.stackId);
-      const wanted = new Set(["open"]);
+      const wanted = new Set(["open", "in_progress"]);
       if (includeAddressed === true) wanted.add("addressed");
       if (includeResolved === true) wanted.add("resolved");
       const allNotes = storage.listNotes(repo, resolved);
-      const noteCounts: Record<"open" | "addressed" | "resolved", number> = { open: 0, addressed: 0, resolved: 0 };
+      const noteCounts: Record<"open" | "in_progress" | "addressed" | "resolved", number> = { open: 0, in_progress: 0, addressed: 0, resolved: 0 };
       for (const note of allNotes) noteCounts[note.state] += 1;
       const notes = allNotes
-        .filter((q) => wanted.has(q.state))
+        .filter((q) => wanted.has(q.state) && (since === undefined || q.id > since))
         .map((q) => ({
           id: q.id,
           file: q.path,
           line: q.line,
           text: q.text,
           state: q.state,
-          ...(q.state === "open" ? {} : { commitRef: q.commitRef, summary: q.summary }),
+          ...(q.state === "in_progress" ? { inProgressNote: q.inProgressNote } : {}),
+          ...(q.state === "addressed" || q.state === "resolved" ? { commitRef: q.commitRef, summary: q.summary } : {}),
           capturedAtSha: q.headSha,
+          sourceContext: q.sourceContext,
           // The branch may have moved since the reviewer read it, in which case the line
           // number is the one they saw, not necessarily the one there now.
           lineMayHaveMoved: q.headSha !== null && context !== null && q.headSha !== context.headSha,
@@ -71,6 +74,10 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
 
       const hiddenStates = (["addressed", "resolved"] as const)
         .filter((state) => !wanted.has(state) && noteCounts[state] > 0);
+      const wantedLabels = [...wanted].map((state) => state.replace("_", "-"));
+      const wantedLabel = wantedLabels.length === 1
+        ? wantedLabels[0]!
+        : `${wantedLabels.slice(0, -1).join(", ")}${wantedLabels.length > 2 ? "," : ""} or ${wantedLabels.at(-1)}`;
       let message: string;
       if (notes.length === 0 && hiddenStates.length > 0) {
         const includeFlag = { addressed: "includeAddressed", resolved: "includeResolved" } as const;
@@ -79,9 +86,11 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
           .map((state) => `${noteCounts[state]} ${state} note${noteCounts[state] === 1 ? "" : "s"}`)
           .join(" and ");
         const flags = hiddenStates.map((state) => `${includeFlag[state]}: true`).join(" and ");
-        message = `No ${[...wanted].join(" or ")} notes returned. ${hidden} ${hiddenCount === 1 ? "is" : "are"} hidden; pass ${flags} to retrieve ${hiddenCount === 1 ? "it" : "them"}.`;
+        message = `No ${wantedLabel} notes returned. ${hidden} ${hiddenCount === 1 ? "is" : "are"} hidden; pass ${flags} to retrieve ${hiddenCount === 1 ? "it" : "them"}.`;
       } else if (notes.length === 0 && allNotes.length === 0) {
         message = "No notes exist for this pull request.";
+      } else if (notes.length === 0 && since !== undefined) {
+        message = `No new ${wantedLabel} notes after note ${since}.`;
       } else {
         message = `Returned ${notes.length} of ${allNotes.length} note${allNotes.length === 1 ? "" : "s"} on this pull request.`;
       }
@@ -93,6 +102,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         branch: context?.headRef ?? null,
         title: context?.title ?? null,
         headSha: context?.headSha ?? null,
+        lastNoteId: allNotes.at(-1)?.id ?? null,
         noteCounts,
         message,
         stack: context?.stackSize == null || context.stackPosition == null
@@ -125,23 +135,46 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
   );
 
   server.registerTool(
+    "mark_note_in_progress",
+    {
+      title: "Mark a review note in progress",
+      description:
+        "Claim a note when work starts. Pass note when work is waiting on a reviewer decision; omit it while work is active.",
+      inputSchema: {
+        id: z.number().int().positive().describe("Note id from get_review_notes."),
+        note: z.string().min(1).optional().describe("Why this work is waiting on the reviewer."),
+      },
+    },
+    async ({ id, note }) => {
+      const marked = storage.markNoteInProgress(id, { note: note ?? null });
+      if (marked === null) {
+        return {
+          content: [{ type: "text", text: `Note ${id} is not open or in progress — it does not exist, or it was already addressed or resolved.` }],
+          isError: true,
+        };
+      }
+      return { content: [{ type: "text", text: `Note ${id} marked in progress.` }] };
+    },
+  );
+
+  server.registerTool(
     "mark_note_addressed",
     {
       title: "Mark a review note addressed",
       description:
-        "Record that a note has been acted on. Use it only once the work is actually done and committed. " +
+        "Record the outcome after an in-progress note has been acted on. A code change can name its commit; an answered question has no commit. " +
         "This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
       inputSchema: {
         id: z.number().int().positive().describe("Note id from get_review_notes."),
-        commitRef: z.string().optional().describe("Commit that addressed it."),
-        summary: z.string().optional().describe("One line on what changed."),
+        commitRef: z.string().min(1).optional().describe("Commit that addressed it, when the outcome changed code."),
+        summary: z.string().min(1).describe("One line recording the outcome."),
       },
     },
     async ({ id, commitRef, summary }) => {
       const marked = storage.markNoteAddressed(id, { commitRef: commitRef ?? null, summary: summary ?? null });
       if (marked === null) {
         return {
-          content: [{ type: "text", text: `Note ${id} is not open — it does not exist, or it was already addressed or resolved.` }],
+          content: [{ type: "text", text: `Note ${id} is not in progress — it does not exist, is still open, or was already addressed or resolved.` }],
           isError: true,
         };
       }

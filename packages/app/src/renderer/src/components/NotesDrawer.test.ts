@@ -44,6 +44,8 @@ const notes: PrView["notes"] = [
     text: "Why does this branch need to handle the shared path this way?",
     state: "open",
     headSha: "b",
+    sourceContext: { startLine: 35, lines: ["before", "context", "target", "after", "later"] },
+    inProgressNote: null,
     commitRef: null,
     summary: null,
     createdAt: "2026-08-18T00:00:00.000Z",
@@ -55,6 +57,8 @@ const notes: PrView["notes"] = [
     text: "Could this preserve the existing caller contract?",
     state: "addressed",
     headSha: "b",
+    sourceContext: null,
+    inProgressNote: null,
     commitRef: "abc1234",
     summary: "Kept the contract and added coverage.",
     createdAt: "2026-08-18T01:00:00.000Z",
@@ -86,6 +90,8 @@ describe("NotesDrawer", () => {
           text: "Why?",
           state: "open",
           headSha: "b",
+          sourceContext: null,
+          inProgressNote: null,
           commitRef: null,
           summary: null,
           createdAt: "2026-08-18T00:00:00.000Z",
@@ -113,6 +119,44 @@ describe("NotesDrawer", () => {
     expect((addressed.get("select[aria-label='Status for note 2']").element as HTMLSelectElement).value).toBe("addressed");
     expect(addressed.text()).toContain("Could this preserve the existing caller contract?");
     expect(addressed.find("[data-note-body]").isVisible()).toBe(false);
+  });
+
+  it("separates active work from notes waiting on the reviewer", () => {
+    const inProgress = {
+      ...notes[0]!,
+      id: 3,
+      state: "in_progress" as const,
+      inProgressNote: null,
+    };
+    const waiting = {
+      ...notes[0]!,
+      id: 4,
+      state: "in_progress" as const,
+      inProgressNote: "Choose whether this should retry.",
+    };
+    const wrapper = mount(NotesDrawer, { props: { store: store([inProgress, waiting]), dock: "right" } });
+
+    expect(wrapper.findAll(".group-heading").map((heading) => heading.text())).toEqual([
+      "In progress 1",
+      "Waiting on you 1",
+    ]);
+    expect(wrapper.get("[data-note-id='4'] [aria-label='Waiting on reviewer']").text()).toContain("Choose whether this should retry.");
+  });
+
+  it("keeps a note expanded while its state moves between groups", async () => {
+    const wrapper = mount(NotesDrawer, { props: { store: store([notes[0]!]), dock: "right" } });
+    expect(wrapper.get("[data-note-id='1'] button[aria-expanded]").attributes("aria-expanded")).toBe("true");
+
+    await wrapper.setProps({
+      store: store([{
+        ...notes[0]!,
+        state: "addressed",
+        summary: "Answered in the active session.",
+      }]),
+    });
+
+    expect(wrapper.get("[data-note-id='1'] button[aria-expanded]").attributes("aria-expanded")).toBe("true");
+    expect(wrapper.get("[data-note-id='1'] [aria-label='Agent update']").text()).toContain("Answered in the active session.");
   });
 
   it("exposes a keyboard-operable disclosure and labeled agent update", async () => {
@@ -212,6 +256,7 @@ describe("NotesDrawer", () => {
 
     await wrapper.get("button[aria-label='Copy all notes']").trigger("click");
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("### src/a-very-long-file-name.ts:37 — open"));
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("37: target"));
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("### src/addressed.ts:9 — addressed"));
   });
 });

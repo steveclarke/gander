@@ -48,16 +48,20 @@ for, so notes came in immediately after M1 rather than waiting for a
 milestone boundary.
 
 Pressing `n` over a file captures a note against it, stamped with the line
-being read. Notes carry three states: `open` when captured, `addressed` when
-an agent has acted on one, and `resolved` when the reviewer re-checks the file.
+being read. Notes carry four states: `open` when captured, `in_progress` when an
+agent claims one, `addressed` when the agent records its outcome, and `resolved`
+when the reviewer re-checks the file. A claimed note can record the reviewer
+decision blocking it, and the notes drawer separates those blockers from active
+work.
 The notes drawer lets the reviewer correct note text or explicitly change a
 note's state when the recorded workflow state needs correcting.
 Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`
 for registration.
 
 Agents discuss notes with the reviewer in their active session. Once the work is
-complete, they record the durable completion state through MCP with an optional
-commit ref and summary.
+complete, they record the durable outcome through MCP with a summary and an
+optional commit ref. Notes also carry immutable source context from the head
+revision at capture time, and agents can fetch only notes after a last-seen id.
 
 Each opened pull request records its own branch, which is how the service maps an
 agent's working branch to a pull request without holding GitHub credentials.

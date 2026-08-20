@@ -130,13 +130,15 @@ needs one answer to what is visible. The cursor walks directories as well as fil
 separate from the selected file, because a directory has nothing to show in the diff:
 passing over one leaves the reader on the file they were already reading.
 
-**Note lifecycle:** `open` (reviewer captures with `n`) → `addressed` (agent,
-over MCP, with optional commit ref and summary) → `resolved` (reviewer re-checks
-the file). Resolution is always the reviewer's act; no MCP tool may resolve
-anything. The MCP contract is deliberately two tools — `get_review_notes` and
-`mark_note_addressed`. Agents discuss notes with the reviewer in their active
-session; MCP carries the reviewer's notes and the durable completion state. Agents
-have `git` and `gh` for code. Keep the contract small.
+**Note lifecycle:** `open` (reviewer captures with `n`) → `in_progress` (agent
+claims it over MCP) → `addressed` (agent records the outcome, with an optional
+commit ref) → `resolved` (reviewer re-checks the file). An in-progress note can
+name the reviewer decision blocking it. Resolution is always the reviewer's act;
+no MCP tool may resolve anything. The MCP contract is deliberately three tools —
+`get_review_notes`, `mark_note_in_progress`, and `mark_note_addressed`. Agents
+discuss notes with the reviewer in their active session; MCP carries the
+reviewer's notes and the durable work state. Agents have `git` and `gh` for code.
+Keep the contract small.
 
 `GANDER_SERVICE_URL` and `GANDER_TOKEN` override the config file at *connection*
 time, not load time (`resolveServiceConnection` in `main/config.ts`) — otherwise
@@ -149,9 +151,13 @@ Steve asks to repair a stale local config, update that file directly instead of
 adding migrations or compatibility branches. Add explicit schema versions and
 migrations only when backward compatibility becomes a product requirement.
 
-`SCHEMA` in `storage.ts` is the only supported SQLite shape. There is no upgrade
-path for databases created by an earlier build; recreate the sole user's database
-after a schema change.
+`SCHEMA` in `storage.ts` is the current SQLite shape. Local databases are disposable
+while the project is young, but the hosted database contains authored production
+review state and must never be recreated. For a schema-changing deploy, add a small
+one-off migration, make `bin/deploy` back up the hosted database before it runs, and
+test the migration directly. Do not add automatic startup migrations, schema-version
+machinery, or backward-compatibility branches until supporting other users requires
+them. Remove obsolete one-off migrations once production has moved past them.
 
 ## Testing
 

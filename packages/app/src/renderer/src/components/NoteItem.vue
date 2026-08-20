@@ -7,6 +7,7 @@ import {
   Check,
   CheckCheck,
   ChevronDown,
+  CircleDot,
   CircleHelp,
   Copy,
   Pencil,
@@ -37,13 +38,17 @@ const deleteDetail = "The note will be removed from the review. This cannot be u
 
 // A keyed note instance survives service refreshes, so a reviewer's disclosure
 // choice remains stable when the Note object is replaced.
-const expanded = shallowRef(props.note.state === "open");
+const expanded = shallowRef(props.note.state === "open" || props.note.state === "in_progress");
 const bodyId = computed(() => `note-body-${props.note.id}`);
 const titleId = computed(() => `note-title-${props.note.id}`);
 const location = computed(() => {
   if (props.note.path === null) return "This pull request";
   const name = basename(props.note.path);
   return props.note.line === null ? name : `${name}:${props.note.line}`;
+});
+const sourceLines = computed(() => {
+  const context = props.note.sourceContext;
+  return context?.lines.map((text, index) => ({ number: context.startLine + index, text })) ?? [];
 });
 
 const timestamp = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -115,11 +120,13 @@ async function changeStatus(event: Event): Promise<void> {
         </button>
         <label class="state" :class="note.state">
           <CircleHelp v-if="note.state === 'open'" :size="12" aria-hidden="true" />
+          <CircleDot v-else-if="note.state === 'in_progress'" :size="12" aria-hidden="true" />
           <Check v-else-if="note.state === 'addressed'" :size="12" aria-hidden="true" />
           <CheckCheck v-else :size="12" aria-hidden="true" />
           <span class="status-label">Status</span>
           <select :value="note.state" :aria-label="`Status for note ${note.id}`" :disabled="changingStatus" @change="changeStatus">
             <option value="open">Open</option>
+            <option value="in_progress">In progress</option>
             <option value="addressed">Addressed</option>
             <option value="resolved">Resolved</option>
           </select>
@@ -154,6 +161,19 @@ async function changeStatus(event: Event): Promise<void> {
         </form>
         <p v-else class="message-text">{{ note.text }}</p>
       </div>
+
+      <section v-if="note.sourceContext" class="source-context" aria-label="Captured source context">
+        <code>
+          <span v-for="sourceLine in sourceLines" :key="sourceLine.number" :class="{ target: sourceLine.number === note.line }">
+            <b>{{ sourceLine.number }}</b>{{ sourceLine.text }}
+          </span>
+        </code>
+      </section>
+
+      <section v-if="note.state === 'in_progress' && note.inProgressNote" class="agent-progress" aria-label="Waiting on reviewer">
+        <div class="message-heading"><h3>Waiting on you</h3></div>
+        <p class="message-text">{{ note.inProgressNote }}</p>
+      </section>
 
       <section v-if="note.summary || note.commitRef" class="agent-update" aria-label="Agent update">
         <div class="message-heading">
@@ -233,6 +253,7 @@ async function changeStatus(event: Event): Promise<void> {
 .status-chevron { margin-left: -2px; pointer-events: none; }
 .state:focus-within { outline: 1px solid var(--accent); outline-offset: 1px; }
 .state.open { color: var(--accent); }
+.state.in_progress { color: var(--warning); }
 .state.addressed { color: var(--warning); }
 .state.resolved { color: var(--success); }
 .disclosure {
@@ -243,8 +264,15 @@ async function changeStatus(event: Event): Promise<void> {
 .chevron { color: var(--faint-foreground); transition: transform 120ms ease; }
 .chevron.expanded { transform: rotate(180deg); }
 .note-body { padding: 1px 10px 11px; }
-.note-message, .agent-update { min-width: 0; border-radius: var(--radius-md); }
+.note-message, .agent-progress, .agent-update { min-width: 0; border-radius: var(--radius-md); }
 .note-message { padding: 9px 10px; background: var(--input-background); border: 1px solid var(--workbench-border); }
+.source-context { margin-top: 8px; overflow: auto; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); background: var(--input-background); }
+.source-context code { display: block; min-width: max-content; padding: 6px 0; font: 10.5px/1.5 var(--mono); }
+.source-context span { display: block; min-height: 1.5em; padding: 0 9px 0 0; white-space: pre; }
+.source-context span.target { background: var(--selection-background); }
+.source-context b { display: inline-block; width: 34px; margin-right: 8px; color: var(--faint-foreground); font-weight: 400; text-align: right; user-select: none; }
+.agent-progress { margin: 8px 0 0 12px; padding: 9px 10px; border-left: 1px solid var(--warning); background: color-mix(in srgb, var(--warning) 6%, transparent); }
+.agent-progress .message-heading h3 { color: var(--warning); }
 .agent-update { margin: 8px 0 0 12px; padding: 9px 10px; border-left: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .message-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
 .message-heading h3 { margin: 0; color: var(--muted-foreground); font: 600 9.5px var(--mono); letter-spacing: .4px; text-transform: uppercase; }

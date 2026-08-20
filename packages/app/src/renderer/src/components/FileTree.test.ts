@@ -218,6 +218,8 @@ describe("FileTree", () => {
       text: "Check this line",
       state: "open",
       headSha: "b",
+      sourceContext: null,
+      inProgressNote: null,
       commitRef: null,
       summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",
@@ -251,13 +253,15 @@ describe("FileTree", () => {
   it("counts unresolved notes on a file and leaves resolved ones out", () => {
     const target = file("app/models/member.rb");
     const other = file("app/models/local.rb");
-    const note = (id: number, path: string, state: "open" | "addressed" | "resolved") => ({
+    const note = (id: number, path: string, state: "open" | "in_progress" | "addressed" | "resolved") => ({
       id,
       path,
       line: id,
       text: `Note ${id}`,
       state,
       headSha: "b",
+      sourceContext: null,
+      inProgressNote: null,
       commitRef: null,
       summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",
@@ -286,6 +290,8 @@ describe("FileTree", () => {
       text: "Check this line",
       state: "open" as const,
       headSha: "b",
+      sourceContext: null,
+      inProgressNote: null,
       commitRef: null,
       summary: null,
       createdAt: "2026-08-18T00:00:00.000Z",

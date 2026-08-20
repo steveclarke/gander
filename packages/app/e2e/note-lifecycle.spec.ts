@@ -18,21 +18,29 @@ test("carries a reviewer note through MCP addressing and reviewer resolution", a
     await expect(note.getByRole("combobox", { name: "Status for note" })).toHaveValue("open");
 
     const pickedUp = await agent.notes(repository.repoId, "feature");
-    expect(pickedUp.noteCounts).toEqual({ open: 1, addressed: 0, resolved: 0 });
+    expect(pickedUp.noteCounts).toEqual({ open: 1, in_progress: 0, addressed: 0, resolved: 0 });
     expect(pickedUp.notes).toHaveLength(1);
-    await agent.markAddressed(pickedUp.notes[0]!.id, "abc1234", "Removed the unnecessary branch");
+    expect(pickedUp.notes[0]!.sourceContext?.lines).toContain("class A");
+
+    await agent.markInProgress(pickedUp.notes[0]!.id, "Need the reviewer to choose the intended behavior");
+    await review.fetchOrigin();
+    await expect(note.getByRole("combobox", { name: "Status for note" })).toHaveValue("in_progress");
+    await expect(note.getByRole("region", { name: "Waiting on reviewer" })).toContainText("choose the intended behavior");
+    expect((await agent.notes(repository.repoId, "feature", pickedUp.lastNoteId!)).notes).toEqual([]);
+
+    await agent.markAddressed(pickedUp.notes[0]!.id, "The reviewer confirmed the branch is required");
 
     await review.fetchOrigin();
     await expect(note.getByRole("combobox", { name: "Status for note" })).toHaveValue("addressed");
-    await expect(note.getByRole("region", { name: "Agent update" })).toContainText("Removed the unnecessary branch");
-    await expect(note.getByRole("region", { name: "Agent update" })).toContainText("abc1234");
+    await expect(note.getByRole("region", { name: "Agent update" })).toContainText("The reviewer confirmed the branch is required");
+    await expect(note.getByRole("region", { name: "Waiting on reviewer" })).toHaveCount(0);
 
     await app.page.getByRole("button", { name: "Mark reviewed" }).click();
     await review.fetchOrigin();
     await expect(note.getByRole("combobox", { name: "Status for note" })).toHaveValue("resolved");
 
     const completed = await agent.notes(repository.repoId, "feature");
-    expect(completed.noteCounts).toEqual({ open: 0, addressed: 0, resolved: 1 });
+    expect(completed.noteCounts).toEqual({ open: 0, in_progress: 0, addressed: 0, resolved: 1 });
   } finally {
     await agent.close();
   }
@@ -79,7 +87,7 @@ test("lets the reviewer edit a note and change its status", async ({ world }) =>
     await expect(status).toHaveValue("resolved");
 
     const saved = await agent.notes(repository.repoId, "feature");
-    expect(saved.noteCounts).toEqual({ open: 0, addressed: 0, resolved: 1 });
+    expect(saved.noteCounts).toEqual({ open: 0, in_progress: 0, addressed: 0, resolved: 1 });
     expect(saved.notes[0]).toMatchObject({ text: "Updated wording", state: "resolved" });
   } finally {
     await agent.close();

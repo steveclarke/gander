@@ -93,9 +93,13 @@ describe("service API", () => {
     const url = "/api/reviews/acme%2Fatlas/7/notes";
 
     it("creates, lists, and deletes a note", async () => {
-      const created = await server.inject({ method: "POST", url, headers: AUTH, payload: { path: "a.rb", line: 3, text: "Why?", headSha: "sha-1" } });
+      const created = await server.inject({
+        method: "POST", url, headers: AUTH,
+        payload: { path: "a.rb", line: 3, text: "Why?", headSha: "sha-1", sourceContext: { startLine: 1, lines: ["one", "two", "three"] } },
+      });
       expect(created.statusCode).toBe(201);
       const id = created.json().id as number;
+      expect(created.json().sourceContext).toEqual({ startLine: 1, lines: ["one", "two", "three"] });
 
       const listed = await server.inject({ method: "GET", url, headers: AUTH });
       expect(listed.json()).toHaveLength(1);
@@ -106,7 +110,8 @@ describe("service API", () => {
     });
 
     it("lists a resolved note with the agent's commit and note", async () => {
-      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
+      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null, sourceContext: null });
+      storage.markNoteInProgress(note.id, { note: null });
       storage.markNoteAddressed(note.id, { commitRef: "abc1234", summary: "Dropped the retry" });
       storage.putFileState("acme/atlas", 7, {
         checked: true, path: "a.rb", baseHash: "base", headHash: "head",
@@ -127,7 +132,7 @@ describe("service API", () => {
     });
 
     it("edits note text and state", async () => {
-      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 3, text: "Before", headSha: null });
+      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 3, text: "Before", headSha: null, sourceContext: null });
       const updated = await server.inject({
         method: "PATCH", url: `${url}/${note.id}`, headers: AUTH,
         payload: { text: "After", state: "resolved" },

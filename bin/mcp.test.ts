@@ -60,7 +60,7 @@ if [[ " $* " == *" --format json "* ]]; then
   if [[ -n "\${MCP_TEST_TOOLS_RESPONSE:-}" ]]; then
     printf '%s\n' "$MCP_TEST_TOOLS_RESPONSE"
   else
-    printf '%s\n' '{"result":{"tools":[{"name":"mark_note_addressed"},{"name":"get_review_notes"}]}}'
+    printf '%s\n' '{"result":{"tools":[{"name":"mark_note_addressed"},{"name":"mark_note_in_progress"},{"name":"get_review_notes"}]}}'
   fi
 else
   printf '%s\n' '{"ok":true}'
@@ -83,7 +83,7 @@ describe.skipIf(platform === "win32")("bin/mcp", () => {
 
     expect(result.status, result.output).toBe(0);
     expect(result.output).toContain("MCP OK");
-    expect(result.output).toContain("get_review_notes, mark_note_addressed");
+    expect(result.output).toContain("get_review_notes, mark_note_addressed, mark_note_in_progress");
     expect(result.output).not.toContain("test-token");
 
     const args = readFileSync(argsFile, "utf8");
@@ -113,7 +113,7 @@ describe.skipIf(platform === "win32")("bin/mcp", () => {
     const result = run("check");
 
     expect(result.status).toBe(1);
-    expect(result.output).toContain("Missing core MCP tools: mark_note_addressed");
+    expect(result.output).toContain("Missing core MCP tools: mark_note_in_progress, mark_note_addressed");
     expect(result.output).toContain("tool contract is invalid");
   });
 
