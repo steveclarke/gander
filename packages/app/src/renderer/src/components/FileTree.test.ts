@@ -110,6 +110,20 @@ describe("FileTree", () => {
     file("config/routes.rb", true),
   ];
 
+  it("distinguishes a partially reviewed directory from a fully reviewed one", () => {
+    const { store } = fakeStore(prView(1, treeFiles));
+    const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });
+    const partial = dirRow(wrapper, "app").find(".cb");
+    const complete = dirRow(wrapper, "config").find(".cb");
+
+    expect(partial.classes()).toContain("part");
+    expect(partial.attributes("aria-checked")).toBe("mixed");
+    expect(partial.find(".lucide-minus").exists()).toBe(true);
+    expect(complete.classes()).toContain("on");
+    expect(complete.attributes("aria-checked")).toBe("true");
+    expect(complete.find(".lucide-check").exists()).toBe(true);
+  });
+
   it("checking a directory issues exactly one batched setCheckedMany call covering every descendant, and never calls setChecked", async () => {
     const { store, calls } = fakeStore(prView(1, treeFiles));
     const wrapper = mount(FileTree, { props: { store, iconTheme: "catppuccin-mocha" } });

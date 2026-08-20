@@ -60,6 +60,11 @@ function dirStateFor(node: TreeNode & { type: "dir" }): "all" | "some" | "none" 
   return dirStates.value.get(node.path) ?? "none";
 }
 
+function dirAriaChecked(node: TreeNode & { type: "dir" }): boolean | "mixed" {
+  const state = dirStateFor(node);
+  return state === "some" ? "mixed" : state === "all";
+}
+
 // Directory paths carry no PR identity, and `store.openPr` reassigns `view` in one step
 // (never through a null in between), so switching PRs within the same repo never unmounts
 // this component. Clear stale collapse state whenever the reviewed PR changes.
@@ -117,7 +122,7 @@ function jumpShortcut(path: string): string | undefined {
           class="cb"
           :class="{ on: dirStateFor(node) === 'all', part: dirStateFor(node) === 'some' }"
           role="checkbox"
-          :aria-checked="dirStateFor(node) === 'all'"
+          :aria-checked="dirAriaChecked(node)"
           tabindex="0"
           @click.stop="checkDir(node)"
           @keydown.enter.space.stop.prevent="checkDir(node)"
@@ -199,7 +204,7 @@ function jumpShortcut(path: string): string | undefined {
 .st.R { color: var(--info); }
 .cb { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--faint-foreground); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 11px; color: transparent; }
 .cb.on { border-color: var(--success); color: var(--success); }
-.cb.part { border-color: var(--success); color: var(--success); }
+.cb.part { border-color: var(--warning); color: var(--warning); }
 .tnode.checked .fname { color: var(--faint-foreground); }
 
 .jump-match { padding: 0; border-radius: 1px; background: var(--accent); color: var(--accent-foreground); font-weight: 750; }

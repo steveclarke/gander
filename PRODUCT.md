@@ -4,7 +4,7 @@
 
 ## Platform
 
-Electron desktop application
+web
 
 ## Users
 
