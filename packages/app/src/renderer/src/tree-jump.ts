@@ -53,7 +53,7 @@ export function jumpTargets(files: ChangedFile[], query: string): JumpTarget[] {
   }));
 }
 
-interface TreeJump {
+export interface TreeJump {
   active: ComputedRef<boolean>;
   targetsByPath: ComputedRef<ReadonlyMap<string, JumpTarget>>;
   start: () => boolean;

@@ -1,0 +1,34 @@
+/* The area under the context toolbar, shared by every surface that fills it: the local
+   viewer, the review, and whatever a surface shows instead when there is nothing yet. */
+.work-surface {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: var(--workbench-background);
+}
+
+.diff {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* A line of text where a file would be. Centred, because it is the whole surface. */
+.empty {
+  margin: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2rem;
+  color: var(--faint-foreground);
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--workbench-border);
+  border-top-color: var(--faint-foreground);
+  border-radius: 50%;
+}
