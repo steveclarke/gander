@@ -92,6 +92,12 @@ flow. Run `bin/mcp check` before handing it back. Stop before publication only
 when Steve explicitly asks not to create a PR or when a concrete blocker requires
 his decision.
 
+Do not hand back an empty review when the changed UI depends on authored state.
+Populate this checkout's disposable local review with representative, clearly
+labeled QA data across the states needed to exercise the feature, then leave the
+relevant surface open in Gander. Never seed or alter the hosted review database
+for QA.
+
 **Electron install trap:** Electron 33's extract-zip silently truncates under
 Node 24, leaving a `node_modules/electron/dist` of a few hundred KB while the
 install script exits 0. Electron then fails to launch. The root `postinstall` hook runs
