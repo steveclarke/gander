@@ -1,4 +1,4 @@
-import type { LocalFile, LocalFileEntry, LocalView, LocalWorktree, NewNote, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
+import type { LocalFile, LocalFileEntry, LocalView, LocalWorktree, NewNote, OpenTarget, PrListItem, PrView, RepoEntry, UpdateNote } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
 import type { ConnectionCheck, ServiceStatus } from "./main/connection.js";
@@ -60,6 +60,7 @@ export interface GanderApi {
   closeLocal(): Promise<void>;
   onLocalViewChanged(listener: (update: LocalViewUpdate) => void): () => void;
   addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha">): Promise<PrView>;
+  updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Promise<PrView>;
   deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
   getSettings(): Promise<AppSettings>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;

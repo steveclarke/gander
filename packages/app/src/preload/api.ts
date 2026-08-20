@@ -84,6 +84,7 @@ export function createGanderApi(
     closeLocal: () => call("closeLocal"),
     onLocalViewChanged: (listener) => subscribe("gander:localViewChanged", (update: LocalViewUpdate) => listener(update)),
     addNote: (repoId, prNumber, input) => call("addNote", repoId, prNumber, input),
+    updateNote: (repoId, prNumber, id, input) => call("updateNote", repoId, prNumber, id, input),
     deleteNote: (repoId, prNumber, id) => call("deleteNote", repoId, prNumber, id),
     getConnection: () => call("getConnection"),
     testConnection: (url, token) => call("testConnection", url, token),

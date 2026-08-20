@@ -130,6 +130,18 @@ describe("storage", () => {
       expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", summary: "Dropped the retry" });
     });
 
+    it("lets the reviewer edit note text and correct its state within one review", () => {
+      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 12, text: "Old text", headSha: null });
+
+      expect(storage.updateNote("acme/atlas", 8, note.id, { text: "Wrong review" })).toBeNull();
+      expect(storage.updateNote("acme/atlas", 7, note.id, { text: "Updated text", state: "resolved" })).toMatchObject({
+        id: note.id,
+        text: "Updated text",
+        state: "resolved",
+      });
+      expect(storage.listNotes("acme/atlas", 7)[0]).toMatchObject({ text: "Updated text", state: "resolved" });
+    });
+
     it("refuses to re-address a note the reviewer already resolved", () => {
       const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null });
       storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" });

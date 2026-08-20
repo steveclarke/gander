@@ -50,6 +50,8 @@ milestone boundary.
 Pressing `n` over a file captures a note against it, stamped with the line
 being read. Notes carry three states: `open` when captured, `addressed` when
 an agent has acted on one, and `resolved` when the reviewer re-checks the file.
+The notes drawer lets the reviewer correct note text or explicitly change a
+note's state when the recorded workflow state needs correcting.
 Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`
 for registration.
 

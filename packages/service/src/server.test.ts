@@ -126,6 +126,22 @@ describe("service API", () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it("edits note text and state", async () => {
+      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: 3, text: "Before", headSha: null });
+      const updated = await server.inject({
+        method: "PATCH", url: `${url}/${note.id}`, headers: AUTH,
+        payload: { text: "After", state: "resolved" },
+      });
+
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json()).toMatchObject({ id: note.id, text: "After", state: "resolved" });
+    });
+
+    it("rejects empty note updates and missing notes", async () => {
+      expect((await server.inject({ method: "PATCH", url: `${url}/999`, headers: AUTH, payload: {} })).statusCode).toBe(400);
+      expect((await server.inject({ method: "PATCH", url: `${url}/999`, headers: AUTH, payload: { text: "Changed" } })).statusCode).toBe(404);
+    });
+
     it("404s on deleting a note that is not there", async () => {
       expect((await server.inject({ method: "DELETE", url: `${url}/999`, headers: AUTH })).statusCode).toBe(404);
     });

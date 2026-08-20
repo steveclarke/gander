@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, MarkAddressed, NewNote, PrContext, PutFileState, Note, ReviewState } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, NewNote, PrContext, PutFileState, Note, ReviewState, UpdateNote } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -57,6 +57,7 @@ export interface Storage {
   markNoteAddressed(id: number, input: MarkAddressed): Note | null;
   listNotes(repoId: string, prNumber: number): Note[];
   addNote(repoId: string, prNumber: number, input: NewNote): Note;
+  updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Note | null;
   deleteNote(repoId: string, prNumber: number, id: number): boolean;
   close(): void;
 }
@@ -216,6 +217,25 @@ export function openStorage(dbPath: string): Storage {
         .run(rid, input.path, input.line, input.text, input.headSha);
       const row = db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(lastInsertRowid) as NoteRow;
       return rowToNote(row);
+    },
+
+    updateNote(repoId, prNumber, id, input) {
+      const rid = reviewId(repoId, prNumber);
+      const assignments: string[] = [];
+      const values: Array<string | number> = [];
+      if (input.text !== undefined) {
+        assignments.push("text = ?");
+        values.push(input.text);
+      }
+      if (input.state !== undefined) {
+        assignments.push("state = ?");
+        values.push(input.state);
+      }
+      if (assignments.length === 0) return null;
+      const changed = db.prepare(`UPDATE notes SET ${assignments.join(", ")} WHERE id = ? AND review_id = ?`)
+        .run(...values, id, rid).changes;
+      if (changed === 0) return null;
+      return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow);
     },
 
     deleteNote(repoId, prNumber, id) {

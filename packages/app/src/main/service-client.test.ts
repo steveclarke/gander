@@ -92,4 +92,17 @@ describe("a request with no body", () => {
     await client.addNote("acme/atlas", 1, { path: "a.rb", line: null, text: "why?", headSha: null });
     expect(seen).toEqual(["application/json"]);
   });
+
+  it("patches a note and validates the saved note", async () => {
+    const url = await serve((app) => {
+      app.patch("/api/reviews/:repoId/:prNumber/notes/:id", async (req) => ({
+        id: 2, path: "a.rb", line: null, text: (req.body as { text: string }).text, state: "resolved",
+        headSha: null, commitRef: null, summary: null, createdAt: new Date().toISOString(),
+      }));
+    });
+    const client = createServiceClient(() => ({ url, token: "t" }));
+
+    await expect(client.updateNote("acme/atlas", 1, 2, { text: "Updated", state: "resolved" }))
+      .resolves.toMatchObject({ id: 2, text: "Updated", state: "resolved" });
+  });
 });

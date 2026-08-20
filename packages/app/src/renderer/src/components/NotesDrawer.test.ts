@@ -30,6 +30,7 @@ function store(notes: PrView["notes"], overrides: Partial<Store> = {}): Store {
     view: view(notes),
     selectedPath: null,
     async deleteNote() {},
+    async updateNote() {},
     select() {},
     ...overrides,
   } as unknown as Store;
@@ -109,7 +110,7 @@ describe("NotesDrawer", () => {
 
     const addressed = wrapper.get("[data-note-id='2']");
     expect(addressed.text()).toContain("addressed.ts:9");
-    expect(addressed.get(".state").text()).toBe("addressed");
+    expect((addressed.get("select[aria-label='Status for note 2']").element as HTMLSelectElement).value).toBe("addressed");
     expect(addressed.text()).toContain("Could this preserve the existing caller contract?");
     expect(addressed.find("[data-note-body]").isVisible()).toBe(false);
   });
@@ -145,6 +146,34 @@ describe("NotesDrawer", () => {
     expect(deleteNote).not.toHaveBeenCalled();
     await open.get("dialog.confirm button.danger").trigger("click");
     expect(deleteNote).toHaveBeenCalledWith(1);
+  });
+
+  it("edits note text and changes status through labeled controls", async () => {
+    const updateNote = vi.fn(async () => {});
+    const wrapper = mount(NotesDrawer, { props: { store: store(notes, { updateNote }), dock: "right" } });
+    const open = wrapper.get("[data-note-id='1']");
+
+    await open.get("button[aria-label='Edit note 1']").trigger("click");
+    const editor = open.get("textarea[aria-label='Edit note 1']");
+    await editor.setValue("Use the shared helper instead");
+    await open.get("form.edit-form").trigger("submit");
+    expect(updateNote).toHaveBeenCalledWith(1, { text: "Use the shared helper instead" });
+
+    await open.get("select[aria-label='Status for note 1']").setValue("resolved");
+    expect(updateNote).toHaveBeenCalledWith(1, { state: "resolved" });
+  });
+
+  it("cancels an edit without saving it", async () => {
+    const updateNote = vi.fn(async () => {});
+    const wrapper = mount(NotesDrawer, { props: { store: store(notes, { updateNote }), dock: "right" } });
+    const open = wrapper.get("[data-note-id='1']");
+
+    await open.get("button[aria-label='Edit note 1']").trigger("click");
+    await open.get("textarea[aria-label='Edit note 1']").setValue("Discard this");
+    await open.get(".edit-actions button[type='button']").trigger("click");
+
+    expect(updateNote).not.toHaveBeenCalled();
+    expect(open.text()).toContain("Why does this branch need");
   });
 
   it("deletes nothing when the confirmation is dismissed", async () => {

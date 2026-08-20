@@ -58,6 +58,7 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     closeLocal: async () => {},
     onLocalViewChanged: () => () => {},
     addNote: async () => prView(),
+    updateNote: async () => prView(),
     deleteNote: async () => prView(),
     getSettings: async () => ({
       editor: { fontFamily: "monospace", fontSize: 16 },

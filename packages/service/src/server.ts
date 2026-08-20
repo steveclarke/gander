@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import type { ZodError } from "zod";
-import { NewNoteSchema, PrContextSchema, PutFileStateSchema } from "@gander/shared";
+import { NewNoteSchema, PrContextSchema, PutFileStateSchema, UpdateNoteSchema } from "@gander/shared";
 import { handleMcpRequest } from "./mcp.js";
 import type { Storage } from "./storage.js";
 
@@ -131,6 +131,21 @@ export function buildServer(opts: {
         return reply.code(404).send({ error: `no note ${id} on ${req.params.repoId}#${prNumber}` });
       }
       return reply.code(204).send();
+    },
+  );
+
+  app.patch<{ Params: { repoId: string; prNumber: string; id: string } }>(
+    "/api/reviews/:repoId/:prNumber/notes/:id",
+    async (req, reply) => {
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
+      if (prNumber === undefined) return;
+      const id = positiveInt("id", req.params.id, reply);
+      if (id === undefined) return;
+      const parsed = UpdateNoteSchema.safeParse(req.body);
+      if (!parsed.success) return badRequest(reply, parsed.error);
+      const note = opts.storage.updateNote(req.params.repoId, prNumber, id, parsed.data);
+      if (!note) return reply.code(404).send({ error: `no note ${id} on ${req.params.repoId}#${prNumber}` });
+      return note;
     },
   );
 

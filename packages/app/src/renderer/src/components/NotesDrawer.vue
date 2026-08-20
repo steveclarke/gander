@@ -108,6 +108,7 @@ async function copyAll(): Promise<void> {
         :note="note"
         :current="note.path === store.selectedPath"
         :copied="copiedNoteId === note.id"
+        :update-note="store.updateNote"
         @navigate="goTo"
         @copy="copyNote"
         @delete="store.deleteNote"

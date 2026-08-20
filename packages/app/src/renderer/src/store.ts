@@ -1,6 +1,6 @@
 import { reactive } from "vue";
 import { isUnreachableReason } from "@gander/shared";
-import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
+import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, NoteState, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi } from "./api.js";
 import type { ImagePreview } from "../../api.js";
 import type { ServiceStatus } from "../../api.js";
@@ -63,6 +63,7 @@ export interface Store {
   reviewedSnapshot(path: string): Promise<string | null>;
   imagePreview(path: string): Promise<ImagePreview | null>;
   addNote(text: string, path: string | null, line: number | null): Promise<void>;
+  updateNote(id: number, input: { text?: string; state?: NoteState }): Promise<void>;
   deleteNote(id: number): Promise<void>;
   select(path: string): void;
   files(): ChangedFile[];
@@ -331,6 +332,12 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         const { repoId, prNumber } = requireOpenPr();
         store.view = await api.deleteNote(repoId, prNumber, id);
+      });
+    },
+    async updateNote(id, input) {
+      await guard(async () => {
+        const { repoId, prNumber } = requireOpenPr();
+        store.view = await api.updateNote(repoId, prNumber, id, input);
       });
     },
     select(path: string) {

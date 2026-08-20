@@ -1,4 +1,4 @@
-import type { FileCheckoff, NewNote, PrFile, PrListItem, PrSummary, PrView, ReviewState } from "@gander/shared";
+import type { FileCheckoff, NewNote, PrFile, PrListItem, PrSummary, PrView, ReviewState, UpdateNote } from "@gander/shared";
 import type { GitEngine } from "./git.js";
 import { ServiceConnectionError, STALE_SERVICE_DATA_WRITE_ERROR, type ServiceClient } from "./service-client.js";
 import type { ImagePreview, ImageSide } from "../image-preview.js";
@@ -17,6 +17,7 @@ export interface Reviewer {
   setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
   setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
   addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha">): Promise<PrView>;
+  updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Promise<PrView>;
   deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
   /** The file as it stood when the reviewer last checked it — the base for the delta view. */
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
@@ -268,6 +269,12 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     },
     async reviewedSnapshot(repoId, prNumber, path) {
       return (await deps.service.getSnapshot(repoId, prNumber, path)).headContent;
+    },
+    async updateNote(repoId, prNumber, id, input) {
+      const entry = requireWritable(repoId, prNumber);
+      const note = await writeServiceState(entry, () => deps.service.updateNote(repoId, prNumber, id, input));
+      entry.view.notes = entry.view.notes.map((candidate) => candidate.id === id ? note : candidate);
+      return entry.view;
     },
     async imagePreview(repoId, prNumber, path) {
       const entry = cache.get(key(repoId, prNumber));

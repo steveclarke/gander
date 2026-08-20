@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "e
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { type LocalView, type OpenTarget, type RepoEntry } from "@gander/shared";
+import { type LocalView, type OpenTarget, type RepoEntry, type UpdateNote } from "@gander/shared";
 import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
@@ -183,6 +183,7 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
   ipcMain.handle("gander:reviewedSnapshot", async (_e, repoId: string, n: number, path: string) => reviewer.reviewedSnapshot(repoId, n, path));
   ipcMain.handle("gander:imagePreview", async (_e, repoId: string, n: number, path: string) => reviewer.imagePreview(repoId, n, path));
   ipcMain.handle("gander:addNote", async (_e, repoId: string, n: number, input: { path: string | null; line: number | null; text: string }) => reviewer.addNote(repoId, n, input));
+  ipcMain.handle("gander:updateNote", async (_e, repoId: string, n: number, id: number, input: UpdateNote) => reviewer.updateNote(repoId, n, id, input));
   ipcMain.handle("gander:deleteNote", async (_e, repoId: string, n: number, id: number) => reviewer.deleteNote(repoId, n, id));
   ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean) => reviewer.setCheckedMany(repoId, n, paths, checked));
   // Connection is deliberately not part of the settings document: that document is
