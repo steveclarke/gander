@@ -1,5 +1,5 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "routes": [
     "DELETE /api/reviews/:repoId/:prNumber/notes/:id",
     "DELETE /mcp",
@@ -707,7 +707,7 @@
     },
     {
       "name": "mark_note_addressed",
-      "description": "Record the outcome after an in-progress note has been acted on. A code change can name its commit; an answered question has no commit. This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
+      "description": "Record the outcome after an open or in-progress note has been acted on. A code change can name its commit; an answered question has no commit. This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
       "inputSchema": {
         "type": "object",
         "properties": {

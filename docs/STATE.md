@@ -49,10 +49,11 @@ milestone boundary.
 
 Pressing `n` over a file captures a note against it, stamped with the line
 being read. Notes carry four states: `open` when captured, `in_progress` when an
-agent claims one, `addressed` when the agent records its outcome, and `resolved`
-when the reviewer re-checks the file. A claimed note can record the reviewer
-decision blocking it, and the notes drawer separates those blockers from active
-work.
+agent claims work that spans time, `addressed` when the agent records its
+outcome, and `resolved` when the reviewer re-checks the file. A claimed note can
+record the reviewer decision blocking it, and the notes drawer separates those
+blockers from active work. Work completed in one exchange can move directly
+from `open` to `addressed`.
 The notes drawer lets the reviewer correct note text or explicitly change a
 note's state when the recorded workflow state needs correcting.
 Agents reach them over MCP at `/mcp` on the review service — see `DEVSTACK.md`

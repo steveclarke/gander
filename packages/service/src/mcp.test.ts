@@ -137,12 +137,11 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
-  it("marks a note addressed, and the state is really in storage", async () => {
+  it("marks an open note addressed without claiming it first", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
     const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null, sourceContext: null });
 
     const client = await connect();
-    await client.callTool({ name: "mark_note_in_progress", arguments: { id: q.id } });
     await client.callTool({
       name: "mark_note_addressed",
       arguments: { id: q.id, commitRef: "abc1234", summary: "Dropped the retry" },
@@ -206,11 +205,26 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
-  it("refuses to mark a note that is not in progress", async () => {
+  it("distinguishes missing, addressed, and resolved notes when addressing fails", async () => {
+    const addressed = storage.addNote("acme/atlas", 7, { path: "addressed.rb", line: null, text: "Address me", headSha: null, sourceContext: null });
+    storage.markNoteAddressed(addressed.id, { commitRef: null, summary: "Done" });
+    const resolved = storage.addNote("acme/atlas", 7, { path: "resolved.rb", line: null, text: "Resolve me", headSha: null, sourceContext: null });
+    storage.markNoteAddressed(resolved.id, { commitRef: null, summary: "Done" });
+    storage.putFileState("acme/atlas", 7, {
+      checked: true, path: "resolved.rb", baseHash: "b", headHash: "h",
+      baseContent: "old", headContent: "new", machine: "test",
+    });
+
     const client = await connect();
-    const result = await client.callTool({ name: "mark_note_addressed", arguments: { id: 999, summary: "Nothing to change" } });
-    expect(result.isError).toBe(true);
-    expect(textOf(result as { content?: unknown })).toContain("not in progress");
+    for (const [id, message] of [
+      [999, "Note 999 does not exist."],
+      [addressed.id, `Note ${addressed.id} is already addressed.`],
+      [resolved.id, `Note ${resolved.id} is already resolved.`],
+    ] as const) {
+      const result = await client.callTool({ name: "mark_note_addressed", arguments: { id, summary: "Nothing to change" } });
+      expect(result.isError).toBe(true);
+      expect(textOf(result as { content?: unknown })).toBe(message);
+    }
     await client.close();
   });
 

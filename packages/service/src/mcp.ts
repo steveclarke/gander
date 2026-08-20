@@ -162,7 +162,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
     {
       title: "Mark a review note addressed",
       description:
-        "Record the outcome after an in-progress note has been acted on. A code change can name its commit; an answered question has no commit. " +
+        "Record the outcome after an open or in-progress note has been acted on. A code change can name its commit; an answered question has no commit. " +
         "This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
       inputSchema: {
         id: z.number().int().positive().describe("Note id from get_review_notes."),
@@ -173,8 +173,12 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
     async ({ id, commitRef, summary }) => {
       const marked = storage.markNoteAddressed(id, { commitRef: commitRef ?? null, summary: summary ?? null });
       if (marked === null) {
+        const state = storage.getNoteState(id);
+        const message = state === null
+          ? `Note ${id} does not exist.`
+          : `Note ${id} is already ${state}.`;
         return {
-          content: [{ type: "text", text: `Note ${id} is not in progress — it does not exist, is still open, or was already addressed or resolved.` }],
+          content: [{ type: "text", text: message }],
           isError: true,
         };
       }

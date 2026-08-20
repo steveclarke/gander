@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { gzipSync, gunzipSync } from "node:zlib";
-import type { FileCheckoff, MarkAddressed, MarkInProgress, NewNote, PrContext, PutFileState, Note, ReviewState, UpdateNote } from "@gander/shared";
+import type { FileCheckoff, MarkAddressed, MarkInProgress, NewNote, NoteState, PrContext, PutFileState, Note, ReviewState, UpdateNote } from "@gander/shared";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -56,6 +56,7 @@ export interface Storage {
   /** Every pull request recorded as part of the same stack, with how many open notes each holds. */
   listStackMembers(repoId: string, stackId: number): Array<{ prNumber: number; headRef: string | null; title: string | null; position: number | null; openNotes: number }>;
   findPrByHeadRef(repoId: string, headRef: string): number | null;
+  getNoteState(id: number): NoteState | null;
   markNoteInProgress(id: number, input: MarkInProgress): Note | null;
   markNoteAddressed(id: number, input: MarkAddressed): Note | null;
   listNotes(repoId: string, prNumber: number): Note[];
@@ -197,6 +198,11 @@ export function openStorage(dbPath: string): Storage {
       return row?.pr_number ?? null;
     },
 
+    getNoteState(id) {
+      const row = db.prepare("SELECT state FROM notes WHERE id = ?").get(id) as { state: NoteState } | undefined;
+      return row?.state ?? null;
+    },
+
     markNoteInProgress(id, input) {
       // Calling the claim tool again updates whether already-started work is active or
       // waiting, without manufacturing another state transition.
@@ -210,12 +216,12 @@ export function openStorage(dbPath: string): Storage {
     },
 
     markNoteAddressed(id, input) {
-      // Only claimed work can be addressed. Re-addressing a resolved one would
-      // undo the reviewer's own act, and the spec puts resolution solely in their hands.
+      // Claiming is useful for work that spans time, but a note handled in one exchange
+      // can go straight from open to addressed. Neither path may undo reviewer resolution.
       const changed = db.prepare(`
         UPDATE notes
         SET state = 'addressed', in_progress_note = NULL, commit_ref = ?, summary = ?, addressed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-        WHERE id = ? AND state = 'in_progress'
+        WHERE id = ? AND state IN ('open', 'in_progress')
       `).run(input.commitRef, input.summary, id).changes;
       if (changed === 0) return null;
       return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow);

@@ -132,10 +132,10 @@ describe("storage", () => {
 
     it("an agent marks a note addressed with a commit and note", () => {
       const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?", headSha: null, sourceContext: null });
-      expect(storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" })).toBeNull();
-      storage.markNoteInProgress(q.id, { note: null });
       const marked = storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" });
       expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", summary: "Dropped the retry" });
+      expect(storage.getNoteState(q.id)).toBe("addressed");
+      expect(storage.getNoteState(999)).toBeNull();
     });
 
     it("claims a note, records why it is waiting, then addresses it without a commit", () => {
