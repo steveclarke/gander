@@ -13,7 +13,7 @@ import { z } from "zod";
  *
  * Not the app's release version: releases happen far more often than the contract moves.
  */
-export const SERVICE_VERSION = "0.7.0";
+export const SERVICE_VERSION = "0.8.0";
 
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
@@ -61,7 +61,10 @@ export const NoteSourceContextSchema = z.object({
 export type NoteSourceContext = z.infer<typeof NoteSourceContextSchema>;
 
 export const NoteSchema = z.object({
+  /** Stable database key used by the service API and MCP mutations. */
   id: z.number().int().positive(),
+  /** Immutable, never-reused conversational handle scoped to this pull request. */
+  number: z.number().int().positive(),
   /** null for a note about the pull request as a whole rather than one file. */
   path: z.string().nullable(),
   /** 1-based line in the head revision, stamped when a line was selected at capture. */

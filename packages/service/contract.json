@@ -1,5 +1,5 @@
 {
-  "version": "0.7.0",
+  "version": "0.8.0",
   "routes": [
     "DELETE /api/reviews/:repoId/:prNumber/notes/:id",
     "DELETE /mcp",
@@ -232,6 +232,11 @@
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
         },
+        "number": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
         "path": {
           "anyOf": [
             {
@@ -341,6 +346,7 @@
       },
       "required": [
         "id",
+        "number",
         "path",
         "line",
         "text",
@@ -666,7 +672,7 @@
   "mcpTools": [
     {
       "name": "get_review_notes",
-      "description": "Notes the reviewer has left on a pull request, with the file and line each one is about. Derive repo and branch from the working directory. Returns open and in-progress notes by default — those are the ones still needing work. The response always counts open, in-progress, addressed, and resolved notes so hidden states are visible. The response names the branch, title, and stack position of the pull request the notes belong to: check it matches the checkout being worked in, because a stacked pull request's sibling is a different branch with different notes.",
+      "description": "Notes the reviewer has left on a pull request, with the file and line each one is about. Each note has a pull-request-scoped number for discussion and a global id for tool calls. Derive repo and branch from the working directory. Returns open and in-progress notes by default — those are the ones still needing work. The response always counts open, in-progress, addressed, and resolved notes so hidden states are visible. The response names the branch, title, and stack position of the pull request the notes belong to: check it matches the checkout being worked in, because a stacked pull request's sibling is a different branch with different notes.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -715,7 +721,7 @@
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991,
-            "description": "Note id from get_review_notes."
+            "description": "Global note id from get_review_notes. Use its number when discussing the note with the reviewer."
           },
           "commitRef": {
             "description": "Commit that addressed it, when the outcome changed code.",
@@ -745,7 +751,7 @@
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991,
-            "description": "Note id from get_review_notes."
+            "description": "Global note id from get_review_notes. Use its number when discussing the note with the reviewer."
           },
           "note": {
             "description": "Why this work is waiting on the reviewer.",

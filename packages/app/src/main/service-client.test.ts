@@ -83,7 +83,7 @@ describe("a request with no body", () => {
       app.post("/api/reviews/:repoId/:prNumber/notes", async (req, reply) => {
         seen.push(req.headers["content-type"]);
         return reply.code(201).send({
-          id: 1, path: "a.rb", line: null, text: "why?", state: "open",
+          id: 1, number: 1, path: "a.rb", line: null, text: "why?", state: "open",
           headSha: null, sourceContext: null, inProgressNote: null,
           commitRef: null, summary: null, createdAt: new Date().toISOString(),
         });
@@ -97,7 +97,7 @@ describe("a request with no body", () => {
   it("patches a note and validates the saved note", async () => {
     const url = await serve((app) => {
       app.patch("/api/reviews/:repoId/:prNumber/notes/:id", async (req) => ({
-        id: 2, path: "a.rb", line: null, text: (req.body as { text: string }).text, state: "resolved",
+        id: 2, number: 1, path: "a.rb", line: null, text: (req.body as { text: string }).text, state: "resolved",
         headSha: null, sourceContext: null, inProgressNote: null,
         commitRef: null, summary: null, createdAt: new Date().toISOString(),
       }));

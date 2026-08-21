@@ -40,6 +40,7 @@ const deleteDetail = "The note will be removed from the review. This cannot be u
 // choice remains stable when the Note object is replaced.
 const expanded = shallowRef(props.note.state === "open" || props.note.state === "in_progress");
 const bodyId = computed(() => `note-body-${props.note.id}`);
+const numberId = computed(() => `note-number-${props.note.id}`);
 const titleId = computed(() => `note-title-${props.note.id}`);
 const location = computed(() => {
   if (props.note.path === null) return "This pull request";
@@ -105,10 +106,12 @@ async function changeStatus(event: Event): Promise<void> {
     class="note-item"
     :class="[{ current }, `state-${note.state}`]"
     :data-note-id="note.id"
-    :aria-labelledby="titleId"
+    :aria-labelledby="`${numberId} ${titleId}`"
   >
     <div class="note-header">
       <div class="identity">
+        <span class="note-number" aria-hidden="true">#{{ note.number }}</span>
+        <span :id="numberId" class="visually-hidden">Note {{ note.number }}</span>
         <button
           class="location"
           data-note-location
@@ -123,8 +126,8 @@ async function changeStatus(event: Event): Promise<void> {
           <CircleDot v-else-if="note.state === 'in_progress'" :size="12" aria-hidden="true" />
           <Check v-else-if="note.state === 'addressed'" :size="12" aria-hidden="true" />
           <CheckCheck v-else :size="12" aria-hidden="true" />
-          <span class="status-label">Status</span>
-          <select :value="note.state" :aria-label="`Status for note ${note.id}`" :disabled="changingStatus" @change="changeStatus">
+          <span class="visually-hidden">Status</span>
+          <select :value="note.state" :aria-label="`Status for note ${note.number}`" :disabled="changingStatus" @change="changeStatus">
             <option value="open">Open</option>
             <option value="in_progress">In progress</option>
             <option value="addressed">Addressed</option>
@@ -138,7 +141,7 @@ async function changeStatus(event: Event): Promise<void> {
         type="button"
         :aria-expanded="expanded"
         :aria-controls="bodyId"
-        :aria-label="`${expanded ? 'Collapse' : 'Expand'} note ${note.id}`"
+        :aria-label="`${expanded ? 'Collapse' : 'Expand'} note ${note.number}`"
         @click="expanded = !expanded"
       >
         <span :id="titleId" class="preview">{{ note.text }}</span>
@@ -153,7 +156,7 @@ async function changeStatus(event: Event): Promise<void> {
           <time :datetime="note.createdAt">{{ formatTimestamp(note.createdAt) }}</time>
         </div>
         <form v-if="editing" class="edit-form" @submit.prevent="saveEdit" @keydown.esc.prevent="cancelEditing">
-          <textarea ref="editInput" v-model="draftText" :aria-label="`Edit note ${note.id}`" :disabled="savingEdit" rows="4" />
+          <textarea ref="editInput" v-model="draftText" :aria-label="`Edit note ${note.number}`" :disabled="savingEdit" rows="4" />
           <div class="edit-actions">
             <button type="button" :disabled="savingEdit" @click="cancelEditing">Cancel</button>
             <button class="save" type="submit" :disabled="savingEdit || draftText.trim() === ''">{{ savingEdit ? "Saving…" : "Save" }}</button>
@@ -187,7 +190,7 @@ async function changeStatus(event: Event): Promise<void> {
         <button
           v-if="!editing"
           type="button"
-          :aria-label="`Edit note ${note.id}`"
+          :aria-label="`Edit note ${note.number}`"
           @click="startEditing"
         >
           <Pencil :size="13" aria-hidden="true" />
@@ -195,7 +198,7 @@ async function changeStatus(event: Event): Promise<void> {
         </button>
         <button
           type="button"
-          :aria-label="`Copy note ${note.id}`"
+          :aria-label="`Copy note ${note.number}`"
           @click="emit('copy', note)"
         >
           <Copy :size="13" aria-hidden="true" />
@@ -204,7 +207,7 @@ async function changeStatus(event: Event): Promise<void> {
         <button
           class="delete"
           type="button"
-          :aria-label="`Delete note ${note.id}`"
+          :aria-label="`Delete note ${note.number}`"
           @click="confirmingDelete = true"
         >
           <Trash2 :size="13" aria-hidden="true" />
@@ -234,6 +237,10 @@ async function changeStatus(event: Event): Promise<void> {
 .note-item.current { background: var(--selection-background); }
 .note-header { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px 8px; min-width: 0; }
 .identity { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.note-number {
+  flex: none; border-radius: var(--radius-sm); padding: 1px 5px;
+  background: var(--badge-background); color: var(--muted-foreground); font: 10.5px var(--mono);
+}
 .location {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   background: none; border: none; padding: 0; color: var(--accent); font: inherit; font-size: 11.5px; cursor: pointer;
@@ -244,7 +251,7 @@ async function changeStatus(event: Event): Promise<void> {
   min-height: 22px; border: 1px solid var(--workbench-border); border-radius: var(--radius-pill); padding: 0 7px;
   color: var(--faint-foreground); font-size: 11px; font-weight: 600;
 }
-.status-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .state select {
   appearance: none; border: 0; outline: 0; padding: 0; background: transparent; color: inherit;
   font: inherit; letter-spacing: normal; text-transform: none; cursor: pointer;

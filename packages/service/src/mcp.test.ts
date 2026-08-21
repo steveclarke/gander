@@ -71,7 +71,7 @@ describe("MCP endpoint", () => {
     expect(payload.branch).toBe("feat/thing");
     expect(payload.title).toBe("Feature");
     expect(payload.notes).toEqual([{
-      id: expect.any(Number), file: "a.rb", line: 12, text: "Why the retry here?", state: "open",
+      id: expect.any(Number), number: 1, file: "a.rb", line: 12, text: "Why the retry here?", state: "open",
       capturedAtSha: null, sourceContext: null, lineMayHaveMoved: false,
     }]);
     await client.close();
@@ -131,7 +131,7 @@ describe("MCP endpoint", () => {
       arguments: { repo: "acme/atlas", branch: "feat/thing", includeResolved: true },
     })) as { content?: unknown })) as { notes: Array<Record<string, unknown>> };
     expect(withResolved.notes).toEqual([{
-      id: resolved.id, file: "a.rb", line: null, text: "handled", state: "resolved",
+      id: resolved.id, number: resolved.number, file: "a.rb", line: null, text: "handled", state: "resolved",
       commitRef: "abc1234", summary: "Dropped the retry", capturedAtSha: null, sourceContext: null, lineMayHaveMoved: false,
     }]);
     await client.close();
@@ -142,10 +142,11 @@ describe("MCP endpoint", () => {
     const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null, sourceContext: null });
 
     const client = await connect();
-    await client.callTool({
+    const result = await client.callTool({
       name: "mark_note_addressed",
       arguments: { id: q.id, commitRef: "abc1234", summary: "Dropped the retry" },
     });
+    expect(textOf(result as { content?: unknown })).toBe("Note 1 marked addressed.");
     expect(storage.listNotes("acme/atlas", 7)[0]).toMatchObject({
       state: "addressed", commitRef: "abc1234", summary: "Dropped the retry",
     });
@@ -160,16 +161,18 @@ describe("MCP endpoint", () => {
     });
 
     const client = await connect();
-    await client.callTool({
+    const progress = await client.callTool({
       name: "mark_note_in_progress",
       arguments: { id: q.id, note: "Need the reviewer to choose A or B" },
     });
+    expect(textOf(progress as { content?: unknown })).toBe("Note 1 marked in progress.");
     const claimed = JSON.parse(textOf((await client.callTool({
       name: "get_review_notes", arguments: { repo: "acme/atlas", branch: "feat/thing" },
     })) as { content?: unknown })) as { noteCounts: Record<string, number>; notes: Array<Record<string, unknown>> };
     expect(claimed.noteCounts).toEqual({ open: 0, in_progress: 1, addressed: 0, resolved: 0 });
     expect(claimed.notes[0]).toMatchObject({
       id: q.id,
+      number: 1,
       state: "in_progress",
       inProgressNote: "Need the reviewer to choose A or B",
       sourceContext: { startLine: 1, lines: ["one", "two", "three"] },
@@ -201,7 +204,7 @@ describe("MCP endpoint", () => {
       name: "get_review_notes", arguments: { repo: "acme/atlas", branch: "feat/thing", since: second.id },
     })) as { content?: unknown })) as { message: string; notes: unknown[] };
     expect(none.notes).toEqual([]);
-    expect(none.message).toBe(`No new open or in-progress notes after note ${second.id}.`);
+    expect(none.message).toBe(`No new open or in-progress notes after cursor id ${second.id}.`);
     await client.close();
   });
 
@@ -217,9 +220,9 @@ describe("MCP endpoint", () => {
 
     const client = await connect();
     for (const [id, message] of [
-      [999, "Note 999 does not exist."],
-      [addressed.id, `Note ${addressed.id} is already addressed.`],
-      [resolved.id, `Note ${resolved.id} is already resolved.`],
+      [999, "Note id 999 does not exist."],
+      [addressed.id, `Note ${addressed.number} is already addressed.`],
+      [resolved.id, `Note ${resolved.number} is already resolved.`],
     ] as const) {
       const result = await client.callTool({ name: "mark_note_addressed", arguments: { id, summary: "Nothing to change" } });
       expect(result.isError).toBe(true);

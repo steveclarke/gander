@@ -111,7 +111,7 @@ describe("storage", () => {
         sourceContext: { startLine: 10, lines: ["before", "near", "target", "after"] },
       });
       expect(q).toMatchObject({
-        path: "a.rb", line: 12, text: "Why the retry here?", state: "open",
+        number: 1, path: "a.rb", line: 12, text: "Why the retry here?", state: "open",
         sourceContext: { startLine: 10, lines: ["before", "near", "target", "after"] },
       });
       expect(storage.listNotes("acme/atlas", 7)).toEqual([q]);
@@ -123,19 +123,27 @@ describe("storage", () => {
       expect(storage.listNotes("acme/atlas", 7)).toHaveLength(1);
     });
 
-    it("scopes notes to one review", () => {
-      storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "on seven", headSha: null, sourceContext: null });
-      storage.addNote("acme/atlas", 8, { path: "a.rb", line: null, text: "on eight", headSha: null, sourceContext: null });
-      expect(storage.listNotes("acme/atlas", 7).map((q) => q.text)).toEqual(["on seven"]);
-      expect(storage.listNotes("acme/atlas", 8).map((q) => q.text)).toEqual(["on eight"]);
+    it("assigns immutable, never-reused numbers within each review", () => {
+      const firstOnSeven = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "first on seven", headSha: null, sourceContext: null });
+      const firstOnEight = storage.addNote("acme/atlas", 8, { path: "a.rb", line: null, text: "first on eight", headSha: null, sourceContext: null });
+      const secondOnSeven = storage.addNote("acme/atlas", 7, { path: "b.rb", line: null, text: "second on seven", headSha: null, sourceContext: null });
+
+      expect([firstOnSeven.number, firstOnEight.number, secondOnSeven.number]).toEqual([1, 1, 2]);
+      expect(new Set([firstOnSeven.id, firstOnEight.id, secondOnSeven.id]).size).toBe(3);
+
+      expect(storage.deleteNote("acme/atlas", 7, secondOnSeven.id)).toBe(true);
+      const thirdOnSeven = storage.addNote("acme/atlas", 7, { path: "c.rb", line: null, text: "third on seven", headSha: null, sourceContext: null });
+      expect(thirdOnSeven.number).toBe(3);
+      expect(thirdOnSeven.id).toBeGreaterThan(secondOnSeven.id);
+      expect(storage.listNotes("acme/atlas", 7).map((note) => note.number)).toEqual([1, 3]);
     });
 
     it("an agent marks a note addressed with a commit and note", () => {
       const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?", headSha: null, sourceContext: null });
       const marked = storage.markNoteAddressed(q.id, { commitRef: "abc1234", summary: "Dropped the retry" });
       expect(marked).toMatchObject({ state: "addressed", commitRef: "abc1234", summary: "Dropped the retry" });
-      expect(storage.getNoteState(q.id)).toBe("addressed");
-      expect(storage.getNoteState(999)).toBeNull();
+      expect(storage.getNote(q.id)).toMatchObject({ number: 1, state: "addressed" });
+      expect(storage.getNote(999)).toBeNull();
     });
 
     it("claims a note, records why it is waiting, then addresses it without a commit", () => {

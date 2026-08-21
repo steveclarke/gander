@@ -43,6 +43,10 @@ reasonable interval when the reviewer explicitly asks the agent to wait. Do
 not register this endpoint globally in Claude or Codex. `bin/mcp` reads this
 worktree's endpoint and bearer token from `.env`.
 
+Each result has a PR-scoped `number` for discussion and a separate global `id`
+for tool calls. Say "Note 4" using `number`; pass its `id` to the mutation tools
+below.
+
 ## Address a note
 
 Treat a note as work, not as a checkbox:

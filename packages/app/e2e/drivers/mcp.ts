@@ -6,6 +6,7 @@ interface NotePayload {
   noteCounts: { open: number; in_progress: number; addressed: number; resolved: number };
   notes: Array<{
     id: number;
+    number: number;
     file: string | null;
     line: number | null;
     text: string;

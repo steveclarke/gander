@@ -39,6 +39,7 @@ function store(notes: PrView["notes"], overrides: Partial<Store> = {}): Store {
 const notes: PrView["notes"] = [
   {
     id: 1,
+    number: 1,
     path: "src/a-very-long-file-name.ts",
     line: 37,
     text: "Why does this branch need to handle the shared path this way?",
@@ -52,6 +53,7 @@ const notes: PrView["notes"] = [
   },
   {
     id: 2,
+    number: 2,
     path: "src/addressed.ts",
     line: 9,
     text: "Could this preserve the existing caller contract?",
@@ -85,6 +87,7 @@ describe("NotesDrawer", () => {
       props: {
         store: store([{
           id: 1,
+          number: 1,
           path: "a.ts",
           line: 3,
           text: "Why?",
@@ -121,16 +124,31 @@ describe("NotesDrawer", () => {
     expect(addressed.find("[data-note-body]").isVisible()).toBe(false);
   });
 
+  it("shows and speaks the pull-request number while retaining the global id internally", () => {
+    const wrapper = mount(NotesDrawer, {
+      props: { store: store([{ ...notes[0]!, id: 41, number: 1 }]), dock: "right" },
+    });
+    const note = wrapper.get("[data-note-id='41']");
+
+    expect(note.get(".note-number").text()).toBe("#1");
+    expect(note.attributes("aria-labelledby")).toBe("note-number-41 note-title-41");
+    expect(note.get("button[aria-expanded]").attributes("aria-label")).toBe("Collapse note 1");
+    expect(note.get("select").attributes("aria-label")).toBe("Status for note 1");
+    expect(note.find("button[aria-label='Delete note 1']").exists()).toBe(true);
+  });
+
   it("separates active work from notes waiting on the reviewer", () => {
     const inProgress = {
       ...notes[0]!,
       id: 3,
+      number: 3,
       state: "in_progress" as const,
       inProgressNote: null,
     };
     const waiting = {
       ...notes[0]!,
       id: 4,
+      number: 4,
       state: "in_progress" as const,
       inProgressNote: "Choose whether this should retry.",
     };
@@ -147,16 +165,18 @@ describe("NotesDrawer", () => {
     const inProgress = {
       ...notes[0]!,
       id: 3,
+      number: 3,
       state: "in_progress" as const,
       inProgressNote: null,
     };
     const waiting = {
       ...notes[0]!,
       id: 4,
+      number: 4,
       state: "in_progress" as const,
       inProgressNote: "Choose whether this should retry.",
     };
-    const resolved = { ...notes[0]!, id: 5, state: "resolved" as const };
+    const resolved = { ...notes[0]!, id: 5, number: 5, state: "resolved" as const };
     const wrapper = mount(NotesDrawer, {
       props: { store: store([...notes, inProgress, waiting, resolved]), dock: "right" },
     });
@@ -304,8 +324,8 @@ describe("NotesDrawer", () => {
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("Agent update (abc1234): Kept the contract"));
 
     await wrapper.get("button[aria-label='Copy all notes']").trigger("click");
-    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("### src/a-very-long-file-name.ts:37 — open"));
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("### Note 1 — src/a-very-long-file-name.ts:37 — open"));
     expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("37: target"));
-    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("### src/addressed.ts:9 — addressed"));
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("### Note 2 — src/addressed.ts:9 — addressed"));
   });
 });

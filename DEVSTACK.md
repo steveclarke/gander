@@ -242,13 +242,14 @@ Run it in the repository being reviewed, not in this one. Three tools appear:
 
 | Tool | Purpose |
 |------|---------|
-| `get_review_notes` | Notes for a repo + branch (or pull request number), with captured source and counts for every state; `since` accepts a last-seen note id |
+| `get_review_notes` | Notes for a repo + branch (or pull request number), with a PR-scoped conversation number, global tool-call id, captured source, and counts for every state; `since` accepts a last-seen global id |
 | `mark_note_in_progress` | Claims a note; its optional note records why work is waiting on the reviewer |
 | `mark_note_addressed` | Records the outcome with a required summary and an optional commit ref |
 
 Discuss notes in the active agent session. Nothing over MCP replies to or resolves
-a note. Resolution stays the reviewer's act, made by re-reviewing the file in the
-app.
+a note. Refer to the PR-scoped `number` in that discussion; pass the separate
+global `id` to mutation tools. Resolution stays the reviewer's act, made by
+re-reviewing the file in the app.
 
 ## Config precedence
 

@@ -15,11 +15,13 @@ test("carries a reviewer note through MCP addressing and reviewer resolution", a
     await review.openNotes();
 
     const note = app.page.getByRole("listitem").filter({ hasText: "Explain why this branch is necessary" });
+    await expect(note.locator(".note-number")).toHaveText("#1");
     await expect(note.getByRole("combobox", { name: "Status for note" })).toHaveValue("open");
 
     const pickedUp = await agent.notes(repository.repoId, "feature");
     expect(pickedUp.noteCounts).toEqual({ open: 1, in_progress: 0, addressed: 0, resolved: 0 });
     expect(pickedUp.notes).toHaveLength(1);
+    expect(pickedUp.notes[0]!.number).toBe(1);
     expect(pickedUp.notes[0]!.sourceContext?.lines).toContain("class A");
 
     await agent.markInProgress(pickedUp.notes[0]!.id, "Need the reviewer to choose the intended behavior");
