@@ -101,3 +101,42 @@ test("lets the reviewer edit a note and change its status", async ({ world }) =>
     await agent.close();
   }
 });
+
+test("keeps note controls fixed and reveals a note's reviewed file in the tree", async ({ world }) => {
+  const repository = await world.addRepository({
+    repoId: "acme/note-navigation",
+    baseFiles: { "src/nested.ts": "const value = 'old';\n" },
+    featureFiles: { "src/nested.ts": "const value = 'new';\n" },
+  });
+  const app = await world.launch();
+  const review = new ReviewDriver(app.page);
+
+  await review.open(repository.title);
+  await review.selectFile("src/nested.ts");
+  await review.addNote("Keep this file easy to find");
+  await review.checkFile("src/nested.ts");
+
+  const fileDisplay = app.page.getByRole("toolbar", { name: "Review file display" });
+  await fileDisplay.getByRole("button", { name: "Hide reviewed files" }).click();
+  await expect(review.file("src/nested.ts")).toHaveCount(0);
+
+  await review.openNotes();
+  const drawer = app.page.getByRole("complementary", { name: "Notes" });
+  const header = drawer.locator("header");
+  const noteList = drawer.getByRole("list", { name: "Review notes" });
+  await drawer.evaluate((element) => {
+    element.style.height = "80px";
+    element.style.alignSelf = "flex-start";
+  });
+  const headerTop = await header.evaluate((element) => element.getBoundingClientRect().top);
+  await noteList.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  expect(await noteList.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await header.evaluate((element) => element.getBoundingClientRect().top)).toBe(headerTop);
+
+  await drawer.getByRole("button", { name: "nested.ts" }).click();
+  const revealed = review.file("src/nested.ts");
+  await expect(fileDisplay.getByRole("button", { name: "Hide reviewed files" })).toHaveAttribute("aria-pressed", "false");
+  await expect(revealed).toBeVisible();
+  await expect(revealed).toHaveClass(/sel/);
+  await expect(revealed).toHaveClass(/cur/);
+});
