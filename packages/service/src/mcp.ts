@@ -30,6 +30,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       title: "Get review notes",
       description:
         "Notes the reviewer has left on a pull request, with the file and line each one is about. " +
+        "Each note has a pull-request-scoped number for discussion and a global id for tool calls. " +
         "Derive repo and branch from the working directory. Returns open and in-progress notes by default — those are the ones still needing work. " +
         "The response always counts open, in-progress, addressed, and resolved notes so hidden states are visible. " +
         "The response names the branch, title, and stack position of the pull request the notes belong to: check it matches the checkout being worked in, " +
@@ -59,6 +60,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         .filter((q) => wanted.has(q.state) && (since === undefined || q.id > since))
         .map((q) => ({
           id: q.id,
+          number: q.number,
           file: q.path,
           line: q.line,
           text: q.text,
@@ -90,7 +92,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       } else if (notes.length === 0 && allNotes.length === 0) {
         message = "No notes exist for this pull request.";
       } else if (notes.length === 0 && since !== undefined) {
-        message = `No new ${wantedLabel} notes after note ${since}.`;
+        message = `No new ${wantedLabel} notes after cursor id ${since}.`;
       } else {
         message = `Returned ${notes.length} of ${allNotes.length} note${allNotes.length === 1 ? "" : "s"} on this pull request.`;
       }
@@ -141,19 +143,23 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       description:
         "Claim a note when work starts. Pass note when work is waiting on a reviewer decision; omit it while work is active.",
       inputSchema: {
-        id: z.number().int().positive().describe("Note id from get_review_notes."),
+        id: z.number().int().positive().describe("Global note id from get_review_notes. Use its number when discussing the note with the reviewer."),
         note: z.string().min(1).optional().describe("Why this work is waiting on the reviewer."),
       },
     },
     async ({ id, note }) => {
       const marked = storage.markNoteInProgress(id, { note: note ?? null });
       if (marked === null) {
+        const existing = storage.getNote(id);
         return {
-          content: [{ type: "text", text: `Note ${id} is not open or in progress — it does not exist, or it was already addressed or resolved.` }],
+          content: [{
+            type: "text",
+            text: existing === null ? `Note id ${id} does not exist.` : `Note ${existing.number} is already ${existing.state}.`,
+          }],
           isError: true,
         };
       }
-      return { content: [{ type: "text", text: `Note ${id} marked in progress.` }] };
+      return { content: [{ type: "text", text: `Note ${marked.number} marked in progress.` }] };
     },
   );
 
@@ -165,7 +171,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
         "Record the outcome after an open or in-progress note has been acted on. A code change can name its commit; an answered question has no commit. " +
         "This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
       inputSchema: {
-        id: z.number().int().positive().describe("Note id from get_review_notes."),
+        id: z.number().int().positive().describe("Global note id from get_review_notes. Use its number when discussing the note with the reviewer."),
         commitRef: z.string().min(1).optional().describe("Commit that addressed it, when the outcome changed code."),
         summary: z.string().min(1).describe("One line recording the outcome."),
       },
@@ -173,16 +179,16 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
     async ({ id, commitRef, summary }) => {
       const marked = storage.markNoteAddressed(id, { commitRef: commitRef ?? null, summary: summary ?? null });
       if (marked === null) {
-        const state = storage.getNoteState(id);
-        const message = state === null
-          ? `Note ${id} does not exist.`
-          : `Note ${id} is already ${state}.`;
+        const existing = storage.getNote(id);
+        const message = existing === null
+          ? `Note id ${id} does not exist.`
+          : `Note ${existing.number} is already ${existing.state}.`;
         return {
           content: [{ type: "text", text: message }],
           isError: true,
         };
       }
-      return { content: [{ type: "text", text: `Note ${id} marked addressed.` }] };
+      return { content: [{ type: "text", text: `Note ${marked.number} marked addressed.` }] };
     },
   );
 

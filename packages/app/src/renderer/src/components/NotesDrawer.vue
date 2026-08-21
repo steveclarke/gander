@@ -1,22 +1,34 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import type { Note } from "@gander/shared";
-import { Copy, MessageSquare, PanelBottom, PanelRight, Plus, X } from "@lucide/vue";
+import type { Note, NoteState } from "@gander/shared";
+import { MessageSquare, PanelBottom, PanelRight, Plus, X } from "@lucide/vue";
 import type { Store } from "../store.js";
 import { revealLine } from "../selection.js";
 import { revealReviewFile } from "../tree-nav.js";
 import NoteItem from "./NoteItem.vue";
+import NotesToolbar, { type NoteStatusFilter } from "./NotesToolbar.vue";
 
 const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
 const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addNote: [] }>();
 
 const notes = computed(() => props.store.view?.notes ?? []);
+const statusFilter = shallowRef<NoteStatusFilter>("all");
+const statusCounts = computed<Record<NoteStatusFilter, number>>(() => ({
+  all: notes.value.length,
+  open: countNotes("open"),
+  in_progress: countNotes("in_progress"),
+  addressed: countNotes("addressed"),
+  resolved: countNotes("resolved"),
+}));
+const visibleNotes = computed(() => statusFilter.value === "all"
+  ? notes.value
+  : notes.value.filter((note) => note.state === statusFilter.value));
 const noteGroups = computed(() => [
-  { key: "open", label: "Open", notes: notes.value.filter((note) => note.state === "open") },
-  { key: "in-progress", label: "In progress", notes: notes.value.filter((note) => note.state === "in_progress" && note.inProgressNote === null) },
-  { key: "waiting", label: "Waiting on you", notes: notes.value.filter((note) => note.state === "in_progress" && note.inProgressNote !== null) },
-  { key: "addressed", label: "Addressed", notes: notes.value.filter((note) => note.state === "addressed") },
-  { key: "resolved", label: "Resolved", notes: notes.value.filter((note) => note.state === "resolved") },
+  { key: "open", label: "Open", notes: visibleNotes.value.filter((note) => note.state === "open") },
+  { key: "in-progress", label: "In progress", notes: visibleNotes.value.filter((note) => note.state === "in_progress" && note.inProgressNote === null) },
+  { key: "waiting", label: "Waiting on you", notes: visibleNotes.value.filter((note) => note.state === "in_progress" && note.inProgressNote !== null) },
+  { key: "addressed", label: "Addressed", notes: visibleNotes.value.filter((note) => note.state === "addressed") },
+  { key: "resolved", label: "Resolved", notes: visibleNotes.value.filter((note) => note.state === "resolved") },
 ].filter((group) => group.notes.length > 0));
 type NoteRow =
   | { key: string; kind: "heading"; label: string; count: number }
@@ -27,6 +39,10 @@ const noteRows = computed<NoteRow[]>(() => noteGroups.value.flatMap((group) => [
 ]));
 const copiedNoteId = shallowRef<number | null>(null);
 const copiedAll = shallowRef(false);
+
+function countNotes(state: NoteState): number {
+  return notes.value.filter((note) => note.state === state).length;
+}
 
 function goTo(q: { path: string | null; line: number | null }): void {
   if (q.path === null) return;
@@ -40,7 +56,7 @@ function noteMarkdown(note: Note): string {
     ? "Pull request"
     : `${note.path}${note.line === null ? "" : `:${note.line}`}`;
   const parts = [
-    `### ${location} — ${note.state}`,
+    `### Note ${note.number} — ${location} — ${note.state}`,
     "",
     `Reviewer: ${note.text}`,
   ];
@@ -86,25 +102,6 @@ async function copyAll(): Promise<void> {
       <h2 class="title">Notes</h2>
       <span class="count">{{ notes.length }}</span>
       <button
-        v-if="notes.length > 0"
-        class="copy-all"
-        aria-label="Copy all notes"
-        title="Copy all notes"
-        @click="copyAll"
-      >
-        <Copy :size="13" aria-hidden="true" />
-        <span>{{ copiedAll ? "Copied" : "Copy all" }}</span>
-      </button>
-      <button
-        class="add"
-        aria-label="Add note (N)"
-        title="Add note (N)"
-        @click="emit('addNote')"
-      >
-        <Plus :size="14" aria-hidden="true" />
-        <span>Add</span>
-      </button>
-      <button
         class="close dockbtn"
         :aria-label="dock === 'right' ? 'Dock notes below the diff' : 'Dock notes beside the diff'"
         :title="dock === 'right' ? 'Dock below the diff' : 'Dock beside the diff'"
@@ -117,12 +114,25 @@ async function copyAll(): Promise<void> {
       </button>
     </header>
 
+    <NotesToolbar
+      v-model="statusFilter"
+      :counts="statusCounts"
+      :copied-all="copiedAll"
+      @copy-all="copyAll"
+      @add-note="emit('addNote')"
+    />
+
     <div v-if="notes.length === 0" class="empty">
       <p>Capture a note about the selected file or line.</p>
       <button type="button" @click="emit('addNote')">
         <Plus :size="14" aria-hidden="true" />
         Add note <kbd>N</kbd>
       </button>
+    </div>
+
+    <div v-else-if="visibleNotes.length === 0" class="empty filtered-empty">
+      <p>No notes have this status.</p>
+      <button type="button" @click="statusFilter = 'all'">Show all notes</button>
     </div>
 
     <ul v-else aria-label="Review notes">
@@ -148,15 +158,7 @@ async function copyAll(): Promise<void> {
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--workbench-border); color: var(--muted-foreground); flex: none; }
 .title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
 .count { font: 11px var(--mono); background: var(--badge-background); border-radius: var(--radius-pill); padding: 1px 7px; }
-.add, .copy-all {
-  display: flex; align-items: center; gap: 4px;
-  background: none; border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
-  color: var(--workbench-foreground); padding: 3px 7px; font: inherit; font-size: 11px; cursor: pointer;
-}
-.copy-all { margin-left: auto; }
-.add:first-of-type { margin-left: auto; }
-.add:hover, .copy-all:hover { border-color: var(--accent); color: var(--accent); }
-.dockbtn { margin-left: 0; }
+.dockbtn { margin-left: auto; }
 .dockbtn + .close { margin-left: 0; }
 .close { margin-left: auto; background: none; border: none; color: var(--faint-foreground); cursor: pointer; display: flex; }
 .close:hover { color: var(--workbench-foreground); }
@@ -169,7 +171,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; borde
   color: var(--accent-foreground); padding: 5px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .empty button kbd { color: var(--workbench-foreground); }
-.add:focus-visible, .copy-all:focus-visible, .empty button:focus-visible, .close:focus-visible {
+.empty button:focus-visible, .close:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 kbd { font: 11px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-sm); padding: 1px 5px; }
@@ -182,7 +184,4 @@ ul { flex: 1; min-height: 0; overflow: auto; list-style: none; margin: 0; paddin
   font: 600 9.5px var(--mono); letter-spacing: .4px; text-transform: uppercase;
 }
 .group-heading span { color: var(--faint-foreground); }
-@container notes (max-width: 330px) {
-  .copy-all span, .add span { display: none; }
-}
 </style>

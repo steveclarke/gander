@@ -35,7 +35,7 @@ beforeEach(() => {
 set -euo pipefail
 printf '%s\\n' "$*" >> "$FAKE_DOCKER_LOG"
 if [[ "$1 $2" == "compose port" ]]; then printf '0.0.0.0:%s\\n' "$FAKE_PORT"; fi
-if [[ "$*" == *"migrate-0.6.0.ts"* ]]; then
+if [[ "$*" == *"migrate-0.8.0.ts"* ]]; then
   # A real docker compose run inherits stdin. Consume it here so this test
   # proves the remote deployment script protects its remaining commands.
   while IFS= read -r _; do :; done
@@ -78,7 +78,7 @@ describe("bin/deploy", () => {
     expect(readFileSync(dockerLog, "utf8").trim().split("\n")).toEqual([
       "compose build gander",
       "compose stop gander",
-      expect.stringMatching(/^compose run --rm --no-deps -v .+\/backups:\/backup gander node_modules\/\.bin\/tsx src\/migrate-0\.6\.0\.ts \/data\/gander\.db \/backup\/gander-\d{8}T\d{6}Z-[a-f0-9]+\.db$/),
+      expect.stringMatching(/^compose run --rm --no-deps -v .+\/backups:\/backup gander node_modules\/\.bin\/tsx src\/migrate-0\.8\.0\.ts \/data\/gander\.db \/backup\/gander-\d{8}T\d{6}Z-[a-f0-9]+\.db$/),
       "compose up -d gander",
       "compose port gander 8390",
     ]);

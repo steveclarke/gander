@@ -55,7 +55,7 @@ mkdir -p "$BACKUP_PATH"
 BACKUP_FILE="gander-$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short HEAD).db"
 docker compose run --rm --no-deps \
   -v "${BACKUP_PATH}:/backup" \
-  gander node_modules/.bin/tsx src/migrate-0.6.0.ts /data/gander.db "/backup/${BACKUP_FILE}" \
+  gander node_modules/.bin/tsx src/migrate-0.8.0.ts /data/gander.db "/backup/${BACKUP_FILE}" \
   < /dev/null
 docker compose up -d gander
 REMOTE

@@ -78,11 +78,25 @@ allocated per-checkout by outport. Don't start packages by hand — the app read
 its port and token from the generated `.env`. `DEVSTACK.md` covers the stack,
 worktrees, and MCP registration.
 
-When Steve asks to open the current PR in Gander, dogfood a change, or respond
+When the user asks to open the current PR in Gander, dogfood a change, or respond
 to Gander review notes, read
 `.agents/skills/review-with-gander/SKILL.md` and follow it. Use the CLI bridge
 from the current worktree; do not register its MCP endpoint globally or reuse
 another worktree's port, token, config, database, or process.
+
+For user-requested code or product changes, create a feature branch, commit and
+push the work, create a pull request, and open that exact pull request in this
+checkout's Gander app. The pull-request review is also the user's QA session: leave
+the app open on the PR so they can inspect the code and exercise the behavior in one
+flow. Run `bin/mcp check` before handing it back. Stop before publication only
+when the user explicitly asks not to create a PR or when a concrete blocker requires
+their decision.
+
+Do not hand back an empty review when the changed UI depends on authored state.
+Populate this checkout's disposable local review with representative, clearly
+labeled QA data across the states needed to exercise the feature, then leave the
+relevant surface open in Gander. Never seed or alter the hosted review database
+for QA.
 
 **Electron install trap:** Electron 33's extract-zip silently truncates under
 Node 24, leaving a `node_modules/electron/dist` of a few hundred KB while the
@@ -149,7 +163,7 @@ saving config would write a machine-specific allocated port into
 
 App config is intentionally not backward-compatible while its shape remains in
 major flux and there is only one maintainer install. Keep validation strict; when
-Steve asks to repair a stale local config, update that file directly instead of
+the user asks to repair a stale local config, update that file directly instead of
 adding migrations or compatibility branches. Add explicit schema versions and
 migrations only when backward compatibility becomes a product requirement.
 

@@ -227,6 +227,7 @@ describe("FileTree", () => {
       leaf,
     ], [{
       id: 1,
+      number: 1,
       path: leaf.path,
       line: 1,
       text: "Check this line",
@@ -269,6 +270,7 @@ describe("FileTree", () => {
     const other = file("app/models/local.rb");
     const note = (id: number, path: string, state: "open" | "in_progress" | "addressed" | "resolved") => ({
       id,
+      number: id,
       path,
       line: id,
       text: `Note ${id}`,
@@ -299,6 +301,7 @@ describe("FileTree", () => {
     const target = file("app/models/member.rb");
     const { store } = fakeStore(prView(1, [target], [{
       id: 1,
+      number: 1,
       path: target.path,
       line: 1,
       text: "Check this line",
