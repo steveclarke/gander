@@ -18,6 +18,9 @@ defineEmits<{
 const folderActionLabel = computed(() => props.allDirectoriesCollapsed
   ? "Expand all folders"
   : "Collapse all folders");
+const reviewedFilesActionLabel = computed(() => props.remainingOnly
+  ? "Show reviewed files"
+  : "Hide reviewed files");
 </script>
 
 <template>
@@ -27,8 +30,8 @@ const folderActionLabel = computed(() => props.allDirectoriesCollapsed
       type="button"
       :class="{ active: remainingOnly }"
       :aria-pressed="remainingOnly"
-      aria-label="Show unreviewed files only"
-      title="Show unreviewed files only"
+      :aria-label="reviewedFilesActionLabel"
+      :title="reviewedFilesActionLabel"
       @click="$emit('toggleRemaining')"
     ><ListFilter :size="16" aria-hidden="true" /></button>
     <button

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrView } from "@gander/shared";
 import type { Store } from "../store.js";
 import { pendingReveal } from "../selection.js";
+import { collapsedDirs, cursor, remainingOnly } from "../tree-nav.js";
 import NotesDrawer from "./NotesDrawer.vue";
 
 // jsdom ships the <dialog> element without showModal/close; Chromium, which is what the
@@ -68,6 +69,9 @@ const notes: PrView["notes"] = [
 describe("NotesDrawer", () => {
   beforeEach(() => {
     pendingReveal.value = null;
+    cursor.value = null;
+    remainingOnly.value = false;
+    collapsedDirs.clear();
   });
 
   it("offers add actions in the empty state", async () => {
@@ -181,8 +185,14 @@ describe("NotesDrawer", () => {
     const wrapper = mount(NotesDrawer, { props: { store: drawerStore, dock: "right" } });
     const open = wrapper.get("[data-note-id='1']");
 
+    remainingOnly.value = true;
+    collapsedDirs.add("src");
+
     await open.get("button[data-note-location]").trigger("click");
     expect(select).toHaveBeenCalledWith("src/a-very-long-file-name.ts");
+    expect(cursor.value).toBe("src/a-very-long-file-name.ts");
+    expect(remainingOnly.value).toBe(false);
+    expect(collapsedDirs.has("src")).toBe(false);
     expect(pendingReveal.value).toBe(37);
 
     await open.get("button[aria-label='Delete note 1']").trigger("click");

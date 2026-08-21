@@ -11,6 +11,7 @@ import {
   pathOf,
   rows,
   remainingOnly,
+  revealReviewFile,
   step,
   toggleAllDirectories,
   visibleFiles,
@@ -87,6 +88,19 @@ describe("tree navigation", () => {
       "src/deep", "src/deep/inner.ts", "vendor", "vendor/bundle.js", "README.md",
     ]);
     expect(rows(files.map((entry) => file(entry.path, true)))).toEqual([]);
+  });
+
+  it("reveals a reviewed file selected outside the tree", () => {
+    remainingOnly.value = true;
+    collapsedDirs.add("src");
+    collapsedDirs.add("src/deep");
+
+    revealReviewFile("src/deep/inner.ts");
+
+    expect(remainingOnly.value).toBe(false);
+    expect(collapsedDirs.has("src")).toBe(false);
+    expect(collapsedDirs.has("src/deep")).toBe(false);
+    expect(rows(files).map(pathOf)).toContain("src/deep/inner.ts");
   });
 
   it("stops at the ends rather than wrapping", () => {

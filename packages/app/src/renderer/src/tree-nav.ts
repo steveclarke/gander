@@ -27,6 +27,16 @@ export function toggleCollapsed(path: string): void {
   else collapsedDirs.add(path);
 }
 
+/** Makes a file opened outside the tree visible and puts the keyboard cursor on it. */
+export function revealReviewFile(path: string): void {
+  remainingOnly.value = false;
+  const parts = path.split("/");
+  for (let index = 1; index < parts.length; index += 1) {
+    collapsedDirs.delete(parts.slice(0, index).join("/"));
+  }
+  cursor.value = path;
+}
+
 /** Files currently included in the review tree. Local files have no review state. */
 export function reviewTreeFiles(files: ChangedFile[]): ChangedFile[] {
   if (!remainingOnly.value) return files;

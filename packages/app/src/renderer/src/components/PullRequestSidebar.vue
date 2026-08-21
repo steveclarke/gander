@@ -28,8 +28,9 @@ defineEmits<{ selectPr: [prNumber: number]; scroll: [] }>();
 const reloading = ref(false);
 const remainingCount = computed(() => props.store.view?.files.filter((file) => !file.checked).length ?? 0);
 const totalFileCount = computed(() => props.store.view?.files.length ?? 0);
+const reviewedCount = computed(() => totalFileCount.value - remainingCount.value);
 const reviewProgressDescription = computed(() =>
-  `${remainingCount.value} of ${totalFileCount.value} ${totalFileCount.value === 1 ? "file" : "files"} unreviewed`);
+  `${reviewedCount.value} of ${totalFileCount.value} ${totalFileCount.value === 1 ? "file" : "files"} reviewed`);
 const hasDirectories = computed(() => reviewTreeFiles(props.store.view?.files ?? []).some((file) => file.path.includes("/")));
 const hasReviewedDirectories = computed(() => hasFullyReviewedDirectories(props.store.view?.files ?? []));
 const foldersCollapsed = computed(() => allDirectoriesCollapsed(props.store.view?.files ?? []));
@@ -74,7 +75,7 @@ async function reload(): Promise<void> {
           class="review-progress"
           :title="reviewProgressDescription"
           :aria-label="reviewProgressDescription"
-        ><span>{{ remainingCount }}/{{ totalFileCount }}</span><span class="review-progress-label"> unreviewed</span></span>
+        ><span>{{ reviewedCount }}/{{ totalFileCount }}</span><span class="review-progress-label"> reviewed</span></span>
         <ReviewFilesToolbar
           :remaining-only="remainingOnly"
           :has-directories="hasDirectories"

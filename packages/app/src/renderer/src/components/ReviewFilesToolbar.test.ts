@@ -17,7 +17,7 @@ describe("ReviewFilesToolbar", () => {
     for (const [label, event] of [
       ["Collapse all folders", "toggleAll"],
       ["Collapse fully reviewed folders", "collapseReviewed"],
-      ["Show unreviewed files only", "toggleRemaining"],
+      ["Hide reviewed files", "toggleRemaining"],
     ] as const) {
       const button = wrapper.get(`.toolbar-action[aria-label="${label}"]`);
       expect(button.text()).toBe("");
@@ -48,7 +48,7 @@ describe("ReviewFilesToolbar", () => {
     }
   });
 
-  it("shows the unreviewed filter as pressed and disables unavailable folder actions", () => {
+  it("shows hidden reviewed files as pressed and disables unavailable folder actions", () => {
     const wrapper = mount(ReviewFilesToolbar, {
       props: {
         remainingOnly: true,
@@ -58,7 +58,7 @@ describe("ReviewFilesToolbar", () => {
       },
     });
 
-    expect(wrapper.get('[aria-label="Show unreviewed files only"]').attributes("aria-pressed")).toBe("true");
+    expect(wrapper.get('[aria-label="Show reviewed files"]').attributes("aria-pressed")).toBe("true");
     expect(wrapper.findAll('[aria-label="Collapse fully reviewed folders"]:disabled')).toHaveLength(2);
     expect(wrapper.findAll('[aria-label="Collapse all folders"]:disabled')).toHaveLength(2);
   });

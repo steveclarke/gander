@@ -25,8 +25,8 @@ test("review file toolbar controls folder disclosure and remaining files", async
   await expect(toolbar.getByRole("button")).toHaveCount(2);
   await expect(app.page.locator(".files-section header").getByRole("toolbar", { name: "Review file display" })).toBeVisible();
   const progress = app.page.locator(".files-section header .review-progress");
-  await expect(progress).toHaveText("6/6 unreviewed");
-  await expect(progress).toHaveAttribute("title", "6 of 6 files unreviewed");
+  await expect(progress).toHaveText("0/6 reviewed");
+  await expect(progress).toHaveAttribute("title", "0 of 6 files reviewed");
 
   const moreActions = toolbar.getByRole("button", { name: "More review file actions" });
   const actions = app.page.getByRole("group", { name: "More review file actions" });
@@ -53,15 +53,17 @@ test("review file toolbar controls folder disclosure and remaining files", async
   });
   expect(await partialDirectory.evaluate((element) => getComputedStyle(element).color)).toBe(warningColor);
 
-  const remaining = toolbar.getByRole("button", { name: "Show unreviewed files only" });
-  await remaining.click();
-  await expect(remaining).toHaveAttribute("aria-pressed", "true");
-  await expect(progress).toHaveText("4/6 unreviewed");
+  const reviewedVisibility = toolbar.locator(".toolbar-action").first();
+  await expect(reviewedVisibility).toHaveAttribute("aria-label", "Hide reviewed files");
+  await reviewedVisibility.click();
+  await expect(reviewedVisibility).toHaveAttribute("aria-pressed", "true");
+  await expect(reviewedVisibility).toHaveAttribute("aria-label", "Show reviewed files");
+  await expect(progress).toHaveText("2/6 reviewed");
   await expect(review.file("a.rb")).toHaveCount(0);
   await expect(review.file("src/main.ts")).toHaveCount(0);
 
-  await remaining.click();
-  await expect(remaining).toHaveAttribute("aria-pressed", "false");
+  await reviewedVisibility.click();
+  await expect(reviewedVisibility).toHaveAttribute("aria-pressed", "false");
   await expect(review.file("a.rb")).toBeVisible();
   await expect(review.file("src/main.ts")).toBeVisible();
 });
@@ -138,7 +140,7 @@ test("keeps review actions inside the minimum-width sidebar", async ({ world }) 
   await review.open(repository.title);
   header = app.page.locator(".files-section header");
   const toolbar = header.getByRole("toolbar", { name: "Review file display" });
-  await expect(toolbar.getByRole("button", { name: "Show unreviewed files only" })).toBeVisible();
+  await expect(toolbar.getByRole("button", { name: "Hide reviewed files" })).toBeVisible();
   await expect(toolbar.getByRole("button", { name: "More review file actions" })).toBeVisible();
   await expect(toolbar.getByRole("button", { name: "Collapse all folders" })).toBeHidden();
   await expect(header.locator(".review-title-prefix")).toBeHidden();

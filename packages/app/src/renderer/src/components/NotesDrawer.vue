@@ -4,6 +4,7 @@ import type { Note } from "@gander/shared";
 import { Copy, MessageSquare, PanelBottom, PanelRight, Plus, X } from "@lucide/vue";
 import type { Store } from "../store.js";
 import { revealLine } from "../selection.js";
+import { revealReviewFile } from "../tree-nav.js";
 import NoteItem from "./NoteItem.vue";
 
 const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
@@ -29,6 +30,7 @@ const copiedAll = shallowRef(false);
 
 function goTo(q: { path: string | null; line: number | null }): void {
   if (q.path === null) return;
+  revealReviewFile(q.path);
   props.store.select(q.path);
   if (q.line !== null) revealLine(q.line);
 }
@@ -142,7 +144,7 @@ async function copyAll(): Promise<void> {
 </template>
 
 <style scoped>
-.drawer { container: notes / inline-size; display: flex; flex-direction: column; background: var(--panel-background); border-left: 1px solid var(--workbench-border); overflow: hidden auto; }
+.drawer { container: notes / inline-size; display: flex; flex-direction: column; background: var(--panel-background); border-left: 1px solid var(--workbench-border); overflow: hidden; }
 header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--workbench-border); color: var(--muted-foreground); flex: none; }
 .title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
 .count { font: 11px var(--mono); background: var(--badge-background); border-radius: var(--radius-pill); padding: 1px 7px; }
@@ -172,7 +174,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; borde
 }
 kbd { font: 11px var(--mono); background: var(--badge-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-sm); padding: 1px 5px; }
 
-ul { list-style: none; margin: 0; padding: 0; }
+ul { flex: 1; min-height: 0; overflow: auto; list-style: none; margin: 0; padding: 0; }
 .group-heading {
   display: flex; align-items: center; justify-content: space-between;
   padding: 7px 10px; border-bottom: 1px solid var(--workbench-border);
