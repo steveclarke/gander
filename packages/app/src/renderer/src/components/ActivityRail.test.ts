@@ -1,9 +1,24 @@
 // @vitest-environment jsdom
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import ActivityRail from "./ActivityRail.vue";
 
 describe("ActivityRail", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("puts Pull Requests first by default", () => {
+    const wrapper = mount(ActivityRail, {
+      props: { active: "pulls", hasTarget: true },
+    });
+
+    expect(wrapper.findAll(".rail-action").map((button) => button.attributes("aria-label"))).toEqual([
+      "Pull Requests",
+      "Explorer",
+      "Current Diff",
+      "Editor settings",
+    ]);
+  });
+
   it("keeps every repository lens available while a local target is selected", async () => {
     const wrapper = mount(ActivityRail, {
       props: { active: "pulls", hasTarget: true },
@@ -26,5 +41,25 @@ describe("ActivityRail", () => {
     expect(wrapper.get("button[aria-label='Current Diff']").attributes("disabled")).toBeDefined();
     expect(wrapper.get("button[aria-label='Pull Requests']").attributes("disabled")).toBeDefined();
     expect(wrapper.get("button[aria-label='Editor settings']").attributes("disabled")).toBeUndefined();
+  });
+
+  it("moves a focused view with Alt+Arrow and remembers the order", async () => {
+    const wrapper = mount(ActivityRail, {
+      props: { active: "pulls", hasTarget: true },
+    });
+
+    await wrapper.get("button[aria-label='Pull Requests']").trigger("keydown", { altKey: true, key: "ArrowDown" });
+
+    expect(wrapper.findAll(".rail-action").map((button) => button.attributes("aria-label"))).toEqual([
+      "Explorer",
+      "Pull Requests",
+      "Current Diff",
+      "Editor settings",
+    ]);
+    expect(JSON.parse(localStorage.getItem("gander.activityOrder") ?? "null")).toEqual([
+      "explorer",
+      "pulls",
+      "changes",
+    ]);
   });
 });
