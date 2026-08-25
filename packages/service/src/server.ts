@@ -4,6 +4,11 @@ import { NewNoteSchema, PrContextSchema, PutFileStateSchema, UpdateNoteSchema } 
 import { handleMcpRequest } from "./mcp.js";
 import type { Storage } from "./storage.js";
 
+// A checkoff carries both diff sides. Generated text files such as lockfiles can
+// exceed Fastify's 1 MiB default even though either revision is ordinary review
+// content. Keep the larger bound on this route instead of every authenticated write.
+const FILE_SNAPSHOT_BODY_LIMIT = 16 * 1024 * 1024;
+
 /** Sends a 400 and returns undefined when the segment is not a positive integer. */
 function positiveInt(name: string, raw: string, reply: FastifyReply): number | undefined {
   const n = Number(raw);
@@ -63,6 +68,7 @@ export function buildServer(opts: {
 
   app.put<{ Params: { repoId: string; prNumber: string } }>(
     "/api/reviews/:repoId/:prNumber/files",
+    { bodyLimit: FILE_SNAPSHOT_BODY_LIMIT },
     async (req, reply) => {
       const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
       if (prNumber === undefined) return;

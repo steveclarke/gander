@@ -51,6 +51,18 @@ describe("service API", () => {
     expect(listed.json()).toEqual([expect.objectContaining({ repoId: "acme/atlas", prNumber: 7 })]);
   });
 
+  it("stores a snapshot whose two text revisions exceed Fastify's default body limit", async () => {
+    const baseContent = "a".repeat(600 * 1024);
+    const headContent = "b".repeat(600 * 1024);
+    const put = await server.inject({
+      method: "PUT", url: "/api/reviews/acme%2Fatlas/7/files", headers: AUTH,
+      payload: { checked: true, path: "pnpm-lock.yaml", baseHash: "b1", headHash: "h1", baseContent, headContent, machine: "studio" },
+    });
+
+    expect(put.statusCode).toBe(200);
+    expect(storage.getSnapshot("acme/atlas", 7, "pnpm-lock.yaml")).toEqual({ baseContent, headContent });
+  });
+
   it("rejects a malformed PUT body with 400 and the zod message", async () => {
     const res = await server.inject({
       method: "PUT", url: "/api/reviews/acme%2Fatlas/7/files", headers: AUTH,
