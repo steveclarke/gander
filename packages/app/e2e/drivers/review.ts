@@ -41,6 +41,7 @@ export class ReviewDriver {
 
   async addNote(text: string): Promise<void> {
     await this.page.getByRole("button", { name: "Add note (N)" }).click();
+    await expect(this.page.getByRole("complementary", { name: "Notes" })).toBeVisible();
     const input = this.page.getByPlaceholder("What needs answering or changing here?");
     await input.fill(text);
     await input.press("Enter");
@@ -48,8 +49,9 @@ export class ReviewDriver {
   }
 
   async openNotes(): Promise<void> {
-    await this.page.getByRole("button", { name: "Notes", exact: true }).click();
-    await expect(this.page.getByRole("heading", { name: "Notes", exact: true })).toBeVisible();
+    const heading = this.page.getByRole("heading", { name: "Notes", exact: true });
+    if (!await heading.isVisible()) await this.page.getByRole("button", { name: "Notes", exact: true }).click();
+    await expect(heading).toBeVisible();
   }
 
   async expectProgress(done: number, total: number): Promise<void> {

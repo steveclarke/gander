@@ -3,13 +3,24 @@ import { computed, shallowRef } from "vue";
 import type { Note, NoteState } from "@gander/shared";
 import { MessageSquare, PanelBottom, PanelRight, Plus, X } from "@lucide/vue";
 import type { Store } from "../store.js";
+import type { NoteTarget } from "../selection.js";
 import { revealLine } from "../selection.js";
 import { revealReviewFile } from "../tree-nav.js";
+import NoteCapture from "./NoteCapture.vue";
 import NoteItem from "./NoteItem.vue";
 import NotesToolbar, { type NoteStatusFilter } from "./NotesToolbar.vue";
 
-const props = defineProps<{ store: Store; dock: "right" | "bottom" }>();
-const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addNote: [] }>();
+const props = withDefaults(defineProps<{
+  store: Store;
+  dock: "right" | "bottom";
+  noteTarget?: NoteTarget | null;
+  noteFocusRequest?: number;
+}>(), {
+  noteTarget: null,
+  noteFocusRequest: 0,
+});
+const noteDraft = defineModel<string>("noteDraft", { default: "" });
+const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addNote: []; closeNote: [] }>();
 
 const notes = computed(() => props.store.view?.notes ?? []);
 const statusFilter = shallowRef<NoteStatusFilter>("all");
@@ -114,6 +125,17 @@ async function copyAll(): Promise<void> {
       </button>
     </header>
 
+    <NoteCapture
+      v-if="noteTarget"
+      v-model="noteDraft"
+      :store="store"
+      :target="noteTarget"
+      :dock="dock"
+      :focus-request="noteFocusRequest"
+      @navigate="goTo"
+      @close="emit('closeNote')"
+    />
+
     <NotesToolbar
       v-model="statusFilter"
       :counts="statusCounts"
@@ -122,7 +144,7 @@ async function copyAll(): Promise<void> {
       @add-note="emit('addNote')"
     />
 
-    <div v-if="notes.length === 0" class="empty">
+    <div v-if="notes.length === 0 && !noteTarget" class="empty">
       <p>Capture a note about the selected file or line.</p>
       <button type="button" @click="emit('addNote')">
         <Plus :size="14" aria-hidden="true" />
@@ -130,12 +152,12 @@ async function copyAll(): Promise<void> {
       </button>
     </div>
 
-    <div v-else-if="visibleNotes.length === 0" class="empty filtered-empty">
+    <div v-else-if="notes.length > 0 && visibleNotes.length === 0" class="empty filtered-empty">
       <p>No notes have this status.</p>
       <button type="button" @click="statusFilter = 'all'">Show all notes</button>
     </div>
 
-    <ul v-else aria-label="Review notes">
+    <ul v-else-if="notes.length > 0" aria-label="Review notes">
       <template v-for="row in noteRows" :key="row.key">
         <li v-if="row.kind === 'heading'" class="group-heading" role="presentation">{{ row.label }} <span>{{ row.count }}</span></li>
         <NoteItem

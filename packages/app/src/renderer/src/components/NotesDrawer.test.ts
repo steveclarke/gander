@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrView } from "@gander/shared";
 import type { Store } from "../store.js";
@@ -84,6 +84,32 @@ describe("NotesDrawer", () => {
     await actions[1]!.trigger("click");
 
     expect(wrapper.emitted("addNote")).toHaveLength(1);
+  });
+
+  it("embeds the active composer above the note controls", async () => {
+    const addNote = vi.fn(async () => {});
+    const wrapper = mount(NotesDrawer, {
+      props: {
+        store: store([], { addNote }),
+        dock: "right",
+        noteTarget: { path: "src/review.ts", line: 12 },
+        noteFocusRequest: 1,
+        noteDraft: "Keep the code visible",
+      },
+    });
+
+    const composer = wrapper.get("[role='form'][aria-labelledby='note-composer-title']");
+    expect(composer.find("[role='dialog']").exists()).toBe(false);
+    expect(composer.text()).toContain("review.ts:12");
+    expect(wrapper.find(".notes-toolbar").exists()).toBe(true);
+    expect(wrapper.find(".empty").exists()).toBe(false);
+
+    expect((composer.get("textarea").element as HTMLTextAreaElement).value).toBe("Keep the code visible");
+    await composer.trigger("submit");
+    await flushPromises();
+
+    expect(addNote).toHaveBeenCalledWith("Keep the code visible", "src/review.ts", 12);
+    expect(wrapper.emitted("closeNote")).toHaveLength(1);
   });
 
   it("keeps the header add action when notes are populated", async () => {

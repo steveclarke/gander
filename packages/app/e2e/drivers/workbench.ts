@@ -4,7 +4,7 @@ export class WorkbenchDriver {
   constructor(readonly page: Page) {}
 
   async openPullRequests(): Promise<void> {
-    const button = this.page.getByRole("button", { name: "Pull Requests" });
+    const button = this.page.getByRole("button", { name: "Pull Requests", exact: true });
     await expect(button).toBeEnabled();
     await button.click();
     await expect(this.page.getByRole("complementary", { name: "Pull Requests" })).toBeVisible();

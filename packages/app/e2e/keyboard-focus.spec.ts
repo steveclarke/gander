@@ -23,10 +23,13 @@ test("routes review shortcuts from Monaco without stealing typed note text", asy
   await expect(note).toHaveValue("Keep this letter: m");
   await expect(review.file("a.rb").getByRole("checkbox")).toHaveAttribute("aria-checked", "false");
   await note.press("Escape");
+  await expect(app.page.getByRole("heading", { name: "Notes", exact: true })).toBeVisible();
 
   await editor.click();
   await app.page.keyboard.press("m");
   await expect(review.file("a.rb").getByRole("checkbox")).toHaveAttribute("aria-checked", "true");
+  await app.page.keyboard.press("Shift+N");
+  await expect(app.page.getByRole("heading", { name: "Notes", exact: true })).toHaveCount(0);
   await app.page.keyboard.press("Shift+N");
   await expect(app.page.getByRole("heading", { name: "Notes", exact: true })).toBeVisible();
 
@@ -36,5 +39,5 @@ test("routes review shortcuts from Monaco without stealing typed note text", asy
   await editor.click();
   await app.page.keyboard.press("]");
   await app.page.keyboard.press("n");
-  await expect(app.page.locator("#note-target")).toContainText("line 2");
+  await expect(app.page.getByRole("form", { name: "New note" })).toContainText("a.rb:2");
 });

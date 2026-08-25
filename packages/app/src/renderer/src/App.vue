@@ -16,7 +16,6 @@ import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
 import KeymapHelp from "./components/KeymapHelp.vue";
 import LocalSurface from "./components/LocalSurface.vue";
-import NoteCapture from "./components/NoteCapture.vue";
 import ReviewSurface from "./components/ReviewSurface.vue";
 import SettingsPane from "./components/SettingsPane.vue";
 import StatusBar from "./components/StatusBar.vue";
@@ -34,6 +33,8 @@ const { level: zoomLevel, change: changeZoom } = useWindowZoom(api);
 const integratedTitleBar = api.initialWindowState.windowStyle === "integrated-titlebar";
 
 const noteTarget = shallowRef<NoteTarget | null>(null);
+const noteDraft = shallowRef("");
+const noteFocusRequest = shallowRef(0);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const helpOpen = ref(false);
@@ -61,16 +62,33 @@ onMounted(() => { void editorSettings.load(); });
 watch(activeMode, (mode) => {
   if (mode === "pulls") return;
   drawerOpen.value = false;
-  noteTarget.value = null;
+  closeNote();
+});
+
+watch(() => [store.targetRepoId, store.selectedPrNumber] as const, ([repoId, prNumber], previous) => {
+  if (repoId === previous[0] && prNumber === previous[1]) return;
+  // A draft belongs to the review where it began. The pane no longer blocks navigation,
+  // so switching reviews must not carry that target into a different pull request.
+  closeNote();
 });
 
 /** Opens the note editor. Without a target, the note lands on wherever the reviewer is. */
 function openNote(target?: NoteTarget): void {
   if (!store.view || activeMode.value !== "pulls") return;
+  drawerOpen.value = true;
+  noteFocusRequest.value += 1;
+  // One draft has one stable target. Repeating the shortcut focuses it instead of
+  // silently moving an unfinished note to whichever file the reviewer visits next.
+  if (noteTarget.value !== null) return;
   noteTarget.value = target ?? {
     path: store.selectedPath,
     line: store.selectedPath === null ? null : currentLine.value,
   };
+}
+
+function closeNote(): void {
+  noteTarget.value = null;
+  noteDraft.value = "";
 }
 
 async function confirmRemoveRepo(): Promise<void> {
@@ -139,11 +157,15 @@ async function confirmRemoveRepo(): Promise<void> {
           v-else
           ref="reviewSurface"
           v-model:drawer-open="drawerOpen"
+          v-model:note-draft="noteDraft"
           :store="store"
           :editor-settings="editorSettings.settings.editor"
           :repo-name="repoName"
+          :note-target="noteTarget"
+          :note-focus-request="noteFocusRequest"
           @choose-repo="chooseRepo()"
           @add-note="openNote"
+          @close-note="closeNote"
         />
       </div>
     </main>
@@ -158,7 +180,6 @@ async function confirmRemoveRepo(): Promise<void> {
       @change-zoom="changeZoom"
       @open-zoom-settings="openSettings('workbench')"
     />
-    <NoteCapture :store="store" :target="noteTarget" @close="noteTarget = null" />
     <KeymapHelp v-if="helpOpen" @close="helpOpen = false" />
     <ConfirmDialog
       :open="repoPendingRemoval !== null"
