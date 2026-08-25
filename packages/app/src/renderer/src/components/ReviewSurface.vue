@@ -17,10 +17,14 @@ const props = defineProps<{
   editorSettings: EditorSettings;
   repoName: string;
   drawerOpen: boolean;
+  noteTarget: NoteTarget | null;
+  noteFocusRequest: number;
 }>();
+const noteDraft = defineModel<string>("noteDraft", { required: true });
 const emit = defineEmits<{
   chooseRepo: [];
   addNote: [target?: NoteTarget];
+  closeNote: [];
   "update:drawerOpen": [open: boolean];
 }>();
 
@@ -76,13 +80,17 @@ defineExpose({
       <template v-if="drawerOpen">
         <Splitter v-model="notesSize" :orientation="notesDock === 'right' ? 'vertical' : 'horizontal'" :min="notesDock === 'right' ? 220 : 120" :max="700" inverted />
         <NotesDrawer
+          v-model:note-draft="noteDraft"
           :store="store"
           class="drawer"
           :dock="notesDock"
+          :note-target="noteTarget"
+          :note-focus-request="noteFocusRequest"
           :style="notesDock === 'right' ? { width: `${notesWidth}px` } : { height: `${notesHeight}px` }"
           @dock="notesDock = $event"
           @close="emit('update:drawerOpen', false)"
           @add-note="emit('addNote')"
+          @close-note="emit('closeNote')"
         />
       </template>
     </div>

@@ -5,7 +5,7 @@ import type { Store } from "../store.js";
 import NoteCapture from "./NoteCapture.vue";
 
 describe("NoteCapture", () => {
-  it("opens as a substantial, described writing surface", () => {
+  it("opens as a compact, non-modal writing surface with a visible target", () => {
     const store = {
       selectedPath: "src/review.ts",
       addNote: vi.fn(),
@@ -15,9 +15,13 @@ describe("NoteCapture", () => {
     });
 
     const note = wrapper.get("textarea");
-    expect(note.attributes("rows")).toBe("12");
+    expect(note.attributes("rows")).toBe("4");
+    expect(note.attributes("aria-label")).toBe("Note text");
     expect(note.attributes("aria-describedby")).toBe("note-capture-hint");
-    expect(wrapper.get("label").attributes("for")).toBe(note.attributes("id"));
+    expect(wrapper.get("form").attributes("role")).toBe("form");
+    expect(wrapper.find("[role='dialog']").exists()).toBe(false);
+    expect(wrapper.get("button.target").text()).toBe("review.ts:12");
+    expect(wrapper.text()).toContain("src/review.ts");
 
     wrapper.unmount();
   });
@@ -35,7 +39,7 @@ describe("NoteCapture", () => {
       },
     });
 
-    expect(wrapper.get("label").text()).toContain("reviewed-file.ts · line 17");
+    expect(wrapper.get("button.target").text()).toBe("reviewed-file.ts:17");
     await wrapper.get("textarea").setValue("Keep this anchor");
     await wrapper.get("form").trigger("submit");
 
@@ -84,5 +88,17 @@ describe("NoteCapture", () => {
     await wrapper.get("form").trigger("submit");
 
     expect(addNote).toHaveBeenCalledWith("Across the whole PR", null, null);
+  });
+
+  it("returns to its frozen file and line without changing the draft", async () => {
+    const store = { addNote: vi.fn() } as unknown as Store;
+    const target = { path: "src/review.ts", line: 12 };
+    const wrapper = mount(NoteCapture, { props: { store, target } });
+
+    await wrapper.get("textarea").setValue("Keep this draft");
+    await wrapper.get("button.target").trigger("click");
+
+    expect(wrapper.emitted("navigate")).toEqual([[target]]);
+    expect((wrapper.get("textarea").element as HTMLTextAreaElement).value).toBe("Keep this draft");
   });
 });

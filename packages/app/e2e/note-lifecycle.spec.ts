@@ -2,6 +2,40 @@ import { test, expect } from "./fixtures/test.js";
 import { McpDriver } from "./drivers/mcp.js";
 import { ReviewDriver } from "./drivers/review.js";
 
+test("keeps the code and target visible while composing a note", async ({ world }) => {
+  const repository = await world.addRepository({ repoId: "acme/inline-note-composer" });
+  const otherRepository = await world.addRepository({ repoId: "acme/other-review" });
+  const app = await world.launch();
+  const review = new ReviewDriver(app.page);
+
+  await review.open(repository.title);
+  await review.selectFile("a.rb");
+  await app.page.getByRole("button", { name: "Add note (N)" }).click();
+
+  const drawer = app.page.getByRole("complementary", { name: "Notes" });
+  const composer = drawer.getByRole("form", { name: "New note" });
+  const input = composer.getByRole("textbox", { name: "Note text" });
+  await expect(drawer).toBeVisible();
+  await expect(composer).toContainText("a.rb:1");
+  await expect(app.page.locator(".monaco-editor:visible").first()).toBeVisible();
+  await expect(app.page.getByRole("dialog")).toHaveCount(0);
+  await drawer.getByRole("button", { name: "Dock notes below the diff" }).click();
+
+  await input.fill("Preserve this unfinished thought");
+  await drawer.getByRole("button", { name: "Close notes" }).click();
+  await expect(drawer).toHaveCount(0);
+  await expect(app.page.locator(".monaco-editor:visible").first()).toBeVisible();
+
+  await review.openNotes();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue("Preserve this unfinished thought");
+
+  await review.workbench.selectRepository(otherRepository.repoId);
+  await expect(app.page.locator(".context-title strong")).toHaveText("other-review");
+  await review.open(otherRepository.title);
+  await expect(composer).toHaveCount(0);
+});
+
 test("carries a reviewer note through MCP addressing and reviewer resolution", async ({ world }) => {
   const repository = await world.addRepository({ repoId: "acme/note-lifecycle" });
   const app = await world.launch();
