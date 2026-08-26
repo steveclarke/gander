@@ -168,7 +168,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
     {
       title: "Mark a review note addressed",
       description:
-        "Record the outcome after an open or in-progress note has been acted on. A code change can name its commit; an answered question has no commit. " +
+        "Record the outcome after an open or in-progress note has been acted on, or correct the outcome while it remains addressed. A code change can name its commit; an answered question has no commit. " +
         "This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
       inputSchema: {
         id: z.number().int().positive().describe("Global note id from get_review_notes. Use its number when discussing the note with the reviewer."),
