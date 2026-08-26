@@ -66,6 +66,9 @@ async function reload(): Promise<void> {
         :selected-pr-number="store.selectedPrNumber"
         @select="$emit('selectPr', $event)"
       />
+      <p v-else-if="store.prsError" class="empty failed" role="status">
+        Could not list pull requests. {{ store.prsError }}
+      </p>
       <p v-else class="empty">No open pull requests.</p>
     </section>
     <section v-if="store.view && store.currentRepoId === store.targetRepoId" class="files-section">
@@ -112,6 +115,7 @@ h1, h2 { flex: none; margin: 0; color: var(--muted-foreground); font-size: 10px;
 .reload:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .reload:disabled { opacity: .5; cursor: default; }
 .empty { margin: 0; padding: 12px; color: var(--faint-foreground); font-size: 11px; }
+.empty.failed { color: var(--danger); }
 .remaining-empty { margin: 0; padding: 16px 12px; color: var(--muted-foreground); font-size: 11px; text-align: center; }
 .files-section :deep(.tree.root) { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 .pull-sidebar :deep(.reviewing-list) { padding: 5px 0 8px; }

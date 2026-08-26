@@ -455,6 +455,25 @@ describe("store", () => {
     expect(store.busy).toBe(false);
   });
 
+  it("says why the pull request list is empty when GitHub could not be asked", async () => {
+    // An empty list reads as "this repository has nothing open". When the fetch failed it
+    // is a lie, and the reviewer goes looking at the repository instead of their token.
+    let fail = true;
+    const store = createStore(fakeApi({
+      listPrs: async () => { if (fail) throw new Error("No GitHub token. Add one in Settings"); return []; },
+    }));
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+
+    expect(store.prs).toEqual([]);
+    expect(store.prsError).toMatch(/No GitHub token/);
+
+    fail = false;
+    await store.refreshPrs();
+
+    expect(store.prsError).toBeNull();
+  });
+
   it("refreshPrs does nothing when no repository is targeted", async () => {
     let calls = 0;
     const store = createStore(fakeApi({ listPrs: async () => { calls += 1; return []; } }));
