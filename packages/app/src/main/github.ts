@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import type { PrSummary } from "@gander/shared";
 
@@ -49,8 +51,18 @@ export async function listOpenPrs(repoId: string, token: string, fetchImpl: type
  * A GUI launch inherits `PATH=/usr/bin:/bin:/usr/sbin:/sbin` — none of the places a
  * package manager installs to — so looking the binary up on PATH finds nothing on a
  * machine where the reviewer's own terminal runs `gh` perfectly well.
+ *
+ * The mise shim comes last: a version manager's `gh` is the reviewer's chosen one, but
+ * the shim re-execs through mise, so it is the slowest of these to answer and only worth
+ * reaching when no package manager put a binary anywhere.
  */
-const GH_PATHS = ["gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/home/linuxbrew/.linuxbrew/bin/gh"];
+const GH_PATHS = [
+  "gh",
+  "/opt/homebrew/bin/gh",
+  "/usr/local/bin/gh",
+  "/home/linuxbrew/.linuxbrew/bin/gh",
+  join(homedir(), ".local", "share", "mise", "shims", "gh"),
+];
 
 /** Whether a token GitHub will accept, and who it belongs to — for the settings pane. */
 export async function checkGithubToken(token: string, fetchImpl: typeof fetch = fetch): Promise<{ ok: true; login: string } | { ok: false; reason: string }> {

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { listOpenPrs, resolveGithubToken } from "./github.js";
 
 const ghPr = {
@@ -117,6 +119,17 @@ describe("resolveGithubToken", () => {
     };
     expect(await resolveGithubToken(undefined, fakeExecFile)).toBe("brew-tok");
     expect(tried).toEqual(["gh", "/opt/homebrew/bin/gh"]);
+  });
+
+  it("finds gh in the mise shim directory when nothing else has it", async () => {
+    // A version-manager install: no package manager put a binary anywhere on the list,
+    // and the GUI launch's PATH cannot see the shim directory either.
+    const shim = join(homedir(), ".local", "share", "mise", "shims", "gh");
+    const fakeExecFile = async (file: string) => {
+      if (file !== shim) throw new Error("command not found");
+      return { stdout: "mise-tok\n" };
+    };
+    expect(await resolveGithubToken(undefined, fakeExecFile)).toBe("mise-tok");
   });
 
   it("says where to put a token when there is none anywhere", async () => {
