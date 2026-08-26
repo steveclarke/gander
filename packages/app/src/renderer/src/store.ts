@@ -9,6 +9,13 @@ import { parentDirectory } from "./paths.js";
 export interface Store {
   repos: RepoEntry[];
   prs: PrListItem[];
+  /**
+   * Why the pull request list is empty, when it is empty because the fetch failed.
+   *
+   * An empty list is otherwise ambiguous: a repository with nothing open and a repository
+   * GitHub would not answer for look identical, and the sidebar states the first as fact.
+   */
+  prsError: string | null;
   worktrees: LocalWorktree[];
   currentRepoId: string | null;
   /** Repository the workbench modes operate on, independent of whichever view is loaded. */
@@ -104,6 +111,7 @@ export function createStore(api: GanderApi): Store {
   const store: Store = reactive({
     repos: [],
     prs: [],
+    prsError: null,
     worktrees: [],
     currentRepoId: null,
     targetRepoId: null,
@@ -177,6 +185,7 @@ export function createStore(api: GanderApi): Store {
           store.targetWorktreePath = null;
           store.selectedPrNumber = null;
           store.prs = [];
+          store.prsError = null;
           store.worktrees = [];
         }
         store.repos = await api.listRepos();
@@ -437,6 +446,7 @@ export function createStore(api: GanderApi): Store {
     const [prs, worktrees] = await Promise.allSettled([api.listPrs(repoId), api.listWorktrees(repoId)]);
     if (request !== targetContextRequest) return;
     store.prs = prs.status === "fulfilled" ? prs.value : [];
+    store.prsError = prs.status === "rejected" ? readable((prs.reason as Error).message) : null;
     store.worktrees = worktrees.status === "fulfilled" ? worktrees.value : [];
     const errors = [prs, worktrees]
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")

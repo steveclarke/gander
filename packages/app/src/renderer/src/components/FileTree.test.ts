@@ -29,6 +29,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
   const store: Store = reactive({
     repos: [],
     prs: [],
+    prsError: null,
     worktrees: [],
     currentRepoId: "acme/atlas",
     targetRepoId: "acme/atlas",
