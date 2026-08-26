@@ -153,6 +153,26 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
+  it("updates an addressed note's outcome until the reviewer resolves it", async () => {
+    const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why?", headSha: null, sourceContext: null });
+    storage.markNoteAddressed(note.id, { commitRef: "abc1234", summary: "Dropped the retry" });
+
+    const client = await connect();
+    const result = await client.callTool({
+      name: "mark_note_addressed",
+      arguments: { id: note.id, commitRef: "def5678", summary: "Restored the retry with a limit" },
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(textOf(result as { content?: unknown })).toBe("Note 1 marked addressed.");
+    expect(storage.getNote(note.id)).toMatchObject({
+      state: "addressed",
+      commitRef: "def5678",
+      summary: "Restored the retry with a limit",
+    });
+    await client.close();
+  });
+
   it("claims a note, exposes a reviewer blocker, and addresses a question without a commit", async () => {
     storage.setPrContext("acme/atlas", 7, { headRef: "feat/thing", title: "Feature", headSha: "sha-1", stackId: null, stackSize: null, stackPosition: null });
     const q = storage.addNote("acme/atlas", 7, {
@@ -208,9 +228,7 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
-  it("distinguishes missing, addressed, and resolved notes when addressing fails", async () => {
-    const addressed = storage.addNote("acme/atlas", 7, { path: "addressed.rb", line: null, text: "Address me", headSha: null, sourceContext: null });
-    storage.markNoteAddressed(addressed.id, { commitRef: null, summary: "Done" });
+  it("distinguishes missing and resolved notes when addressing fails", async () => {
     const resolved = storage.addNote("acme/atlas", 7, { path: "resolved.rb", line: null, text: "Resolve me", headSha: null, sourceContext: null });
     storage.markNoteAddressed(resolved.id, { commitRef: null, summary: "Done" });
     storage.putFileState("acme/atlas", 7, {
@@ -221,7 +239,6 @@ describe("MCP endpoint", () => {
     const client = await connect();
     for (const [id, message] of [
       [999, "Note id 999 does not exist."],
-      [addressed.id, `Note ${addressed.number} is already addressed.`],
       [resolved.id, `Note ${resolved.number} is already resolved.`],
     ] as const) {
       const result = await client.callTool({ name: "mark_note_addressed", arguments: { id, summary: "Nothing to change" } });

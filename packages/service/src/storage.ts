@@ -220,11 +220,12 @@ export function openStorage(dbPath: string): Storage {
 
     markNoteAddressed(id, input) {
       // Claiming is useful for work that spans time, but a note handled in one exchange
-      // can go straight from open to addressed. Neither path may undo reviewer resolution.
+      // can go straight from open to addressed. Agents can correct the recorded outcome
+      // until the reviewer resolves it; neither path may undo reviewer resolution.
       const changed = db.prepare(`
         UPDATE notes
         SET state = 'addressed', in_progress_note = NULL, commit_ref = ?, summary = ?, addressed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-        WHERE id = ? AND state IN ('open', 'in_progress')
+        WHERE id = ? AND state IN ('open', 'in_progress', 'addressed')
       `).run(input.commitRef, input.summary, id).changes;
       if (changed === 0) return null;
       return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow);

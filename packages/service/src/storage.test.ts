@@ -146,6 +146,23 @@ describe("storage", () => {
       expect(storage.getNote(999)).toBeNull();
     });
 
+    it("lets an agent correct an addressed outcome until the reviewer resolves it", () => {
+      const note = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Why the retry?", headSha: null, sourceContext: null });
+      storage.markNoteAddressed(note.id, { commitRef: "abc1234", summary: "Dropped the retry" });
+
+      expect(storage.markNoteAddressed(note.id, { commitRef: "def5678", summary: "Restored the retry with a limit" })).toMatchObject({
+        state: "addressed",
+        commitRef: "def5678",
+        summary: "Restored the retry with a limit",
+      });
+
+      storage.putFileState("acme/atlas", 7, {
+        checked: true, path: "a.rb", baseHash: "b", headHash: "h",
+        baseContent: "old", headContent: "new", machine: "test",
+      });
+      expect(storage.markNoteAddressed(note.id, { commitRef: "ghi9012", summary: "Too late" })).toBeNull();
+    });
+
     it("claims a note, records why it is waiting, then addresses it without a commit", () => {
       const q = storage.addNote("acme/atlas", 7, { path: "a.rb", line: null, text: "Which behavior?", headSha: null, sourceContext: null });
 

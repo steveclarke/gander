@@ -64,8 +64,10 @@ for registration.
 
 Agents discuss notes with the reviewer in their active session. Once the work is
 complete, they record the durable outcome through MCP with a summary and an
-optional commit ref. Notes also carry immutable source context from the head
-revision at capture time, and agents can fetch only notes after a last-seen id.
+optional commit ref. They can correct that recorded outcome while the note remains
+addressed; reviewer resolution makes it final. Notes also carry immutable source
+context from the head revision at capture time, and agents can fetch only notes
+after a last-seen id.
 
 Each opened pull request records its own branch, which is how the service maps an
 agent's working branch to a pull request without holding GitHub credentials.
