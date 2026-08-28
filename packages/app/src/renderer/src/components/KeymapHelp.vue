@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BINDINGS, GROUPS } from "../keymap.js";
+import { BINDINGS, GROUPS, bindingLabel } from "../keymap.js";
 
 defineEmits<{ close: [] }>();
 
@@ -20,7 +20,7 @@ const inGroup = (group: string) => BINDINGS.filter((binding) => binding.group ==
           <h3>{{ group }}</h3>
           <dl>
             <template v-for="binding in inGroup(group)" :key="binding.command">
-              <dt><kbd>{{ binding.label }}</kbd></dt>
+              <dt><kbd>{{ bindingLabel(binding.command) }}</kbd></dt>
               <dd>{{ binding.description }}</dd>
             </template>
           </dl>

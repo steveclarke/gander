@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BINDINGS, GROUPS, bindingFor, isPrefix } from "./keymap.js";
+import { BINDINGS, GROUPS, bindingFor, bindingLabel, isPrefix } from "./keymap.js";
 
 const press = (key: string, modifiers: Partial<KeyboardEvent> = {}): KeyboardEvent =>
   ({ key, metaKey: false, ctrlKey: false, altKey: false, ...modifiers }) as KeyboardEvent;
@@ -35,6 +35,18 @@ describe("keymap", () => {
 
   it("starts the visible-row jump with f", () => {
     expect(bindingFor(press("f"))?.command).toBe("jump-row");
+  });
+
+  it("opens the pull-request file picker with Command or Control P", () => {
+    expect(bindingFor(press("p", { metaKey: true }))?.command).toBe("quick-file");
+    expect(bindingFor(press("p", { ctrlKey: true }))?.command).toBe("quick-file");
+    expect(bindingFor(press("p"))).toBeNull();
+  });
+
+  it("prints the platform modifier used by modified bindings", () => {
+    expect(bindingLabel("quick-file", true)).toBe("⌘P");
+    expect(bindingLabel("quick-file", false)).toBe("Ctrl+P");
+    expect(bindingLabel("next-file", false)).toBe("j / ↓");
   });
 
   // The `?` sheet renders from this table, so a binding outside the printed groups would
