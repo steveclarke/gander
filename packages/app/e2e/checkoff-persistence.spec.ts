@@ -17,3 +17,16 @@ test("persists a file checkoff across an app restart", async ({ world }) => {
   await expect(review.file("a.rb").getByRole("checkbox")).toHaveAttribute("aria-checked", "true");
   await review.expectProgress(1, 2);
 });
+
+test("mirrors reviewed and unreviewed files to GitHub", async ({ world }) => {
+  const repository = await world.addRepository({ repoId: "acme/viewed-mirror" });
+  const app = await world.launch();
+  const review = new ReviewDriver(app.page);
+  await review.open(repository.title);
+
+  await app.page.getByRole("button", { name: "Mark reviewed" }).click();
+  expect(world.github.isViewed(repository.repoId, "a.rb")).toBe(true);
+
+  await app.page.getByRole("button", { name: "Reviewed", exact: true }).click();
+  expect(world.github.isViewed(repository.repoId, "a.rb")).toBe(false);
+});

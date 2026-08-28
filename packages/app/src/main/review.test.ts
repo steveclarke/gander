@@ -18,7 +18,7 @@ let storage: Storage; let server: FastifyInstance; let reviewer: Reviewer; let p
 async function currentPr(fx: FixtureRepo): Promise<PrSummary> {
   const headSha = await fx.git(["rev-parse", "refs/pull/1/head"]);
   const baseSha = await fx.git(["rev-parse", "main"]);
-  return { number: 1, title: "Feature", body: "", draft: false, baseRef: "main", baseSha, headRef: "feature", stack: null, headSha };
+  return { githubId: "PR_test_1", number: 1, title: "Feature", body: "", draft: false, baseRef: "main", baseSha, headRef: "feature", stack: null, headSha };
 }
 
 beforeEach(async () => {
@@ -34,6 +34,7 @@ beforeEach(async () => {
     git: createGitEngine(clonesRoot),
     service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
     listPrs: async () => [await currentPr(fixture)],
+    setFileViewed: async () => {},
     repoUrl: () => fixture.dir,
     machine: "test-machine",
   });
@@ -71,6 +72,7 @@ describe("review pipeline", () => {
       git: countingEngine,
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
+      setFileViewed: async () => {},
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
@@ -120,7 +122,7 @@ describe("review pipeline", () => {
 
   it("setChecked persists through the service and survives re-open", async () => {
     await reviewer.openPr("acme/atlas", 1);
-    const view = await reviewer.setChecked("acme/atlas", 1, "a.rb", true);
+    const { view } = await reviewer.setChecked("acme/atlas", 1, "a.rb", true);
     expect(view.files.find((f) => f.path === "a.rb")!.checked).toBe(true);
 
     const reopened = await reviewer.openPr("acme/atlas", 1);
@@ -129,10 +131,52 @@ describe("review pipeline", () => {
 
   it("setCheckedMany checks a batch from the cached view and persists it", async () => {
     await reviewer.openPr("acme/atlas", 1);
-    const view = await reviewer.setCheckedMany("acme/atlas", 1, ["a.rb", "b.rb"], true);
+    const { view } = await reviewer.setCheckedMany("acme/atlas", 1, ["a.rb", "b.rb"], true);
     expect(view.files.every((f) => f.checked)).toBe(true);
     const reopened = await reviewer.openPr("acme/atlas", 1);
     expect(reopened.files.every((f) => f.checked)).toBe(true);
+  });
+
+  it("mirrors each saved checkoff to the GitHub pull request", async () => {
+    const calls: Array<[string, string, boolean]> = [];
+    const mirrored = createReviewer({
+      git: createGitEngine(clonesRoot),
+      service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
+      listPrs: async () => [await currentPr(fixture)],
+      setFileViewed: async (...args) => { calls.push(args); },
+      repoUrl: () => fixture.dir,
+      machine: "test-machine",
+    });
+    await mirrored.openPr("acme/atlas", 1);
+
+    const checked = await mirrored.setCheckedMany("acme/atlas", 1, ["a.rb", "b.rb"], true);
+    const unchecked = await mirrored.setChecked("acme/atlas", 1, "a.rb", false);
+
+    expect(checked.githubError).toBeNull();
+    expect(unchecked.githubError).toBeNull();
+    expect(calls).toEqual([
+      ["PR_test_1", "a.rb", true],
+      ["PR_test_1", "b.rb", true],
+      ["PR_test_1", "a.rb", false],
+    ]);
+  });
+
+  it("keeps the Gander checkoff and reports the mismatch when GitHub rejects it", async () => {
+    const mirrored = createReviewer({
+      git: createGitEngine(clonesRoot),
+      service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
+      listPrs: async () => [await currentPr(fixture)],
+      setFileViewed: async () => { throw new Error("GitHub GraphQL: Resource not accessible by integration"); },
+      repoUrl: () => fixture.dir,
+      machine: "test-machine",
+    });
+    await mirrored.openPr("acme/atlas", 1);
+
+    const result = await mirrored.setChecked("acme/atlas", 1, "a.rb", true);
+
+    expect(result.view.files.find((file) => file.path === "a.rb")?.checked).toBe(true);
+    expect(result.githubError).toMatch(/saved as reviewed in Gander.*GitHub.*Resource not accessible/s);
+    expect(storage.getReview("acme/atlas", 1).files.find((file) => file.path === "a.rb")?.checked).toBe(true);
   });
 
   it("setChecked throws if the PR was never opened", async () => {
@@ -151,6 +195,7 @@ describe("review pipeline", () => {
       git: createGitEngine(clonesRoot),
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(moved)],
+      setFileViewed: async () => {},
       repoUrl: () => moved.dir,
       machine: "test-machine",
     });
@@ -240,7 +285,7 @@ describe("review pipeline", () => {
     await fixture.git(["checkout", "main"]);
 
     await reviewer.openPr("acme/atlas", 1);
-    const reChecked = await reviewer.setChecked("acme/atlas", 1, "a.rb", true);
+    const { view: reChecked } = await reviewer.setChecked("acme/atlas", 1, "a.rb", true);
     const a = reChecked.files.find((f) => f.path === "a.rb")!;
     expect(a.checked).toBe(true);
     expect(a.changedSince).toBe(false);
@@ -265,6 +310,7 @@ describe("review pipeline", () => {
       git: countingEngine,
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
+      setFileViewed: async () => {},
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
@@ -364,6 +410,7 @@ describe("review pipeline", () => {
       git: createGitEngine(clonesRoot),
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
+      setFileViewed: async () => {},
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
@@ -399,6 +446,7 @@ describe("review pipeline", () => {
       git: createGitEngine(clonesRoot),
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
+      setFileViewed: async () => {},
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });

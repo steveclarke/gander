@@ -7,9 +7,9 @@ Decision date: 2026-08-18
 ## Decision
 
 Gander will add built-in GitHub.com sign-in using a **GitHub App user access
-token obtained through GitHub's device flow**. The GitHub App will request only
-read access to repository metadata and pull requests, use expiring user access
-tokens, and store access and refresh tokens through Electron's OS-backed
+token obtained through GitHub's device flow**. The GitHub App will request read
+access to repository metadata and write access to pull requests, use expiring
+user access tokens, and store access and refresh tokens through Electron's OS-backed
 `safeStorage` API.
 
 This issue is an investigation, not the OAuth implementation. The slices below
@@ -42,17 +42,20 @@ store.
 
 ## Why a GitHub App
 
-A traditional OAuth App is a poor fit for a read-only reviewer. Public data can
-be read with no OAuth scope, but private repository access requires the OAuth
+A traditional OAuth App is a poor fit for a reviewer with one narrow GitHub
+mutation. Public data can be read with no OAuth scope, but private repository
+access requires the OAuth
 `repo` scope. GitHub defines that scope as full read and write access to public
 and private repositories; even `public_repo` includes write capabilities. Gander
-must not ask for mutation privileges it does not use.
+must not ask for mutation privileges beyond mirroring its reviewed-file
+checkoffs to GitHub's per-user Viewed state.
 
 A GitHub App has fine-grained permissions. The endpoints Gander uses accept a
 GitHub App user access token with:
 
 - **Metadata: read**, for `GET /user/repos`
-- **Pull requests: read**, for `GET /repos/{owner}/{repo}/pulls`
+- **Pull requests: write**, for `GET /repos/{owner}/{repo}/pulls` and the
+  `markFileAsViewed` / `unmarkFileAsViewed` GraphQL mutations
 
 No Contents permission, webhook subscription, private key, or installation
 token is required for the current API calls. Repository installation remains
@@ -99,7 +102,7 @@ For GitHub.com, the maintainer will register one public GitHub App owned by the
 project's durable account or organization. Its client ID is public configuration
 and may be compiled into release builds. Registration must enable device flow,
 keep user-to-server token expiration enabled, request only Metadata read and
-Pull requests read, subscribe to no webhooks, and publish the repository URL as
+Pull requests write, subscribe to no webhooks, and publish the repository URL as
 its homepage and support location.
 
 The app must be tested against personal repositories, selected-repository
@@ -180,7 +183,7 @@ never sent to a different origin.
    fake in tests.
 3. **Installation-aware repository discovery.** Handle selected installations,
    organization approval/SSO failures, no-installation UX, and installation
-   management links without adding GitHub write operations.
+   management links without adding GitHub write operations beyond file-viewed mirroring.
 4. **Refresh, sign-out, and revocation UX.** Implement atomic rotation,
    single-flight refresh, restart persistence, local sign-out, remote-revocation
    detection, and the GitHub authorization-management link.
@@ -191,8 +194,9 @@ never sent to a different origin.
    registration, `/api/v3` and web-auth URL derivation, certificate validation
    guidance, host-aware `gh auth token --hostname`, and GHES integration tests.
 
-Each slice must preserve the rule that GitHub integration is read-only and that
-authentication and API failures surface their real, redacted error.
+Each slice must preserve the rule that file-viewed mirroring is Gander's only
+GitHub mutation and that authentication and API failures surface their real,
+redacted error.
 
 ## Primary sources
 

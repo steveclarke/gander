@@ -5,7 +5,7 @@ import type { Store } from "../store.js";
 import TargetBar from "./TargetBar.vue";
 
 const pr = (number: number, headRef: string, title: string) => ({
-  number, title, body: "", draft: false, baseRef: "main", baseSha: "a", headRef, headSha: "b",
+  githubId: `PR_test_${number}`, number, title, body: "", draft: false, baseRef: "main", baseSha: "a", headRef, headSha: "b",
   stack: null, reviewProgress: null,
 });
 

@@ -199,8 +199,9 @@ reverting the fix.
 - Comments explain *why*, especially where the code looks wrong without the
   reason (Monaco's hidden textarea, retained snapshots, connection-time config).
   Match that density; don't narrate what the code already says.
-- Everything in the app is read-only. There is no editing feature and no GitHub
-  review machinery (comments, approvals, merge) — that's out of scope by design.
+- Everything in the app is read-only with respect to repository content. The only
+  GitHub mutation mirrors Gander checkoffs to the reviewer's per-user Viewed state;
+  comments, approvals, and merges remain out of scope by design.
 - Errors surface: no silent degradation, no write queues, no swallowed git or
   GitHub error text.
 - Icons come from `@lucide/vue`. Panel sizes and docking live in

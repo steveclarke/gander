@@ -7,6 +7,7 @@ export interface ReviewerDeps {
   git: GitEngine;
   service: ServiceClient;
   listPrs(repoId: string): Promise<PrSummary[]>;
+  setFileViewed(pullRequestId: string, path: string, viewed: boolean): Promise<void>;
   repoUrl(repoId: string): string;
   machine: string;
 }
@@ -14,14 +15,20 @@ export interface Reviewer {
   listPrsWithProgress(repoId: string): Promise<PrListItem[]>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
-  setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
-  setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
+  setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<CheckoffResult>;
+  setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<CheckoffResult>;
   addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha" | "sourceContext">): Promise<PrView>;
   updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Promise<PrView>;
   deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
   /** The file as it stood when the reviewer last checked it — the base for the delta view. */
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
+}
+
+export interface CheckoffResult {
+  view: PrView;
+  /** Gander is authoritative, so a GitHub failure is returned beside the saved view. */
+  githubError: string | null;
 }
 
 interface CacheEntry {
@@ -189,12 +196,16 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     return useCachedViewOnConnectionFailure(repoId, prNumber, () => loadRefresh(repoId, prNumber));
   }
 
-  async function applyChecked(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView> {
+  async function applyChecked(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<CheckoffResult> {
     const entry = requireWritable(repoId, prNumber);
     const { view } = entry;
-    for (const path of paths) {
-      const file = view.files.find((f) => f.path === path);
+    const files = paths.map((path) => {
+      const file = view.files.find((candidate) => candidate.path === path);
       if (!file) throw new Error(`${path} is not part of PR #${prNumber}`);
+      return file;
+    });
+    for (const file of files) {
+      const { path } = file;
       if (checked) {
         await writeServiceState(entry, () => deps.service.putFileState(repoId, prNumber, {
           checked: true, path,
@@ -209,7 +220,22 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
         file.checked = false;
       }
     }
-    return view;
+
+    const failures: string[] = [];
+    for (const { path } of files) {
+      try {
+        await deps.setFileViewed(view.pr.githubId, path, checked);
+      } catch (error) {
+        failures.push(`${path}: ${(error as Error).message}`);
+      }
+    }
+    const action = checked ? "reviewed" : "unreviewed";
+    const saved = files.length === 1 ? files[0]!.path : `${files.length} files`;
+    const failed = failures.length === 1 ? "1 file" : `${failures.length} files`;
+    const githubError = failures.length === 0
+      ? null
+      : `${saved} saved as ${action} in Gander, but GitHub did not mirror ${failed}: ${failures.join("; ")}`;
+    return { view, githubError };
   }
 
   function requireWritable(repoId: string, prNumber: number): CacheEntry {

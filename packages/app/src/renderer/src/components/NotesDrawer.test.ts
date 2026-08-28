@@ -21,7 +21,7 @@ if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.sho
 }
 
 const view = (notes: PrView["notes"]): PrView => ({
-  pr: { number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
+  pr: { githubId: "PR_test_1", number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
   files: [],
   notes,
 });

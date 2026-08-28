@@ -13,6 +13,7 @@ type ListHook = (requestCount: number) => Promise<void> | void;
 
 interface RepositoryResponse {
   pullRequests: PullRequestFixture[];
+  viewedFiles: Set<string>;
   onList?: ListHook;
   requestCount: number;
 }
@@ -26,6 +27,23 @@ export class GithubServer {
 
   private constructor() {
     this.server = Fastify({ logger: false });
+    this.server.post<{ Body: { query?: string; variables?: { input?: { pullRequestId?: string; path?: string } } } }>(
+      "/graphql",
+      async (request, reply) => {
+        if (request.headers.authorization !== `Bearer ${this.token}`) {
+          return reply.code(401).send({ message: "Bad credentials" });
+        }
+        const input = request.body.variables?.input;
+        const match = [...this.repositories.entries()].find(([repoId, repository]) =>
+          repository.pullRequests.some((pullRequest) => this.pullRequestId(repoId, pullRequest.number) === input?.pullRequestId));
+        if (!match || !input?.path) return reply.code(200).send({ errors: [{ message: "Pull request or path not found" }] });
+        const [, repository] = match;
+        if (request.body.query?.includes("unmarkFileAsViewed")) repository.viewedFiles.delete(input.path);
+        else if (request.body.query?.includes("markFileAsViewed")) repository.viewedFiles.add(input.path);
+        else return reply.code(200).send({ errors: [{ message: "Unknown mutation" }] });
+        return { data: { mirror: { clientMutationId: null } } };
+      },
+    );
   }
 
   static async start(): Promise<GithubServer> {
@@ -43,6 +61,7 @@ export class GithubServer {
         await repository.onList?.(repository.requestCount);
         if (request.query.page && request.query.page !== "1") return [];
         return repository.pullRequests.map((pullRequest) => ({
+          node_id: github.pullRequestId(repoId, pullRequest.number),
           number: pullRequest.number,
           title: pullRequest.title,
           body: "",
@@ -57,7 +76,7 @@ export class GithubServer {
   }
 
   register(repoId: string, pullRequests: PullRequestFixture[], onList?: ListHook): void {
-    this.repositories.set(repoId, { pullRequests, onList, requestCount: 0 });
+    this.repositories.set(repoId, { pullRequests, viewedFiles: new Set(), onList, requestCount: 0 });
   }
 
   updatePullRequest(repoId: string, pullRequest: PullRequestFixture): void {
@@ -70,6 +89,14 @@ export class GithubServer {
 
   requestsFor(repoId: string): number {
     return this.repositories.get(repoId)?.requestCount ?? 0;
+  }
+
+  isViewed(repoId: string, path: string): boolean {
+    return this.repositories.get(repoId)?.viewedFiles.has(path) ?? false;
+  }
+
+  private pullRequestId(repoId: string, number: number): string {
+    return `PR_${repoId.replaceAll("/", "_")}_${number}`;
   }
 
   async close(): Promise<void> {

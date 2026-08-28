@@ -4,6 +4,7 @@ import type { ThemeId } from "./themes.js";
 import type { ConnectionCheck, ServiceStatus } from "./main/connection.js";
 import type { ImagePreview } from "./image-preview.js";
 import type { LocalViewUpdate } from "./main/local-viewer.js";
+import type { CheckoffResult } from "./main/review.js";
 
 export type { ImagePreview, ImageSide } from "./image-preview.js";
 
@@ -46,8 +47,8 @@ export interface GanderApi {
   setConnection(url: string, token: string): Promise<ConnectionCheck>;
   serviceStatus(): Promise<ServiceStatus>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
-  setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<PrView>;
-  setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<PrView>;
+  setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<CheckoffResult>;
+  setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<CheckoffResult>;
   refreshPr(repoId: string, prNumber: number): Promise<PrView>;
   reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
   imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;

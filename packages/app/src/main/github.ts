@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile);
 const runGhAuthToken: ExecFileFn = (file, args) => execFileAsync(file, args);
 
 interface GhPr {
+  node_id: string;
   number: number; title: string; body: string | null; draft: boolean;
   base: { ref: string; sha: string }; head: { ref: string; sha: string };
   // Present since GitHub shipped stacked pull requests; absent on a standalone one.
@@ -23,6 +24,36 @@ const apiBase = (): string => (process.env.GANDER_GITHUB_API_URL ?? DEFAULT_API_
 
 function githubHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+}
+
+interface GraphqlResponse {
+  errors?: Array<{ message?: unknown }>;
+}
+
+/** Mirror one Gander checkoff to the authenticated reviewer's GitHub Viewed state. */
+export async function setFileViewed(
+  pullRequestId: string,
+  path: string,
+  viewed: boolean,
+  token: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  const mutation = viewed ? "markFileAsViewed" : "unmarkFileAsViewed";
+  const input = viewed ? "MarkFileAsViewedInput" : "UnmarkFileAsViewedInput";
+  const res = await fetchImpl(`${apiBase()}/graphql`, {
+    method: "POST",
+    headers: { ...githubHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: `mutation MirrorFileViewed($input: ${input}!) { ${mutation}(input: $input) { clientMutationId } }`,
+      variables: { input: { pullRequestId, path } },
+    }),
+  });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  const body = (await res.json()) as GraphqlResponse;
+  if (body.errors?.length) {
+    const detail = body.errors.map((error) => typeof error.message === "string" ? error.message : "Unknown GraphQL error").join("; ");
+    throw new Error(`GitHub GraphQL: ${detail}`);
+  }
 }
 
 export async function listOpenPrs(repoId: string, token: string, fetchImpl: typeof fetch = fetch): Promise<PrSummary[]> {
@@ -39,7 +70,7 @@ export async function listOpenPrs(repoId: string, token: string, fetchImpl: type
     page += 1;
   }
   return all.map((p) => ({
-    number: p.number, title: p.title, body: p.body ?? "", draft: p.draft,
+    githubId: p.node_id, number: p.number, title: p.title, body: p.body ?? "", draft: p.draft,
     baseRef: p.base.ref, baseSha: p.base.sha, headRef: p.head.ref, headSha: p.head.sha,
     stack: p.stack ?? null,
   }));

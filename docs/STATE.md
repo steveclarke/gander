@@ -11,7 +11,9 @@ M1 is merged to `master`.
 
 A working Electron app that opens a GitHub PR, shows its files as a tree with
 hierarchical checkoff, renders a unified Monaco diff, and persists review state
-to a local Fastify + SQLite service.
+to a local Fastify + SQLite service. Successful checkoffs also mirror to the
+authenticated reviewer's per-user GitHub Viewed state; Gander remains authoritative
+if that secondary write fails.
 
 | Package | Contents |
 |---|---|
@@ -117,5 +119,5 @@ independent, clean-world scenarios covering persistence, content-based review
 state, notes and MCP, service recovery and compatibility, target isolation,
 keyboard focus, images, local worktrees, the real `bin/gander` command, and clone
 concurrency. The suite uses real Git,
-Fastify, SQLite, IPC, preload, and renderer boundaries; only GitHub's HTTP endpoint
-is represented by a local fake.
+Fastify, SQLite, IPC, preload, and renderer boundaries; only GitHub's REST and
+GraphQL HTTP endpoints are represented by a local fake.
