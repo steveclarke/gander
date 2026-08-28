@@ -11,6 +11,7 @@ const store = {
   view: null,
   lastFetchAt: null,
   busy: false,
+  githubViewedSync: { pending: 0, failed: 0, message: null },
 } as Store;
 
 describe("StatusBar", () => {
@@ -71,5 +72,23 @@ describe("StatusBar", () => {
     expect(wrapper.get(".service").classes()).toContain("warning");
 
     wrapper.unmount();
+  });
+
+  it("shows pending and failed GitHub Viewed work", async () => {
+    const mutableStore = reactive({
+      ...store,
+      githubViewedSync: { pending: 2, failed: 0, message: null },
+    }) as Store;
+    const wrapper = mount(StatusBar, {
+      props: { store: mutableStore, treeVisible: true, isDevelopment: false, worktreeLabel: null, zoomLevel: 0 },
+    });
+
+    expect(wrapper.get(".github-sync").text()).toBe("GitHub sync · 2 pending");
+
+    mutableStore.githubViewedSync = { pending: 0, failed: 1, message: "Bad credentials" };
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".github-sync").text()).toBe("GitHub sync · 1 failed");
+    expect(wrapper.get(".github-sync").classes()).toContain("failed");
+    expect(wrapper.get(".github-sync").attributes("title")).toBe("Bad credentials");
   });
 });

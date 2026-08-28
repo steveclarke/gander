@@ -5,8 +5,10 @@ import type { ConnectionCheck, ServiceStatus } from "./main/connection.js";
 import type { ImagePreview } from "./image-preview.js";
 import type { LocalViewUpdate } from "./main/local-viewer.js";
 import type { CheckoffResult } from "./main/review.js";
+import type { GithubViewedSyncStatus } from "./main/github-viewed-queue.js";
 
 export type { ImagePreview, ImageSide } from "./image-preview.js";
+export type { GithubViewedSyncStatus } from "./main/github-viewed-queue.js";
 
 export type WindowStyle = "native-titlebar" | "integrated-titlebar";
 export const WINDOW_STYLE_ARGUMENT = "--gander-window-style=";
@@ -42,6 +44,8 @@ export interface GanderApi {
   getConnection(): Promise<{ url: string; token: string; githubToken: string; fromEnvironment: boolean }>;
   /** Checks the token against GitHub, and saves it only if GitHub accepts it. Empty clears it. */
   setGithubToken(token: string): Promise<GithubTokenCheck>;
+  githubViewedSyncStatus(): Promise<GithubViewedSyncStatus>;
+  onGithubViewedSyncStatus(listener: (status: GithubViewedSyncStatus) => void): () => void;
   testConnection(url: string, token: string): Promise<ConnectionCheck>;
   /** Checks first, and saves only a connection that answered. */
   setConnection(url: string, token: string): Promise<ConnectionCheck>;

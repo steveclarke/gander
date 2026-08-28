@@ -56,7 +56,10 @@ const treeJump = useReviewKeyboard({
 
 useBackgroundRefresh(store, () => store.view !== null || store.localView !== null);
 
-onMounted(() => { void editorSettings.load(); });
+onMounted(() => {
+  void editorSettings.load();
+  void store.loadGithubViewedSync();
+});
 
 // The notes belong to the pull request being reviewed, so leaving it puts them away.
 watch(activeMode, (mode) => {

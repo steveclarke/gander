@@ -18,15 +18,23 @@ test("persists a file checkoff across an app restart", async ({ world }) => {
   await review.expectProgress(1, 2);
 });
 
-test("mirrors reviewed and unreviewed files to GitHub", async ({ world }) => {
+test("updates the local checkoff immediately and mirrors it to GitHub in the background", async ({ world }) => {
   const repository = await world.addRepository({ repoId: "acme/viewed-mirror" });
   const app = await world.launch();
   const review = new ReviewDriver(app.page);
   await review.open(repository.title);
 
-  await app.page.getByRole("button", { name: "Mark reviewed" }).click();
-  expect(world.github.isViewed(repository.repoId, "a.rb")).toBe(true);
+  const paused = world.github.pauseViewedMutations();
+  try {
+    await app.page.getByRole("button", { name: "Mark reviewed" }).click();
+    await paused.entered;
+    await expect(app.page.getByRole("button", { name: "Reviewed", exact: true })).toBeVisible();
+    expect(world.github.isViewed(repository.repoId, "a.rb")).toBe(false);
+  } finally {
+    paused.release();
+  }
+  await expect.poll(() => world.github.isViewed(repository.repoId, "a.rb")).toBe(true);
 
   await app.page.getByRole("button", { name: "Reviewed", exact: true }).click();
-  expect(world.github.isViewed(repository.repoId, "a.rb")).toBe(false);
+  await expect.poll(() => world.github.isViewed(repository.repoId, "a.rb")).toBe(false);
 });

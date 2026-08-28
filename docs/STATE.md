@@ -11,9 +11,10 @@ M1 is merged to `master`.
 
 A working Electron app that opens a GitHub PR, shows its files as a tree with
 hierarchical checkoff, renders a unified Monaco diff, and persists review state
-to a local Fastify + SQLite service. Successful checkoffs also mirror to the
-authenticated reviewer's per-user GitHub Viewed state; Gander remains authoritative
-if that secondary write fails.
+to a local Fastify + SQLite service. Successful checkoffs enqueue an account-scoped,
+durable background mirror to the authenticated reviewer's per-user GitHub Viewed
+state. The local checkoff does not wait for GitHub; transient failures retry and
+permanent failures stay visible. Gander remains authoritative if the mirror fails.
 
 | Package | Contents |
 |---|---|

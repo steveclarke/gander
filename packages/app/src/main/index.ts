@@ -7,7 +7,8 @@ import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, save
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine, type GitEngine } from "./git.js";
-import { checkGithubToken, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
+import { checkGithubToken, getGithubAccount, githubApiUrl, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
+import { createGithubViewedQueue, type GithubAccount, type GithubViewedQueue } from "./github-viewed-queue.js";
 import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
@@ -59,7 +60,7 @@ function requireOpenWorktree(senderId: number, path: string): void {
   }
 }
 
-async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
+async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubViewedQueue: GithubViewedQueue }> {
   const cfg = loadConfig();
   const git = createGitEngine(join(app.getPath("userData"), "clones"));
   // Resolved per request rather than captured: the reviewer can enter or change the
@@ -69,6 +70,35 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
   // Finder gets a minimal PATH with no `gh` on it, which must leave the window open and
   // the settings reachable rather than killing the launch.
   const githubToken = async (): Promise<string> => resolveGithubToken(cfg.githubToken);
+  let accountCache: { token: string; account: GithubAccount } | null = null;
+  let activeAccount: GithubAccount | null = null;
+  async function accountForToken(token: string): Promise<GithubAccount> {
+    if (accountCache?.token === token) return accountCache.account;
+    const account = await getGithubAccount(token);
+    accountCache = { token, account };
+    return account;
+  }
+  async function githubConnection(): Promise<{ token: string; account: GithubAccount }> {
+    const token = await githubToken();
+    return { token, account: await accountForToken(token) };
+  }
+  const githubViewedQueue = createGithubViewedQueue({
+    path: join(app.getPath("userData"), "github-viewed-queue.json"),
+    currentAccount: async () => (await githubConnection()).account,
+    send: async (job) => {
+      const connection = await githubConnection();
+      if (connection.account.apiUrl !== job.account.apiUrl || connection.account.login !== job.account.login) {
+        throw new Error(`GitHub is signed in as ${connection.account.login}, not ${job.account.login}`);
+      }
+      await setFileViewed(job.pullRequestId, job.path, job.viewed, connection.token);
+    },
+    retryable: isRetryableGithubError,
+    onStatus: (status) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send("gander:githubViewedSyncStatus", status);
+      }
+    },
+  });
   const requireRepo = (repoId: string): RepoEntry => {
     const entry = cfg.repos.find((r) => r.repoId === repoId);
     if (!entry) throw new Error(`Repo ${repoId} is not registered`);
@@ -76,8 +106,19 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
   };
   const reviewer = createReviewer({
     git, service,
-    listPrs: async (repoId) => listOpenPrs(repoId, await githubToken()),
-    setFileViewed: async (pullRequestId, path, viewed) => setFileViewed(pullRequestId, path, viewed, await githubToken()),
+    listPrs: async (repoId) => {
+      const token = await githubToken();
+      const [account, prs] = await Promise.all([
+        accountForToken(token),
+        listOpenPrs(repoId, token),
+      ]);
+      activeAccount = account;
+      return prs;
+    },
+    enqueueFilesViewed: (pullRequestId, paths, viewed) => {
+      if (!activeAccount) throw new Error("GitHub account is not known; refresh the pull request and try again");
+      githubViewedQueue.enqueue(activeAccount, pullRequestId, paths, viewed);
+    },
     repoUrl: (repoId) => requireRepo(repoId).url,
     machine: hostname(),
   });
@@ -163,6 +204,7 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
   });
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => reviewer.listPrsWithProgress(repoId));
   ipcMain.handle("gander:serviceStatus", async () => service.status());
+  ipcMain.handle("gander:githubViewedSyncStatus", async () => githubViewedQueue.status());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
@@ -200,13 +242,20 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
     // Emptying it is how the reviewer goes back to whatever `gh` provides.
     if (trimmed === "") {
       delete cfg.githubToken;
+      accountCache = null;
+      activeAccount = null;
       saveConfig(cfg);
+      githubViewedQueue.retryFailed();
       return { ok: true as const, login: "" };
     }
     const result = await checkGithubToken(trimmed);
     if (!result.ok) return result;
     cfg.githubToken = trimmed;
+    const account = { apiUrl: githubApiUrl(), login: result.login };
+    accountCache = { token: trimmed, account };
+    activeAccount = account;
     saveConfig(cfg);
+    githubViewedQueue.retryFailed();
     return result;
   });
   ipcMain.handle("gander:testConnection", async (_e, url: string, token: string) => checkConnection(url, token));
@@ -230,7 +279,8 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
     zoomController.apply(settings.window.zoomLevel);
   });
 
-  return { cfg, git };
+  githubViewedQueue.start();
+  return { cfg, git, githubViewedQueue };
 }
 
 function installMenu(updates: UpdateController | null): void {
@@ -368,8 +418,9 @@ try {
 app.whenReady().then(async () => {
   let cfg: GanderConfig;
   let git: GitEngine;
+  let githubViewedQueue: GithubViewedQueue;
   try {
-    ({ cfg, git } = await bootstrap());
+    ({ cfg, git, githubViewedQueue } = await bootstrap());
     if (launchTarget !== null) assertRepositoryRegistered(cfg.repos, launchTarget.repoId);
   } catch (err) {
     dialog.showErrorBox("Gander failed to start", (err as Error).message);
@@ -380,6 +431,7 @@ app.whenReady().then(async () => {
   const updates = await initializeUpdates();
   installMenu(updates);
   updates?.checkAtStartup();
+  app.on("will-quit", () => githubViewedQueue.stop());
 
   try {
     const stop = await startOpenServer({

@@ -7,7 +7,7 @@ export interface ReviewerDeps {
   git: GitEngine;
   service: ServiceClient;
   listPrs(repoId: string): Promise<PrSummary[]>;
-  setFileViewed(pullRequestId: string, path: string, viewed: boolean): Promise<void>;
+  enqueueFilesViewed(pullRequestId: string, paths: string[], viewed: boolean): void;
   repoUrl(repoId: string): string;
   machine: string;
 }
@@ -221,20 +221,13 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       }
     }
 
-    const failures: string[] = [];
-    for (const { path } of files) {
-      try {
-        await deps.setFileViewed(view.pr.githubId, path, checked);
-      } catch (error) {
-        failures.push(`${path}: ${(error as Error).message}`);
-      }
+    let githubError: string | null = null;
+    try {
+      deps.enqueueFilesViewed(view.pr.githubId, files.map(({ path }) => path), checked);
+    } catch (error) {
+      const saved = files.length === 1 ? files[0]!.path : `${files.length} files`;
+      githubError = `${saved} saved as ${checked ? "reviewed" : "unreviewed"} in Gander, but its GitHub Viewed update could not be queued: ${(error as Error).message}`;
     }
-    const action = checked ? "reviewed" : "unreviewed";
-    const saved = files.length === 1 ? files[0]!.path : `${files.length} files`;
-    const failed = failures.length === 1 ? "1 file" : `${failures.length} files`;
-    const githubError = failures.length === 0
-      ? null
-      : `${saved} saved as ${action} in Gander, but GitHub did not mirror ${failed}: ${failures.join("; ")}`;
     return { view, githubError };
   }
 

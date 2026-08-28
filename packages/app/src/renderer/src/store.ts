@@ -2,8 +2,7 @@ import { reactive } from "vue";
 import { isUnreachableReason } from "@gander/shared";
 import type { ChangedFile, LocalFile, LocalFileEntry, LocalView, LocalWorktree, NoteState, OpenTarget, PrListItem, PrView, RepoEntry } from "@gander/shared";
 import type { GanderApi } from "./api.js";
-import type { ImagePreview } from "../../api.js";
-import type { ServiceStatus } from "../../api.js";
+import type { GithubViewedSyncStatus, ImagePreview, ServiceStatus } from "../../api.js";
 import { parentDirectory } from "./paths.js";
 
 export interface Store {
@@ -35,11 +34,14 @@ export interface Store {
   error: string | null;
   /** Reachability and compatibility from the service's version handshake. */
   serviceStatus: ServiceStatus;
+  /** Durable background work that mirrors Gander checkoffs to GitHub Viewed state. */
+  githubViewedSync: GithubViewedSyncStatus;
   /** When the pull request was last fetched from origin, as an ISO string. */
   lastFetchAt: string | null;
   /** True while a long-running main-process action is in flight. Not for setChecked/setCheckedMany — those are near-instant and shouldn't flicker a "busy" indicator. */
   busy: boolean;
   loadRepos(): Promise<void>;
+  loadGithubViewedSync(): Promise<void>;
   checkService(): Promise<void>;
   dismissError(): void;
   /** Reopen the pull request that was open when the app last closed. */
@@ -97,6 +99,13 @@ export function createStore(api: GanderApi): Store {
   let targetContextRequest = 0;
   let explorerMutation = Promise.resolve();
 
+  function applyGithubViewedSync(status: GithubViewedSyncStatus): void {
+    const previousMessage = store.githubViewedSync.message;
+    store.githubViewedSync = status;
+    if (status.failed > 0 && status.message) store.error = status.message;
+    else if (previousMessage !== null && store.error === previousMessage) store.error = null;
+  }
+
   function syncCurrentProgress(): void {
     if (!store.view) return;
     const item = store.prs.find((pr) => pr.number === store.view?.pr.number);
@@ -126,6 +135,7 @@ export function createStore(api: GanderApi): Store {
     localSurface: "explorer",
     error: null,
     serviceStatus: { state: "unreachable", reason: "Checking the Gander service…" },
+    githubViewedSync: { pending: 0, failed: 0, message: null },
     lastFetchAt: null,
     busy: false,
 
@@ -133,6 +143,9 @@ export function createStore(api: GanderApi): Store {
       await guard(async () => {
         store.repos = await api.listRepos();
       });
+    },
+    async loadGithubViewedSync() {
+      applyGithubViewedSync(await api.githubViewedSyncStatus());
     },
     async checkService() {
       const previous = store.serviceStatus;
@@ -548,5 +561,6 @@ export function createStore(api: GanderApi): Store {
     }
   }
 
+  api.onGithubViewedSyncStatus(applyGithubViewedSync);
   return store;
 }

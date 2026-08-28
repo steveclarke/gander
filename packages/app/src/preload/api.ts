@@ -9,6 +9,7 @@ import {
 } from "../api.js";
 import type { OpenTarget } from "@gander/shared";
 import type { LocalViewUpdate } from "../main/local-viewer.js";
+import type { GithubViewedSyncStatus } from "../main/github-viewed-queue.js";
 import { DEFAULT_THEME_ID, THEME_IDS, type ThemeId } from "../themes.js";
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>;
@@ -90,6 +91,8 @@ export function createGanderApi(
     testConnection: (url, token) => call("testConnection", url, token),
     setConnection: (url, token) => call("setConnection", url, token),
     setGithubToken: (token) => call("setGithubToken", token),
+    githubViewedSyncStatus: () => call("githubViewedSyncStatus"),
+    onGithubViewedSyncStatus: (listener) => subscribe("gander:githubViewedSyncStatus", (status: GithubViewedSyncStatus) => listener(status)),
     getSettings: () => call("getSettings"),
     updateSettings: (settings) => call("updateSettings", settings),
     onOpenSettings: (listener) => subscribe("gander:openSettings", listener),

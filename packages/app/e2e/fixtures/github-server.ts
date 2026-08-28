@@ -24,6 +24,9 @@ export class GithubServer {
   readonly server: FastifyInstance;
   url = "";
   private readonly repositories = new Map<string, RepositoryResponse>();
+  private viewedMutationGate: Promise<void> | null = null;
+  private releaseViewedMutation: (() => void) | null = null;
+  private viewedMutationEntered: (() => void) | null = null;
 
   private constructor() {
     this.server = Fastify({ logger: false });
@@ -38,6 +41,8 @@ export class GithubServer {
           repository.pullRequests.some((pullRequest) => this.pullRequestId(repoId, pullRequest.number) === input?.pullRequestId));
         if (!match || !input?.path) return reply.code(200).send({ errors: [{ message: "Pull request or path not found" }] });
         const [, repository] = match;
+        this.viewedMutationEntered?.();
+        await this.viewedMutationGate;
         if (request.body.query?.includes("unmarkFileAsViewed")) repository.viewedFiles.delete(input.path);
         else if (request.body.query?.includes("markFileAsViewed")) repository.viewedFiles.add(input.path);
         else return reply.code(200).send({ errors: [{ message: "Unknown mutation" }] });
@@ -48,6 +53,12 @@ export class GithubServer {
 
   static async start(): Promise<GithubServer> {
     const github = new GithubServer();
+    github.server.get("/user", async (request, reply) => {
+      if (request.headers.authorization !== `Bearer ${github.token}`) {
+        return reply.code(401).send({ message: "Bad credentials" });
+      }
+      return { login: "e2e-reviewer" };
+    });
     github.server.get<{ Params: { owner: string; repo: string }; Querystring: { page?: string } }>(
       "/repos/:owner/:repo/pulls",
       async (request, reply) => {
@@ -93,6 +104,24 @@ export class GithubServer {
 
   isViewed(repoId: string, path: string): boolean {
     return this.repositories.get(repoId)?.viewedFiles.has(path) ?? false;
+  }
+
+  pauseViewedMutations(): { entered: Promise<void>; release(): void } {
+    let entered!: () => void;
+    let release!: () => void;
+    const enteredPromise = new Promise<void>((resolve) => { entered = resolve; });
+    this.viewedMutationGate = new Promise<void>((resolve) => { release = resolve; });
+    this.viewedMutationEntered = entered;
+    this.releaseViewedMutation = release;
+    return {
+      entered: enteredPromise,
+      release: () => {
+        this.releaseViewedMutation?.();
+        this.viewedMutationGate = null;
+        this.releaseViewedMutation = null;
+        this.viewedMutationEntered = null;
+      },
+    };
   }
 
   private pullRequestId(repoId: string, number: number): string {

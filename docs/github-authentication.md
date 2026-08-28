@@ -30,6 +30,13 @@ out, GitHub-backed views fail with an actionable missing-token error. No other
 normal desktop workflow invokes `gh`. Developer-only worktree and release
 scripts do invoke it; those scripts are not part of the packaged app runtime.
 
+Viewed-state mutations run from a durable queue in Electron user data. Queue entries
+store the GitHub API base and account login, but never the token; the worker resolves
+the current credential when it sends and only processes entries for that account.
+Rapid toggles for the same pull request and path collapse to the latest state.
+Transient failures retry with backoff, while permanent failures remain visible in
+the app with their GitHub error text.
+
 The `git` executable remains a runtime requirement by design. Cloning and
 fetching private repositories use Git's own credential helper; the GitHub API
 token is not injected into Git commands.
