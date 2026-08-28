@@ -128,6 +128,8 @@ export const MarkInProgressSchema = z.object({
 export type MarkInProgress = z.infer<typeof MarkInProgressSchema>;
 
 export interface PrSummary {
+  /** GitHub's global node ID, required by file-viewed GraphQL mutations. */
+  githubId: string;
   number: number;
   title: string;
   body: string;

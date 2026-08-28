@@ -7,7 +7,7 @@ import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, save
 import { checkConnection } from "./connection.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine, type GitEngine } from "./git.js";
-import { checkGithubToken, listOpenPrs, resolveGithubToken } from "./github.js";
+import { checkGithubToken, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
 import { startOpenServer } from "./open-socket.js";
 import { createReviewer } from "./review.js";
 import { createServiceClient } from "./service-client.js";
@@ -77,6 +77,7 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine }> {
   const reviewer = createReviewer({
     git, service,
     listPrs: async (repoId) => listOpenPrs(repoId, await githubToken()),
+    setFileViewed: async (pullRequestId, path, viewed) => setFileViewed(pullRequestId, path, viewed, await githubToken()),
     repoUrl: (repoId) => requireRepo(repoId).url,
     machine: hostname(),
   });

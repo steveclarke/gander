@@ -311,14 +311,18 @@ export function createStore(api: GanderApi): Store {
     async setChecked(path: string, checked: boolean) {
       await guard(async () => {
         const { repoId, prNumber } = requireOpenPr();
-        store.view = await api.setChecked(repoId, prNumber, path, checked);
+        const result = await api.setChecked(repoId, prNumber, path, checked);
+        store.view = result.view;
+        store.error = result.githubError;
         syncCurrentProgress();
       });
     },
     async setCheckedMany(paths: string[], checked: boolean) {
       await guard(async () => {
         const { repoId, prNumber } = requireOpenPr();
-        store.view = await api.setCheckedMany(repoId, prNumber, paths, checked);
+        const result = await api.setCheckedMany(repoId, prNumber, paths, checked);
+        store.view = result.view;
+        store.error = result.githubError;
         syncCurrentProgress();
       });
     },

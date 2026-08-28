@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { listOpenPrs, resolveGithubToken } from "./github.js";
+import { listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
 
 const ghPr = {
+  node_id: "PR_kwDOExample",
   number: 987, title: "Late-fee automation", body: "Adds calculator", draft: true,
   base: { ref: "main", sha: "aaa111" }, head: { sha: "bbb222" },
 };
@@ -24,7 +25,7 @@ describe("listOpenPrs", () => {
     }) as typeof fetch;
 
     const prs = await listOpenPrs("acme/atlas", "tok", fakeFetch);
-    expect(prs).toEqual([{ number: 987, title: "Late-fee automation", body: "Adds calculator", draft: true, baseRef: "main", baseSha: "aaa111", headSha: "bbb222", stack: null }]);
+    expect(prs).toEqual([{ githubId: "PR_kwDOExample", number: 987, title: "Late-fee automation", body: "Adds calculator", draft: true, baseRef: "main", baseSha: "aaa111", headSha: "bbb222", stack: null }]);
   });
 
   it("surfaces API errors loudly with status and body", async () => {
@@ -78,6 +79,50 @@ describe("listOpenPrs", () => {
 
     expect(prs).toHaveLength(1);
     expect(calls).toBe(1);
+  });
+});
+
+describe("setFileViewed", () => {
+  const originalApiUrl = process.env.GANDER_GITHUB_API_URL;
+  beforeEach(() => { delete process.env.GANDER_GITHUB_API_URL; });
+  afterEach(() => {
+    if (originalApiUrl === undefined) delete process.env.GANDER_GITHUB_API_URL;
+    else process.env.GANDER_GITHUB_API_URL = originalApiUrl;
+  });
+
+  it.each([
+    [true, "markFileAsViewed", "MarkFileAsViewedInput"],
+    [false, "unmarkFileAsViewed", "UnmarkFileAsViewedInput"],
+  ])("mirrors viewed=%s through %s", async (viewed, mutation, inputType) => {
+    const fakeFetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.github.com/graphql");
+      expect(init?.method).toBe("POST");
+      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer tok");
+      const body = JSON.parse(String(init?.body)) as { query: string; variables: unknown };
+      expect(body.query).toContain(`${mutation}(input: $input)`);
+      expect(body.query).toContain(`$input: ${inputType}!`);
+      expect(body.variables).toEqual({ input: { pullRequestId: "PR_123", path: "src/a.ts" } });
+      return new Response(JSON.stringify({ data: { [mutation]: { clientMutationId: null } } }), { status: 200 });
+    }) as typeof fetch;
+
+    await setFileViewed("PR_123", "src/a.ts", viewed, "tok", fakeFetch);
+  });
+
+  it("surfaces GraphQL errors even when the HTTP request succeeds", async () => {
+    const fakeFetch = (async () => new Response(JSON.stringify({
+      errors: [{ message: "Resource not accessible by integration" }],
+    }), { status: 200 })) as typeof fetch;
+
+    await expect(setFileViewed("PR_123", "src/a.ts", true, "tok", fakeFetch)).rejects.toThrow(
+      /Resource not accessible by integration/,
+    );
+  });
+
+  it("surfaces HTTP errors with the response body", async () => {
+    const fakeFetch = (async () => new Response("Bad credentials", { status: 401 })) as typeof fetch;
+    await expect(setFileViewed("PR_123", "src/a.ts", true, "tok", fakeFetch)).rejects.toThrow(
+      /401.*Bad credentials/s,
+    );
   });
 });
 

@@ -37,7 +37,7 @@ service token. `bin/dev` starts the review service and the app together.
 this checkout's settings; see `DEVSTACK.md` for the setup and precedence rules.
 
 Reviewing a pull request needs `git` and a GitHub API token. The GitHub CLI is
-not a runtime requirement: Gander calls GitHub's REST API directly. Today it
+not a runtime requirement: Gander calls GitHub's REST and GraphQL APIs directly. Today it
 looks for a token in this order:
 
 1. `GANDER_GITHUB_TOKEN`, for development and automation

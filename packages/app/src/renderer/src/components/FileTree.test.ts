@@ -13,7 +13,7 @@ const file = (path: string, checked = false): PrFile =>
 
 function prView(prNumber: number, files: PrFile[], notes: PrView["notes"] = []): PrView {
   return {
-    pr: { number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
+    pr: { githubId: `PR_test_${prNumber}`, number: prNumber, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
     files,
     notes,
   };

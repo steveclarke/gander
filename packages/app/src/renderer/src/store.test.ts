@@ -6,7 +6,7 @@ import { createStore, readable } from "./store.js";
 import { DEFAULT_APP_SETTINGS } from "../../settings.js";
 
 const prView = (checkedPaths: string[] = []): PrView => ({
-  pr: { number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
+  pr: { githubId: "PR_test_1", number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b" },
   files: [
     { path: "a.rb", status: "M", baseContent: "o", headContent: "n", baseHash: "b1", headHash: "h1", checked: checkedPaths.includes("a.rb"), changedSince: false },
     { path: "b.rb", status: "A", baseContent: null, headContent: "x", baseHash: null, headHash: "h2", checked: checkedPaths.includes("b.rb"), changedSince: false },
@@ -35,10 +35,10 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     chooseLocalRepo: async () => null,
     removeRepo: async () => {},
     listWorktrees: async () => [],
-    listPrs: async () => [{ number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b", reviewProgress: null }],
+    listPrs: async () => [{ githubId: "PR_test_1", number: 1, title: "T", body: "", draft: false, baseRef: "main", baseSha: "a", headRef: "feature", stack: null, headSha: "b", reviewProgress: null }],
     openPr: async () => prView(),
-    setChecked: async (_r, _n, path, checked) => prView(checked ? [path] : []),
-    setCheckedMany: async (_r, _n, paths) => prView(paths),
+    setChecked: async (_r, _n, path, checked) => ({ view: prView(checked ? [path] : []), githubError: null }),
+    setCheckedMany: async (_r, _n, paths) => ({ view: prView(paths), githubError: null }),
     refreshPr: async () => prView(),
     lastReview: async () => null,
     initialTarget: async () => null,
@@ -183,6 +183,23 @@ describe("store", () => {
     expect(store.prs[0]?.reviewProgress).toEqual({ done: 1, total: 2 });
     await store.setChecked("a.rb", false);
     expect(store.prs[0]?.reviewProgress).toEqual({ done: 0, total: 2 });
+  });
+
+  it("shows a GitHub mirror failure without losing the saved Gander checkoff", async () => {
+    const store = createStore(fakeApi({
+      setChecked: async (_repoId, _prNumber, path) => ({
+        view: prView([path]),
+        githubError: `${path} saved as reviewed in Gander, but GitHub did not mirror 1 file`,
+      }),
+    }));
+    await store.loadRepos();
+    await store.selectRepo("acme/atlas");
+    await store.openPr(1);
+
+    await store.setChecked("a.rb", true);
+
+    expect(store.view?.files.find((file) => file.path === "a.rb")?.checked).toBe(true);
+    expect(store.error).toMatch(/saved as reviewed in Gander/);
   });
 
   it("registers and selects a repository from a chosen checkout", async () => {
