@@ -81,6 +81,15 @@ const lastFetch = computed(() => {
 
     <span v-if="store.view || store.localView" class="sep">·</span>
     <span v-if="store.view || store.localView" class="fetch">{{ lastFetch }}</span>
+    <span
+      v-if="store.githubViewedSync.pending > 0 || store.githubViewedSync.failed > 0"
+      class="github-sync"
+      :class="{ failed: store.githubViewedSync.failed > 0 }"
+      :title="store.githubViewedSync.message ?? 'GitHub Viewed changes are syncing in the background'"
+      role="status"
+    >
+      GitHub sync · {{ store.githubViewedSync.failed > 0 ? `${store.githubViewedSync.failed} failed` : `${store.githubViewedSync.pending} pending` }}
+    </span>
 
     <span class="spacer" />
     <span v-if="store.busy" class="working">Working…</span>
@@ -116,6 +125,8 @@ const lastFetch = computed(() => {
 .service.warning .dot { background: var(--warning); }
 .spacer { flex: 1; }
 .working { color: var(--muted-foreground); }
+.github-sync { color: var(--muted-foreground); }
+.github-sync.failed { color: var(--danger); }
 .development { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 32ch; color: var(--warning); }
 .development-kind { flex: none; font-weight: 700; letter-spacing: 0.06em; }
 .worktree-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

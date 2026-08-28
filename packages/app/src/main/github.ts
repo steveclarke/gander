@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { PrSummary } from "@gander/shared";
+import type { GithubAccount } from "./github-viewed-queue.js";
 
 type ExecFileFn = (file: string, args: readonly string[]) => Promise<{ stdout: string }>;
 
@@ -20,7 +21,7 @@ interface GhPr {
 const PER_PAGE = 100;
 const DEFAULT_API_URL = "https://api.github.com";
 
-const apiBase = (): string => (process.env.GANDER_GITHUB_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, "");
+export const githubApiUrl = (): string => (process.env.GANDER_GITHUB_API_URL ?? DEFAULT_API_URL).replace(/\/+$/, "");
 
 function githubHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
@@ -28,6 +29,39 @@ function githubHeaders(token: string): Record<string, string> {
 
 interface GraphqlResponse {
   errors?: Array<{ message?: unknown }>;
+}
+
+export class GithubApiError extends Error {
+  constructor(message: string, readonly retryable: boolean) {
+    super(message);
+    this.name = "GithubApiError";
+  }
+}
+
+export function isRetryableGithubError(error: unknown): boolean {
+  return error instanceof GithubApiError && error.retryable;
+}
+
+const retryableHttpError = (status: number, detail: string): boolean =>
+  status === 408 || status === 429 || status >= 500
+  || (status === 403 && /rate.?limit|secondary rate|abuse/i.test(detail));
+
+export async function getGithubAccount(token: string, fetchImpl: typeof fetch = fetch): Promise<GithubAccount> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`${githubApiUrl()}/user`, { headers: githubHeaders(token) });
+  } catch (error) {
+    throw new GithubApiError(`Could not reach GitHub: ${(error as Error).message}`, true);
+  }
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new GithubApiError(`GitHub API ${res.status}: ${detail}`, retryableHttpError(res.status, detail));
+  }
+  const body = (await res.json()) as { login?: unknown };
+  if (typeof body.login !== "string" || body.login === "") {
+    throw new GithubApiError("GitHub's user response did not contain a login", false);
+  }
+  return { apiUrl: githubApiUrl(), login: body.login };
 }
 
 /** Mirror one Gander checkoff to the authenticated reviewer's GitHub Viewed state. */
@@ -40,25 +74,33 @@ export async function setFileViewed(
 ): Promise<void> {
   const mutation = viewed ? "markFileAsViewed" : "unmarkFileAsViewed";
   const input = viewed ? "MarkFileAsViewedInput" : "UnmarkFileAsViewedInput";
-  const res = await fetchImpl(`${apiBase()}/graphql`, {
-    method: "POST",
-    headers: { ...githubHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      query: `mutation MirrorFileViewed($input: ${input}!) { ${mutation}(input: $input) { clientMutationId } }`,
-      variables: { input: { pullRequestId, path } },
-    }),
-  });
-  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  let res: Response;
+  try {
+    res = await fetchImpl(`${githubApiUrl()}/graphql`, {
+      method: "POST",
+      headers: { ...githubHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `mutation MirrorFileViewed($input: ${input}!) { ${mutation}(input: $input) { clientMutationId } }`,
+        variables: { input: { pullRequestId, path } },
+      }),
+    });
+  } catch (error) {
+    throw new GithubApiError(`Could not reach GitHub: ${(error as Error).message}`, true);
+  }
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new GithubApiError(`GitHub API ${res.status}: ${detail}`, retryableHttpError(res.status, detail));
+  }
   const body = (await res.json()) as GraphqlResponse;
   if (body.errors?.length) {
     const detail = body.errors.map((error) => typeof error.message === "string" ? error.message : "Unknown GraphQL error").join("; ");
-    throw new Error(`GitHub GraphQL: ${detail}`);
+    throw new GithubApiError(`GitHub GraphQL: ${detail}`, /rate.?limit|temporar|timeout/i.test(detail));
   }
 }
 
 export async function listOpenPrs(repoId: string, token: string, fetchImpl: typeof fetch = fetch): Promise<PrSummary[]> {
   const headers = githubHeaders(token);
-  const apiUrl = apiBase();
+  const apiUrl = githubApiUrl();
   const all: GhPr[] = [];
   let page = 1;
   for (;;) {
@@ -97,7 +139,7 @@ const GH_PATHS = [
 
 /** Whether a token GitHub will accept, and who it belongs to — for the settings pane. */
 export async function checkGithubToken(token: string, fetchImpl: typeof fetch = fetch): Promise<{ ok: true; login: string } | { ok: false; reason: string }> {
-  const apiUrl = apiBase();
+  const apiUrl = githubApiUrl();
   let res: Response;
   try {
     res = await fetchImpl(`${apiUrl}/user`, {

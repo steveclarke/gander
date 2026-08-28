@@ -44,6 +44,8 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     initialTarget: async () => null,
     getConnection: async () => ({ url: "http://service", token: "t", githubToken: "", fromEnvironment: false }),
     setGithubToken: async () => ({ ok: true as const, login: "octocat" }),
+    githubViewedSyncStatus: async () => ({ pending: 0, failed: 0, message: null }),
+    onGithubViewedSyncStatus: () => () => {},
     testConnection: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
     setConnection: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
     onOpenTarget: () => () => {},
@@ -75,6 +77,25 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
 }
 
 describe("store", () => {
+  it("tracks background GitHub Viewed work and surfaces permanent failures", async () => {
+    const listeners: Array<(status: { pending: number; failed: number; message: string | null }) => void> = [];
+    const store = createStore(fakeApi({
+      githubViewedSyncStatus: async () => ({ pending: 2, failed: 0, message: null }),
+      onGithubViewedSyncStatus: (next) => { listeners.push(next); return () => {}; },
+    }));
+
+    await store.loadGithubViewedSync();
+    expect(store.githubViewedSync).toEqual({ pending: 2, failed: 0, message: null });
+
+    const message = "GitHub Viewed sync failed for a.rb: Bad credentials. The Gander review is saved.";
+    listeners[0]!({ pending: 0, failed: 1, message });
+    expect(store.githubViewedSync.failed).toBe(1);
+    expect(store.error).toBe(message);
+
+    listeners[0]!({ pending: 0, failed: 0, message: null });
+    expect(store.error).toBeNull();
+  });
+
   it("opens a target naming a repository and pull request", async () => {
     const store = createStore(fakeApi());
     await store.loadRepos();

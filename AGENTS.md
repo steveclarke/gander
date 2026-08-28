@@ -201,9 +201,12 @@ reverting the fix.
   Match that density; don't narrate what the code already says.
 - Everything in the app is read-only with respect to repository content. The only
   GitHub mutation mirrors Gander checkoffs to the reviewer's per-user Viewed state;
-  comments, approvals, and merges remain out of scope by design.
-- Errors surface: no silent degradation, no write queues, no swallowed git or
-  GitHub error text.
+  comments, approvals, and merges remain out of scope by design. That mirror uses
+  an account-scoped durable queue in Electron user data so GitHub latency never
+  blocks the authoritative service checkoff.
+- Errors surface: no silent degradation, no queues for authored service state, no
+  swallowed git or GitHub error text. Transient GitHub Viewed failures retry in the
+  background; permanent failures remain visible in the status bar and error banner.
 - Icons come from `@lucide/vue`. Panel sizes and docking live in
   localStorage (`renderer/src/layout.ts`); anything a second machine should see
   belongs in the service instead.

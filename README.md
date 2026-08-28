@@ -44,6 +44,10 @@ looks for a token in this order:
 2. the token entered in Settings → Connection
 3. an existing `gh auth login` session, as a convenience fallback
 
+Gander saves a review checkoff first, then mirrors it to GitHub's per-user Viewed
+state from a durable background queue. A slow GitHub request does not delay the
+local UI, and permanent mirror failures remain visible in the app.
+
 Git operations use the system `git` binary and its configured credential
 helper. Until built-in sign-in lands, a token entered in Settings is stored in
 Gander's mode-`0600` config file rather than the OS credential store. See

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
+import { getGithubAccount, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
 
 const ghPr = {
   node_id: "PR_kwDOExample",
@@ -123,6 +123,35 @@ describe("setFileViewed", () => {
     await expect(setFileViewed("PR_123", "src/a.ts", true, "tok", fakeFetch)).rejects.toThrow(
       /401.*Bad credentials/s,
     );
+  });
+
+  it("classifies rate limits and server errors for retry but not authentication failures", async () => {
+    const rateLimited = setFileViewed("PR_123", "src/a.ts", true, "tok", (async () =>
+      new Response("slow down", { status: 429 })) as typeof fetch);
+    await expect(rateLimited).rejects.toSatisfy(isRetryableGithubError);
+
+    const unauthorized = setFileViewed("PR_123", "src/a.ts", true, "tok", (async () =>
+      new Response("Bad credentials", { status: 401 })) as typeof fetch);
+    await expect(unauthorized).rejects.not.toSatisfy(isRetryableGithubError);
+
+    const rateLimited403 = setFileViewed("PR_123", "src/a.ts", true, "tok", (async () =>
+      new Response("API rate limit exceeded", { status: 403 })) as typeof fetch);
+    await expect(rateLimited403).rejects.toSatisfy(isRetryableGithubError);
+  });
+});
+
+describe("getGithubAccount", () => {
+  it("loads the account identity without retaining the token", async () => {
+    const fakeFetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toBe("https://api.github.com/user");
+      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer tok");
+      return new Response(JSON.stringify({ login: "octocat" }), { status: 200 });
+    }) as typeof fetch;
+
+    await expect(getGithubAccount("tok", fakeFetch)).resolves.toEqual({
+      apiUrl: "https://api.github.com",
+      login: "octocat",
+    });
   });
 });
 

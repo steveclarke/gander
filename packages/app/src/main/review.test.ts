@@ -34,7 +34,7 @@ beforeEach(async () => {
     git: createGitEngine(clonesRoot),
     service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
     listPrs: async () => [await currentPr(fixture)],
-    setFileViewed: async () => {},
+    enqueueFilesViewed: () => {},
     repoUrl: () => fixture.dir,
     machine: "test-machine",
   });
@@ -72,7 +72,7 @@ describe("review pipeline", () => {
       git: countingEngine,
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
-      setFileViewed: async () => {},
+      enqueueFilesViewed: () => {},
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
@@ -137,13 +137,13 @@ describe("review pipeline", () => {
     expect(reopened.files.every((f) => f.checked)).toBe(true);
   });
 
-  it("mirrors each saved checkoff to the GitHub pull request", async () => {
-    const calls: Array<[string, string, boolean]> = [];
+  it("queues each saved checkoff for the GitHub pull request", async () => {
+    const calls: Array<[string, string[], boolean]> = [];
     const mirrored = createReviewer({
       git: createGitEngine(clonesRoot),
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
-      setFileViewed: async (...args) => { calls.push(args); },
+      enqueueFilesViewed: (...args) => { calls.push(args); },
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
@@ -155,18 +155,17 @@ describe("review pipeline", () => {
     expect(checked.githubError).toBeNull();
     expect(unchecked.githubError).toBeNull();
     expect(calls).toEqual([
-      ["PR_test_1", "a.rb", true],
-      ["PR_test_1", "b.rb", true],
-      ["PR_test_1", "a.rb", false],
+      ["PR_test_1", ["a.rb", "b.rb"], true],
+      ["PR_test_1", ["a.rb"], false],
     ]);
   });
 
-  it("keeps the Gander checkoff and reports the mismatch when GitHub rejects it", async () => {
+  it("keeps the Gander checkoff and reports when the GitHub update cannot be queued", async () => {
     const mirrored = createReviewer({
       git: createGitEngine(clonesRoot),
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
-      setFileViewed: async () => { throw new Error("GitHub GraphQL: Resource not accessible by integration"); },
+      enqueueFilesViewed: () => { throw new Error("queue is not writable"); },
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
@@ -175,7 +174,7 @@ describe("review pipeline", () => {
     const result = await mirrored.setChecked("acme/atlas", 1, "a.rb", true);
 
     expect(result.view.files.find((file) => file.path === "a.rb")?.checked).toBe(true);
-    expect(result.githubError).toMatch(/saved as reviewed in Gander.*GitHub.*Resource not accessible/s);
+    expect(result.githubError).toMatch(/saved as reviewed in Gander.*GitHub.*could not be queued.*queue is not writable/s);
     expect(storage.getReview("acme/atlas", 1).files.find((file) => file.path === "a.rb")?.checked).toBe(true);
   });
 
@@ -195,7 +194,7 @@ describe("review pipeline", () => {
       git: createGitEngine(clonesRoot),
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(moved)],
-      setFileViewed: async () => {},
+      enqueueFilesViewed: () => {},
       repoUrl: () => moved.dir,
       machine: "test-machine",
     });
@@ -310,7 +309,7 @@ describe("review pipeline", () => {
       git: countingEngine,
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
-      setFileViewed: async () => {},
+      enqueueFilesViewed: () => {},
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
@@ -410,7 +409,7 @@ describe("review pipeline", () => {
       git: createGitEngine(clonesRoot),
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
-      setFileViewed: async () => {},
+      enqueueFilesViewed: () => {},
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
@@ -446,7 +445,7 @@ describe("review pipeline", () => {
       git: createGitEngine(clonesRoot),
       service: createServiceClient(() => ({ url: `http://127.0.0.1:${port}`, token: "t" })),
       listPrs: async () => [await currentPr(fixture)],
-      setFileViewed: async () => {},
+      enqueueFilesViewed: () => {},
       repoUrl: () => fixture.dir,
       machine: "test-machine",
     });
