@@ -15,6 +15,7 @@ export type Command =
   | "first-file"
   | "last-file"
   | "jump-row"
+  | "quick-file"
   | "toggle-directory"
   | "dismiss"
   | "toggle-checked"
@@ -48,6 +49,7 @@ export const BINDINGS: Binding[] = [
   { command: "first-file", keys: ["g"], prefix: "g", label: "gg", description: "First row", group: "Move" },
   { command: "last-file", keys: ["G"], label: "⇧G", description: "Last row", group: "Move" },
   { command: "jump-row", keys: ["f"], label: "f", description: "Jump to a visible row by name", group: "Move" },
+  { command: "quick-file", keys: ["p"], label: "⌘P", description: "Open a file in this pull request", group: "Move", meta: true },
   { command: "toggle-directory", keys: ["o"], label: "o", description: "Open the directory and step in, or close the one you are in", group: "Move" },
   { command: "dismiss", keys: ["Escape"], label: "Esc", description: "Close what is open on top", group: "Move" },
 
@@ -66,6 +68,12 @@ export const BINDINGS: Binding[] = [
 ];
 
 export const GROUPS: Binding["group"][] = ["Move", "Review", "Read", "Panels"];
+
+export function bindingLabel(command: Command, isMac = /Mac/.test(globalThis.navigator?.platform ?? "")): string {
+  const binding = BINDINGS.find((candidate) => candidate.command === command);
+  if (!binding) return "";
+  return binding.meta === true && !isMac ? binding.label.replace("⌘", "Ctrl+") : binding.label;
+}
 
 /**
  * `pending` is the prefix key already pressed, if any. A binding with a prefix is reachable

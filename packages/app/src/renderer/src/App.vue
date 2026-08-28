@@ -21,6 +21,8 @@ import SettingsPane from "./components/SettingsPane.vue";
 import StatusBar from "./components/StatusBar.vue";
 import TargetBar from "./components/TargetBar.vue";
 import WorkbenchSidebar from "./components/WorkbenchSidebar.vue";
+import QuickFilePicker from "./components/QuickFilePicker.vue";
+import { revealReviewFile } from "./tree-nav.js";
 
 const store = createStore(api);
 const editorSettings = createEditorSettingsStore(api, api.initialWindowState.colorTheme);
@@ -38,6 +40,7 @@ const noteFocusRequest = shallowRef(0);
 const drawerOpen = ref(false);
 const treeVisible = ref(true);
 const helpOpen = ref(false);
+const quickFileOpen = shallowRef(false);
 const repoPendingRemoval = ref<string | null>(null);
 const reviewSurface = ref<InstanceType<typeof ReviewSurface> | null>(null);
 
@@ -52,6 +55,7 @@ const treeJump = useReviewKeyboard({
   helpOpen,
   diff: () => reviewSurface.value,
   captureNote: () => openNote(),
+  openQuickFile,
 });
 
 useBackgroundRefresh(store, () => store.view !== null || store.localView !== null);
@@ -65,6 +69,7 @@ onMounted(() => {
 watch(activeMode, (mode) => {
   if (mode === "pulls") return;
   drawerOpen.value = false;
+  quickFileOpen.value = false;
   closeNote();
 });
 
@@ -72,6 +77,7 @@ watch(() => [store.targetRepoId, store.selectedPrNumber] as const, ([repoId, prN
   if (repoId === previous[0] && prNumber === previous[1]) return;
   // A draft belongs to the review where it began. The pane no longer blocks navigation,
   // so switching reviews must not carry that target into a different pull request.
+  quickFileOpen.value = false;
   closeNote();
 });
 
@@ -92,6 +98,18 @@ function openNote(target?: NoteTarget): void {
 function closeNote(): void {
   noteTarget.value = null;
   noteDraft.value = "";
+}
+
+function openQuickFile(): void {
+  if (!store.view || activeMode.value !== "pulls") return;
+  helpOpen.value = false;
+  quickFileOpen.value = true;
+}
+
+function selectQuickFile(path: string): void {
+  revealReviewFile(path);
+  store.select(path);
+  quickFileOpen.value = false;
 }
 
 async function confirmRemoveRepo(): Promise<void> {
@@ -184,6 +202,14 @@ async function confirmRemoveRepo(): Promise<void> {
       @open-zoom-settings="openSettings('workbench')"
     />
     <KeymapHelp v-if="helpOpen" @close="helpOpen = false" />
+    <QuickFilePicker
+      v-if="quickFileOpen && store.view"
+      :files="store.view.files"
+      :selected-path="store.selectedPath"
+      :icon-theme="editorSettings.settings.workbench.iconTheme"
+      @select="selectQuickFile"
+      @close="quickFileOpen = false"
+    />
     <ConfirmDialog
       :open="repoPendingRemoval !== null"
       title="Remove repository?"

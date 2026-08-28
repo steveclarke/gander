@@ -22,6 +22,7 @@ export interface KeyboardSurface {
   /** Null until the review surface has mounted its diff. */
   diff: () => DiffCommands | null;
   captureNote: () => void;
+  openQuickFile: () => void;
 }
 
 /**
@@ -63,6 +64,9 @@ export function useReviewKeyboard(surface: KeyboardSurface): TreeJump {
         return moveTo(edge(files, command === "first-file" ? "first" : "last"));
       case "jump-row":
         return surface.treeVisible.value && store.currentRepoId === store.targetRepoId && treeJump.start();
+      case "quick-file":
+        surface.openQuickFile();
+        return true;
       case "toggle-directory": {
         if (at === null) return true;
         // Opening a directory is how a reviewer says "let me look in here", so the cursor
