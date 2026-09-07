@@ -1,56 +1,52 @@
 # Brand kit
 
-`brand-guide.html` is the reference — open it first.
+`brand-guide.html` shows the logo variants, palette, typography, and asset inventory.
 
-## What is authored here
+The mascot is a curious goose with a swept feather tuft, raised eyebrow, and
+smiling orange bill. The approved design has no magnifying glass or accessories.
+
+## Sources
 
 | Path | Contents |
 |---|---|
-| `svg/` | The nine masters. Everything else is derived from these. |
-| `png/` | Raster exports of the masters. |
-| `favicon/` | Icon set plus `site.webmanifest`. |
-| `social/` | OG image and platform avatars. |
-| `fonts/` | Bricolage Grotesque variable font and its licence note. |
+| `svg/mark-color.svg` | The original hand-drawn mascot, with explicit face and bill fills. |
+| `svg/mark-black.svg`, `svg/mark-white.svg` | Single-ink variants. Luminance masks cut out the face, bill, and highlights. |
+| `svg/logo-*.svg` | Horizontal and stacked lockups in color, black, and white. |
+| `svg/app-icon.svg` | Rounded cream tile for the packaged desktop app. |
+| `svg/app-icon-square.svg` | Square cream tile for favicons and social avatars. |
+| `svg/app-icon-dev.svg` | Inset amber tile distinguishing development from the packaged app. |
+| `fonts/` | Bricolage Grotesque variable font and source information. |
 
-`svg/app-icon.svg` and `svg/app-icon-square.svg` are the icon masters: the navy
-mark on a solid light field, filling 76% of the canvas and centred on its own
-ink rather than on the master's viewBox. Everything in `favicon/` and every avatar in
-`social/` comes from the square one, and `packages/app/resources/icon.png` from
-the rounded one. They exist because the mark's cheek is negative space — dropped
-straight onto a transparent icon canvas, the eye and cheek fill with whatever
-sits behind the icon.
+The color mascot retains its cream face on any background. The black and white
+variants have a transparent face and use one ink color. Do not make a monochrome
+variant by replacing every fill: that would erase the expression.
 
-## How the masters were built
+The wordmark retains the existing Bricolage Grotesque 700 lettering, already
+converted to paths. All SVG masters work without installed fonts. Lockups and
+icons center the mascot on its visible artwork, rather than its square viewBox.
+The icon artwork occupies 76% of the tile height.
 
-The mark came out of Recraft's Vector model in its "Geometric Logo" style. The
-vectoriser flattened the bill tip to a blunt edge, so one curve in the outline
-path was extended by hand to restore the point; the shape is otherwise as
-generated.
+## Regenerate exports
 
-The wordmark is Bricolage Grotesque 700 at font-size 92 with letter-spacing -2,
-composed against a mark scaled to 140px tall for the horizontal lockup and 242px
-tall for the stacked one, then converted to paths:
+Install Inkscape and ImageMagick, then run from the repository root:
 
-```
-inkscape FILE --actions="select-all;object-to-path;export-filename:FILE;export-do"
-inkscape FILE --actions="select-all;fit-canvas-to-selection;export-filename:FILE;export-do"
+```sh
+python3 brand/export.py
 ```
 
-Inkscape writes its root tag as `<svg\n`, not `<svg `, and re-adds `width`/
-`height` attributes matching the viewBox. Anything that inlines these files and
-sizes them by attribute will get a full-bleed SVG instead — size them in CSS.
+The script reads the SVG masters and regenerates all PNGs, the multi-size ICO,
+social images, both Electron icons, and the nine embedded brand-guide previews.
+Edit the appropriate SVG masters before running it. The guide's palette and
+prose are maintained directly in `brand-guide.html`.
 
-## Colour ramp
+## Colors
 
-Steps 50–950 are OKLCH at hue 251.78, with the brand navy `#1B3A5B` pinned at
-step 900 (L 0.342, C 0.069) and chroma scaled by a curve peaking at step 600.
-The `@theme` block in the brand guide is the copy-paste form.
+- Navy `#1B3A5B`: outline, body, eye, and color wordmark.
+- Cream `#FFF8E9`: face, breast, eye highlight, and icon background.
+- Orange `#F5A340`: bill.
+- Sand `#E6DBC5`: breast shading.
+- Slate `#47617C`: wing highlight.
+- Amber `#E9B65B`: development icon background only.
 
-## Regenerating a colour variant
-
-The masters are single-colour: every fill in a given file is the same hex, and
-the white cheek is negative space. A variant is a search and replace.
-
-```
-sed 's/#1b3a5b/#0a2139/gi' svg/logo-horizontal-color.svg > /tmp/variant.svg
-```
+The existing navy UI ramp remains unchanged: OKLCH hue 251.78, with navy pinned
+at step 900. The guide contains the Tailwind `@theme` block.
