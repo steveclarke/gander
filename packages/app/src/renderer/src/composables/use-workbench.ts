@@ -25,7 +25,7 @@ export interface Workbench {
   openExternalTarget(target: OpenTarget): Promise<void>;
   chooseRepo(repoId?: string): Promise<void>;
   removeRepo(repoId: string): Promise<void>;
-  selectRepo(repoId: string, options?: { keepChosenMode?: boolean }): Promise<void>;
+  selectRepo(repoId: string): Promise<void>;
   selectWorktree(path: string): Promise<void>;
   selectMode(mode: WorkbenchMode): Promise<void>;
   openPr(prNumber: number): Promise<void>;
@@ -38,8 +38,8 @@ export interface Workbench {
  * the reviewer's own navigation always wins over a load that is still in flight.
  */
 export function useWorkbench(store: Store, api: GanderApi): Workbench {
-  const activeMode = shallowRef<WorkbenchMode>("explorer");
-  const modeBeforeSettings = shallowRef<Exclude<WorkbenchMode, "settings">>("explorer");
+  const activeMode = shallowRef<WorkbenchMode>("pulls");
+  const modeBeforeSettings = shallowRef<Exclude<WorkbenchMode, "settings">>("pulls");
   const settingsCategory = shallowRef<SettingsCategory>("workbench");
   const unconfigured = shallowRef(false);
 
@@ -68,21 +68,10 @@ export function useWorkbench(store: Store, api: GanderApi): Workbench {
     await store.loadRepos();
   }
 
-  function landIn(mode: LocalMode, keepChosenMode: boolean): void {
-    // The reviewer went somewhere else while the load was in flight: remember where this
-    // target landed, so closing Settings returns to it, and leave them where they are.
-    if (keepChosenMode && activeMode.value !== "explorer") {
-      modeBeforeSettings.value = mode;
-      return;
-    }
-    activeMode.value = mode;
-  }
-
   async function openLocalTarget(
     path: string,
     mode: LocalMode,
     contextError: string | null,
-    keepChosenMode = false,
   ): Promise<void> {
     await store.openLocal(path);
     const localError = store.error;
@@ -90,7 +79,7 @@ export function useWorkbench(store: Store, api: GanderApi): Workbench {
     store.error = errors.length ? errors.join("\n") : null;
     if (localError) return;
     store.showLocalSurface(mode);
-    landIn(mode, keepChosenMode);
+    activeMode.value = mode;
   }
 
   async function openExternalTarget(target: OpenTarget): Promise<void> {
@@ -110,19 +99,14 @@ export function useWorkbench(store: Store, api: GanderApi): Workbench {
     } else activeMode.value = "pulls";
   }
 
-  /**
-   * `keepChosenMode` is for the repository opened at launch: that load finishes long after
-   * the window is usable, and it must not drag the reviewer out of a view they opened
-   * while it was still working.
-   */
-  async function selectRepo(repoId: string, { keepChosenMode = false } = {}): Promise<void> {
+  async function selectRepo(repoId: string): Promise<void> {
     await store.selectRepo(repoId);
     const contextError = store.error;
     if (!store.targetWorktreePath) {
-      landIn("explorer", keepChosenMode);
+      activeMode.value = "explorer";
       return;
     }
-    await openLocalTarget(store.targetWorktreePath, "explorer", contextError, keepChosenMode);
+    await openLocalTarget(store.targetWorktreePath, "explorer", contextError);
   }
 
   /** Register a repository from a folder on disk, and open its checkout. `repoId` names the one the reviewer is being asked to locate. */
@@ -188,7 +172,9 @@ export function useWorkbench(store: Store, api: GanderApi): Workbench {
     }
 
     const firstRepo = store.repos[0];
-    if (firstRepo) await selectRepo(firstRepo.repoId, { keepChosenMode: true });
+    // Loading the initial repository must not switch away from Pull Requests or from
+    // a view the reviewer selected while startup was still in flight.
+    if (firstRepo) await store.selectRepo(firstRepo.repoId);
   }
 
   // The main process can name a target at any time — at launch, and again whenever
