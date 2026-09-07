@@ -11,9 +11,8 @@ export class WorkbenchDriver {
   }
 
   async selectWorktree(branch: string): Promise<void> {
-    // Launch selects the registered checkout asynchronously. Wait for that first local
-    // view before replacing it, or its late completion can win this interaction race.
-    await expect(this.page.locator(".local-progress")).toBeVisible();
+    // Explorer becomes available once startup has loaded the repository's worktrees.
+    await expect(this.page.getByRole("button", { name: "Explorer", exact: true })).toBeEnabled();
     const trigger = this.page.locator('button[aria-controls="target-picker"]');
     await trigger.click();
     await this.page.locator(".worktree-row").filter({ hasText: branch }).click();

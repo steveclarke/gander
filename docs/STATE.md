@@ -87,6 +87,10 @@ picker. The target switcher remembers it and discovers its linked worktrees with
 workspace; the activity bar switches among Explorer, Current Diff, and Pull Requests
 without changing what those modes mean.
 
+On a normal launch, Pull Requests is selected and the initial repository's pull request
+list loads. This also applies after closing the app from another view. An explicit
+command-line target still opens the requested review or local checkout.
+
 Every registered repository has a local checkout. Gander derives its repository ID and
 remote URL from Git; URL-only registration and command-line auto-registration are not
 supported. If the checkout moves, the target switcher can locate a replacement checkout

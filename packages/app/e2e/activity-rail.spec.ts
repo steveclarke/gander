@@ -1,5 +1,26 @@
 import { test, expect } from "./fixtures/test.js";
 
+test("opens Pull Requests on launch and after using another view", async ({ world }) => {
+  const title = "Startup review";
+  await world.addLocalRepository({ repoId: "acme/startup", title });
+  const app = await world.launch();
+
+  async function expectPullRequests(): Promise<void> {
+    const rail = app.page.getByRole("navigation", { name: "Workspace views" });
+    await expect(rail.getByRole("button", { name: "Pull Requests" })).toHaveClass(/active/);
+    await expect(app.page.getByRole("option").filter({ hasText: title })).toBeVisible();
+  }
+
+  await expectPullRequests();
+  for (const name of ["Explorer", "Current Diff"]) {
+    const button = app.page.getByRole("navigation", { name: "Workspace views" }).getByRole("button", { name });
+    await button.click();
+    await expect(button).toHaveClass(/active/);
+    await app.restart();
+    await expectPullRequests();
+  }
+});
+
 test("reorders workspace views by dragging and remembers the order", async ({ world }) => {
   await world.addLocalRepository({ repoId: "acme/activity-rail" });
   const app = await world.launch();
