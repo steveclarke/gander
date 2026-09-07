@@ -72,12 +72,26 @@ bin/mcp call mark_note_addressed id=NOTE_ID commitRef=COMMIT_SHA summary="WHAT C
 
 Discuss the note with the reviewer in the active agent session. Only mark it
 addressed after the work is complete, and use `summary` for a concise durable
-record of what changed. Only the reviewer resolves a note after re-reviewing the
-file; the MCP contract has no reply tool.
+record of what changed. Resolution follows the reviewer's decision: they can re-review in the app or
+explicitly ask an agent to resolve the note. On that explicit instruction, use:
+
+```bash
+bin/mcp call resolve_note id=NOTE_ID
+```
+
+To reopen a note on explicit reviewer direction:
+
+```bash
+bin/mcp call reopen_note id=NOTE_ID
+```
+
+Both tools use the global id, preserve text, context, and outcome, and clear the
+in-progress note. Repeated calls succeed. Addressed still records completed work;
+it does not imply reviewer acceptance. The MCP contract has no reply tool.
 
 ## Diagnose the bridge
 
-- `bin/mcp check` verifies health, authentication, MCP negotiation, and the three
+- `bin/mcp check` verifies health, authentication, MCP negotiation, and the five
   required tools.
 - `bin/mcp tools` lists the live contract.
 - `bin/mcp tui` opens MCP Inspector's terminal UI.

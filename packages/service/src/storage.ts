@@ -65,6 +65,7 @@ export interface Storage {
   listNotes(repoId: string, prNumber: number): Note[];
   addNote(repoId: string, prNumber: number, input: NewNote): Note;
   updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Note | null;
+  setNoteState(id: number, state: "open" | "resolved"): Note | null;
   deleteNote(repoId: string, prNumber: number, id: number): boolean;
   close(): void;
 }
@@ -268,6 +269,15 @@ export function openStorage(dbPath: string): Storage {
         .run(...values, id, rid).changes;
       if (changed === 0) return null;
       return rowToNote(db.prepare(`SELECT ${NOTE_COLUMNS} FROM notes WHERE id = ?`).get(id) as NoteRow);
+    },
+
+    setNoteState(id, state) {
+      const review = db.prepare(`
+        SELECT reviews.repo_id, reviews.pr_number FROM reviews
+        JOIN notes ON notes.review_id = reviews.id WHERE notes.id = ?
+      `).get(id) as { repo_id: string; pr_number: number } | undefined;
+      if (review === undefined) return null;
+      return this.updateNote(review.repo_id, review.pr_number, id, { state });
     },
 
     deleteNote(repoId, prNumber, id) {
