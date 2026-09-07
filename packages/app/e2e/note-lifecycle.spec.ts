@@ -136,6 +136,32 @@ test("lets the reviewer edit a note and change its status", async ({ world }) =>
   }
 });
 
+test("expands and collapses all notes from either dock", async ({ world }) => {
+  const repository = await world.addRepository({ repoId: "acme/note-disclosure" });
+  const app = await world.launch();
+  const review = new ReviewDriver(app.page);
+  await review.open(repository.title);
+  await review.addNote("QA: first disclosure note");
+  await app.page.getByRole("complementary", { name: "Notes" }).getByRole("button", { name: "Add note (N)" }).click();
+  const input = app.page.getByPlaceholder("What needs answering or changing here?");
+  await input.fill("QA: second disclosure note");
+  await input.press("Enter");
+  await expect(input).toHaveCount(0);
+  await review.openNotes();
+  const drawer = app.page.getByRole("complementary", { name: "Notes" });
+  const bodies = drawer.locator("[data-note-body]");
+  await expect(bodies).toHaveCount(2);
+  for (const dock of ["right", "bottom"]) {
+    if (dock === "bottom") await drawer.getByRole("button", { name: "Dock notes below the diff" }).click();
+    await drawer.getByRole("button", { name: "Collapse all notes" }).click();
+    for (const body of await bodies.all()) await expect(body).toBeHidden();
+    const expand = drawer.getByRole("button", { name: "Expand all notes" });
+    await expand.focus();
+    await expand.press("Enter");
+    for (const body of await bodies.all()) await expect(body).toBeVisible();
+  }
+});
+
 test("keeps note controls fixed and reveals a note's reviewed file in the tree", async ({ world }) => {
   const repository = await world.addRepository({
     repoId: "acme/note-navigation",

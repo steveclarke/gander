@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
+import { computed, reactive, shallowRef, watch } from "vue";
 import type { Note, NoteState } from "@gander/shared";
 import { MessageSquare, PanelBottom, PanelRight, Plus, X } from "@lucide/vue";
 import type { Store } from "../store.js";
@@ -23,6 +23,26 @@ const noteDraft = defineModel<string>("noteDraft", { default: "" });
 const emit = defineEmits<{ close: []; dock: ["right" | "bottom"]; addNote: []; closeNote: [] }>();
 
 const notes = computed(() => props.store.view?.notes ?? []);
+// Disclosure belongs to the drawer so bulk actions include notes hidden by a filter.
+// Keep each choice stable across status changes and service refreshes.
+const expandedNotes = reactive(new Map<number, boolean>());
+watch(notes, (current) => {
+  const ids = new Set(current.map((note) => note.id));
+  for (const id of expandedNotes.keys()) {
+    if (!ids.has(id)) expandedNotes.delete(id);
+  }
+  for (const note of current) {
+    if (!expandedNotes.has(note.id)) {
+      expandedNotes.set(note.id, note.state === "open" || note.state === "in_progress");
+    }
+  }
+}, { immediate: true });
+const anyExpanded = computed(() => notes.value.some((note) => expandedNotes.get(note.id)));
+function toggleAll(): void {
+  const expanded = !anyExpanded.value;
+  for (const note of notes.value) expandedNotes.set(note.id, expanded);
+}
+
 const statusFilter = shallowRef<NoteStatusFilter>("all");
 const statusCounts = computed<Record<NoteStatusFilter, number>>(() => ({
   all: notes.value.length,
@@ -140,6 +160,8 @@ async function copyAll(): Promise<void> {
       v-model="statusFilter"
       :counts="statusCounts"
       :copied-all="copiedAll"
+      :any-expanded="anyExpanded"
+      @toggle-all="toggleAll"
       @copy-all="copyAll"
       @add-note="emit('addNote')"
     />
@@ -163,6 +185,8 @@ async function copyAll(): Promise<void> {
         <NoteItem
           v-else
           :note="row.note"
+          :expanded="expandedNotes.get(row.note.id) ?? false"
+          @update:expanded="expandedNotes.set(row.note.id, $event)"
           :current="row.note.path === store.selectedPath"
           :copied="copiedNoteId === row.note.id"
           :update-note="store.updateNote"

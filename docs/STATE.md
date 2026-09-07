@@ -59,6 +59,9 @@ blockers from active work. Work completed in one exchange can move directly
 from `open` to `addressed`.
 The notes drawer lets the reviewer correct note text or explicitly change a
 note's state when the recorded workflow state needs correcting.
+Its toolbar can expand or collapse all notes, including notes hidden by the status
+filter. Individual disclosure choices survive refreshes and status changes while
+the drawer stays open.
 Each note also has an immutable number scoped to its pull request, shown in the
 drawer and returned over MCP so the reviewer and agent can both refer to "Note
 4". The service keeps a separate global id for writes and incremental cursors.

@@ -36,9 +36,7 @@ const editInput = useTemplateRef<HTMLTextAreaElement>("editInput");
 
 const deleteDetail = "The note will be removed from the review. This cannot be undone.";
 
-// A keyed note instance survives service refreshes, so a reviewer's disclosure
-// choice remains stable when the Note object is replaced.
-const expanded = shallowRef(props.note.state === "open" || props.note.state === "in_progress");
+const expanded = defineModel<boolean>("expanded", { required: true });
 const bodyId = computed(() => `note-body-${props.note.id}`);
 const numberId = computed(() => `note-number-${props.note.id}`);
 const titleId = computed(() => `note-title-${props.note.id}`);

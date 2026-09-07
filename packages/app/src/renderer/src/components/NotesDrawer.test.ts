@@ -76,6 +76,31 @@ describe("NotesDrawer", () => {
     collapsedDirs.clear();
   });
 
+  it("toggles all notes, including filtered notes, and follows individual disclosure", async () => {
+    const wrapper = mount(NotesDrawer, { props: { store: store(notes), dock: "right" } });
+    await wrapper.get("button[aria-label='Collapse all notes']").trigger("click");
+    expect(wrapper.findAll("[data-note-id] button[aria-expanded]").map((button) => button.attributes("aria-expanded")))
+      .toEqual(["false", "false"]);
+
+    await wrapper.get("select").setValue("addressed");
+    await wrapper.get("button[aria-label='Expand all notes']").trigger("click");
+    await wrapper.get("select").setValue("all");
+    expect(wrapper.findAll("[data-note-id] button[aria-expanded]").map((button) => button.attributes("aria-expanded")))
+      .toEqual(["true", "true"]);
+
+    await wrapper.get("button[aria-label='Collapse note 1']").trigger("click");
+    await wrapper.get("button[aria-label='Collapse note 2']").trigger("click");
+    expect(wrapper.find("button[aria-label='Expand all notes']").exists()).toBe(true);
+    await wrapper.get("button[aria-label='Expand note 1']").trigger("click");
+    expect(wrapper.find("button[aria-label='Collapse all notes']").exists()).toBe(true);
+
+    await wrapper.setProps({ store: store(notes.map((note) => ({ ...note }))) });
+    expect(wrapper.get("button[aria-label='Expand note 2']").attributes("aria-expanded")).toBe("false");
+    await wrapper.setProps({ store: store([]) });
+    expect(wrapper.find("button[aria-label='Collapse all notes']").exists()).toBe(false);
+    expect(wrapper.find("button[aria-label='Expand all notes']").exists()).toBe(false);
+  });
+
   it("offers add actions in the empty state", async () => {
     const wrapper = mount(NotesDrawer, { props: { store: store([]), dock: "right" } });
 
