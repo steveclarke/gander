@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
-  <title>Gander app icon</title>
-<rect x="0" y="0" width="1024" height="1024" rx="230" fill="#FFF8E9"/>
-<g transform="translate(512 512) scale(1.83981087) translate(-284 -243.5)">  <!-- One continuous silhouette keeps the long neck legible at icon sizes. -->
+  <title>Gander development icon</title>
+<rect x="100" y="100" width="824" height="824" rx="165" fill="#E9B65B"/>
+<g transform="translate(100 100) scale(.8046875)"><g transform="translate(512 512) scale(1.83981087) translate(-284 -243.5)">  <!-- One continuous silhouette keeps the long neck legible at icon sizes. -->
   <path d="M109 447c-12-48-3-88 24-124 21-29 31-58 26-91-4-25-20-47-18-76 2-34 18-62 47-80l-10-28c23-1 39 6 53 19 14-18 33-27 56-27l-9 26c56 4 98 42 104 97l-3 49c-5 42-36 66-77 77-15 5-22 19-17 35 6 18 30 31 48 45 28 21 47 48 52 78Z" fill="#1B3A5B" stroke="#1B3A5B" stroke-width="16" stroke-linejoin="round"/>
   <!-- The face flows into the breast instead of becoming a separate round badge. -->
   <path d="M242 90c-33 11-53 39-51 74 1 28 18 43 26 66 12 34 3 64-17 95-25 38-28 79-15 122h176c-6-27-23-48-48-66-24-17-46-33-51-57-7-32 7-59 36-69 38-12 58-33 61-67 5-51-29-97-77-101-15-2-29-1-40 3Z" fill="#FFF8E9"/>
@@ -13,5 +13,5 @@
   <ellipse cx="304" cy="164" rx="12" ry="17" fill="#1B3A5B"/>
   <circle cx="308" cy="158" r="4" fill="#FFF8E9"/>
   <path d="M146 376c-10 21-12 44-8 65" stroke="#47617C" stroke-width="11" stroke-linecap="round"/>
-</g>
+</g></g>
 </svg>
