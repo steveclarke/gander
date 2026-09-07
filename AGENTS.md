@@ -148,10 +148,12 @@ passing over one leaves the reader on the file they were already reading.
 claims work that spans time over MCP) → `addressed` (agent records the outcome,
 with an optional commit ref) → `resolved` (reviewer re-checks the file). Work
 completed in one exchange can move directly from `open` to `addressed`. An
-in-progress note can name the reviewer decision blocking it. Resolution is
-always the reviewer's act; no MCP tool may resolve anything. The MCP contract is
-deliberately three tools —
-`get_review_notes`, `mark_note_in_progress`, and `mark_note_addressed`. Agents
+in-progress note can name the reviewer decision blocking it. Resolution requires
+the reviewer's decision: they can re-check in the app or
+explicitly direct an agent to use `resolve_note`. The agent can also use
+`reopen_note` on explicit reviewer direction. Addressed remains distinct from
+resolved. The MCP contract includes `get_review_notes`, `mark_note_in_progress`,
+`mark_note_addressed`, `resolve_note`, and `reopen_note`. Agents
 discuss notes with the reviewer in their active session; MCP carries the
 reviewer's notes and the durable work state. Agents have `git` and `gh` for code.
 Keep the contract small.

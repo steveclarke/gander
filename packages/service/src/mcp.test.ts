@@ -49,10 +49,57 @@ afterEach(async () => {
 });
 
 describe("MCP endpoint", () => {
-  it("offers only the note pickup and completion tools", async () => {
+  it("offers the note workflow tools", async () => {
     const client = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(names).toEqual(["get_review_notes", "mark_note_addressed", "mark_note_in_progress"]);
+    expect(names).toEqual(["get_review_notes", "mark_note_addressed", "mark_note_in_progress", "reopen_note", "resolve_note"]);
+    await client.close();
+  });
+
+  it.each(["open", "in_progress", "addressed", "resolved"] as const)(
+    "resolves and reopens a %s note by global id without losing authored content",
+    async (state) => {
+      const other = storage.addNote("acme/other", 8, { path: null, line: null, text: "Unrelated", headSha: null, sourceContext: null });
+      const note = storage.addNote("acme/atlas", 7, {
+        path: "a.ts", line: 2, text: "Why this choice?", headSha: "captured-sha",
+        sourceContext: { startLine: 1, lines: ["before", "selected", "after"] },
+      });
+      expect(note.id).not.toBe(note.number);
+      storage.markNoteAddressed(note.id, { summary: "The reviewer chose A", commitRef: "abc123" });
+      storage.updateNote("acme/atlas", 7, note.id, { state });
+      if (state === "in_progress") storage.markNoteInProgress(note.id, { note: "Decision needed" });
+      const before = storage.getNote(note.id)!;
+      const client = await connect();
+      for (const [tool, target, verb] of [
+        ["reopen_note", "open", "reopened"],
+        ["resolve_note", "resolved", "resolved"],
+        ["resolve_note", "resolved", "resolved"],
+        ["reopen_note", "open", "reopened"],
+        ["reopen_note", "open", "reopened"],
+      ] as const) {
+        // Restore the original state to cover resolve from every state as well.
+        if (tool === "resolve_note" && storage.getNote(note.id)?.state === "open") {
+          storage.updateNote("acme/atlas", 7, note.id, { state });
+        }
+        const result = await client.callTool({ name: tool, arguments: { id: note.id } });
+        expect(result.isError).not.toBe(true);
+        expect(textOf(result as { content?: unknown })).toBe(`Note ${note.number} ${verb}.`);
+        expect(storage.getNote(note.id)).toEqual({ ...before, state: target, inProgressNote: null });
+      }
+      expect(storage.getNote(other.id)).toEqual(other);
+      expect(storage.getReview("acme/atlas", 7).files).toEqual([]);
+      await client.close();
+    },
+  );
+
+  it.each(["resolve_note", "reopen_note"])("%s reports missing ids and rejects invalid ids", async (name) => {
+    const client = await connect();
+    const missing = await client.callTool({ name, arguments: { id: 999 } });
+    expect(missing.isError).toBe(true);
+    expect(textOf(missing as { content?: unknown })).toBe("Note id 999 does not exist.");
+    for (const id of [0, -1, 1.5, "1"]) {
+      expect((await client.callTool({ name, arguments: { id } })).isError).toBe(true);
+    }
     await client.close();
   });
 

@@ -4,11 +4,9 @@ import { z } from "zod";
 import type { Storage } from "./storage.js";
 
 /**
- * The MCP contract is deliberately tiny: agents read the reviewer's notes, claim the
- * ones they start, and say when they have acted on one. Nothing here reads diffs, lists files, touches
- * checkoffs, or resolves a note — resolution is the reviewer's act alone, made in
- * the app by re-checking the file. Agents already have git and gh for code; this carries
- * only the reviewer's notes and their durable completion state.
+ * Agents read notes and record work outcomes. Explicit reviewer direction also lets
+ * them resolve or reopen notes. Git and gh remain the tools for reading code;
+ * MCP carries review notes and their durable state, without touching checkoffs.
  */
 export function buildMcpServer(storage: Storage, version: string): McpServer {
   const server = new McpServer({ name: "gander", version });
@@ -169,7 +167,7 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       title: "Mark a review note addressed",
       description:
         "Record the outcome after an open or in-progress note has been acted on, or correct the outcome while it remains addressed. A code change can name its commit; an answered question has no commit. " +
-        "This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
+        "This records completed work, not reviewer acceptance. Use resolve_note only when the reviewer explicitly asks to resolve it.",
       inputSchema: {
         id: z.number().int().positive().describe("Global note id from get_review_notes. Use its number when discussing the note with the reviewer."),
         commitRef: z.string().min(1).optional().describe("Commit that addressed it, when the outcome changed code."),
@@ -191,6 +189,27 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       return { content: [{ type: "text", text: `Note ${marked.number} marked addressed.` }] };
     },
   );
+
+  for (const [name, state, title, description] of [
+    ["resolve_note", "resolved", "Resolve a review note",
+      "Resolve a note only when the reviewer explicitly asks. Addressed means work completed; resolved means the reviewer has accepted or closed it."],
+    ["reopen_note", "open", "Reopen a review note",
+      "Reopen a note only when the reviewer explicitly asks, returning it to open for further work."],
+  ] as const) {
+    server.registerTool(name, {
+      title,
+      description: description + " Accepts any current state; repeating the action succeeds. Preserves text, captured context, and outcome; clears the in-progress note. Does not change file checkoffs.",
+      inputSchema: {
+        id: z.number().int().positive().describe("Global note id from get_review_notes, not its pull-request-scoped number."),
+      },
+    }, async ({ id }) => {
+      const updated = storage.setNoteState(id, state);
+      if (updated === null) {
+        return { content: [{ type: "text", text: `Note id ${id} does not exist.` }], isError: true };
+      }
+      return { content: [{ type: "text", text: `Note ${updated.number} ${state === "open" ? "reopened" : "resolved"}.` }] };
+    });
+  }
 
   return server;
 }

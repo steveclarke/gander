@@ -1,5 +1,5 @@
 {
-  "version": "0.8.1",
+  "version": "0.9.0",
   "routes": [
     "DELETE /api/reviews/:repoId/:prNumber/notes/:id",
     "DELETE /mcp",
@@ -713,7 +713,7 @@
     },
     {
       "name": "mark_note_addressed",
-      "description": "Record the outcome after an open or in-progress note has been acted on, or correct the outcome while it remains addressed. A code change can name its commit; an answered question has no commit. This does not resolve the note — the reviewer resolves it by re-reviewing the file.",
+      "description": "Record the outcome after an open or in-progress note has been acted on, or correct the outcome while it remains addressed. A code change can name its commit; an answered question has no commit. This records completed work, not reviewer acceptance. Use resolve_note only when the reviewer explicitly asks to resolve it.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -757,6 +757,44 @@
             "description": "Why this work is waiting on the reviewer.",
             "type": "string",
             "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "reopen_note",
+      "description": "Reopen a note only when the reviewer explicitly asks, returning it to open for further work. Accepts any current state; repeating the action succeeds. Preserves text, captured context, and outcome; clears the in-progress note. Does not change file checkoffs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Global note id from get_review_notes, not its pull-request-scoped number."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    {
+      "name": "resolve_note",
+      "description": "Resolve a note only when the reviewer explicitly asks. Addressed means work completed; resolved means the reviewer has accepted or closed it. Accepts any current state; repeating the action succeeds. Preserves text, captured context, and outcome; clears the in-progress note. Does not change file checkoffs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Global note id from get_review_notes, not its pull-request-scoped number."
           }
         },
         "required": [

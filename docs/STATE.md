@@ -53,7 +53,9 @@ milestone boundary.
 Pressing `n` over a file captures a note against it, stamped with the line
 being read. Notes carry four states: `open` when captured, `in_progress` when an
 agent claims work that spans time, `addressed` when the agent records its
-outcome, and `resolved` when the reviewer re-checks the file. A claimed note can
+outcome, and `resolved` when the reviewer re-checks the file or explicitly directs
+an agent to resolve it over MCP. An agent can also reopen a note on explicit
+reviewer direction. A claimed note can
 record the reviewer decision blocking it, and the notes drawer separates those
 blockers from active work. Work completed in one exchange can move directly
 from `open` to `addressed`.

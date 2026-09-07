@@ -238,18 +238,37 @@ claude mcp add --transport http gander "$GANDER_SERVICE_URL/mcp" \
   --header "Authorization: Bearer $GANDER_TOKEN"
 ```
 
-Run it in the repository being reviewed, not in this one. Three tools appear:
+Run it in the repository being reviewed, not in this one. Five tools appear:
 
 | Tool | Purpose |
 |------|---------|
 | `get_review_notes` | Notes for a repo + branch (or pull request number), with a PR-scoped conversation number, global tool-call id, captured source, and counts for every state; `since` accepts a last-seen global id |
 | `mark_note_in_progress` | Claims a note; its optional note records why work is waiting on the reviewer |
 | `mark_note_addressed` | Records the outcome with a required summary and an optional commit ref |
+| `resolve_note` | Resolves a note by global id on explicit reviewer direction |
+| `reopen_note` | Returns a note to open by global id on explicit reviewer direction |
 
-Discuss notes in the active agent session. Nothing over MCP replies to or resolves
-a note. Refer to the PR-scoped `number` in that discussion; pass the separate
-global `id` to mutation tools. Resolution stays the reviewer's act, made by
-re-reviewing the file in the app.
+Discuss notes in the active agent session. Record an answer durably with
+`mark_note_addressed` and its summary; MCP has no separate reply thread.
+Addressed means work completed. Resolved means the reviewer accepted or closed
+it, either in the app or by explicitly directing an agent to use `resolve_note`.
+Refer to the PR-scoped `number` in discussion; pass the global `id` to mutations.
+Both new tools accept any current state and succeed on repeated calls. They keep
+the text, captured source context, summary, and commit ref, clear the in-progress
+note, and leave file checkoffs alone. Reopening retains the outcome in storage;
+`get_review_notes` exposes outcomes only for addressed and resolved notes.
+
+```bash
+bin/mcp call resolve_note id=NOTE_ID
+bin/mcp call reopen_note id=NOTE_ID
+```
+
+Reading notes (including resolved notes), recording answers, resolving, and
+reopening are available through MCP. Creating, editing the text of, and deleting
+notes remain HTTP/app operations; there is no separate reply endpoint. These
+operations are outside the read/answer/resolve workflow. The MCP tools use the
+existing connection authentication and avoid separate raw API calls for these
+review actions; they do not change authentication prompts at connection startup.
 
 ## Config precedence
 
