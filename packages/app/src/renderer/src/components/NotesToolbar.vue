@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { NoteState } from "@gander/shared";
-import { ChevronDown, Copy, ListFilter, Plus } from "@lucide/vue";
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, Copy, ListFilter, Plus } from "@lucide/vue";
 
 export type NoteStatusFilter = "all" | NoteState;
 
 const props = defineProps<{
   counts: Record<NoteStatusFilter, number>;
   copiedAll: boolean;
+  anyExpanded: boolean;
 }>();
 const filter = defineModel<NoteStatusFilter>({ required: true });
-defineEmits<{ addNote: []; copyAll: [] }>();
+defineEmits<{ addNote: []; copyAll: []; toggleAll: [] }>();
 
 const options = computed<{ value: NoteStatusFilter; label: string }[]>(() => [
   { value: "all", label: `All statuses (${props.counts.all})` },
@@ -32,6 +33,15 @@ const options = computed<{ value: NoteStatusFilter; label: string }[]>(() => [
     </label>
 
     <div class="toolbar-actions">
+      <button
+        v-if="counts.all > 0"
+        type="button"
+        :aria-label="anyExpanded ? 'Collapse all notes' : 'Expand all notes'"
+        :title="anyExpanded ? 'Collapse all notes' : 'Expand all notes'"
+        @click="$emit('toggleAll')"
+      >
+        <component :is="anyExpanded ? ChevronsDownUp : ChevronsUpDown" :size="14" aria-hidden="true" />
+      </button>
       <button
         v-if="counts.all > 0"
         type="button"
@@ -88,7 +98,7 @@ const options = computed<{ value: NoteStatusFilter; label: string }[]>(() => [
 }
 .toolbar-actions button:hover { border-color: var(--accent); color: var(--accent); }
 
-@container notes (max-width: 330px) {
+@container notes (max-width: 380px) {
   .toolbar-actions button { width: 26px; justify-content: center; padding: 0; }
   .toolbar-actions span { display: none; }
 }
