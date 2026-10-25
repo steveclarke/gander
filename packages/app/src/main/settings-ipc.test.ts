@@ -13,7 +13,7 @@ function fixture(): {
   onSettingsChanged: ReturnType<typeof vi.fn>;
 } {
   const cfg: GanderConfig = {
-    servers: [], ownerServers: [],
+    servers: [],
     repos: [],
     settings: DEFAULT_APP_SETTINGS,
   };

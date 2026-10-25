@@ -45,7 +45,6 @@ if [ ! -f .gander/config.json ]; then
   cat > .gander/config.json <<'JSON'
 {
   "servers": [],
-  "ownerServers": [],
   "settings": {
     "editor": {
       "fontFamily": "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",

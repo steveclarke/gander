@@ -31,6 +31,19 @@ curl -s http://127.0.0.1:8390/healthz     # {"ok":true,"version":"..."}
 |---|---|---|
 | `GANDER_TOKEN` | — | Required. Guards the API and the MCP endpoint alike |
 | `GANDER_PUBLISH_PORT` | `8390` | Host port, when 8390 is taken |
+| `GANDER_CLAIM_OWNERS` | empty (everything) | Comma-separated repository owners this server covers, such as `alice,alice-labs` |
+| `GANDER_OTHER_SERVER` | empty | Where repositories outside `GANDER_CLAIM_OWNERS` are reviewed, such as `the team server (https://reviews.example.com)` |
+
+When a reviewer opens a repository, the app asks each of its servers whether it covers
+that repository. A server that is the only one to say yes is used without asking; none or
+several means the reviewer chooses once. Left empty, the service covers every repository,
+which is how a server behaved before claims existed. With other servers in use — a team
+server covering work repositories, say — list the owners this one is for, so each
+repository has exactly one claimant.
+
+An agent that asks this server for notes on a repository it does not cover, and has
+nothing stored for, is told so instead of being told there are no notes. With
+`GANDER_OTHER_SERVER` set, the answer names that server.
 
 The database is a SQLite file on the `gander-data` volume, at `/data/gander.db`.
 It is the only state; back up the volume and you have backed up every review.

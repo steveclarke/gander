@@ -15,7 +15,22 @@ defineEmits<{
   toggleTree: [];
   changeZoom: [level: number];
   openZoomSettings: [];
+  changeServer: [repoId: string];
 }>();
+
+const repoId = computed(() => props.store.currentRepoId ?? props.store.targetRepoId);
+// Says where this repository's notes go, so a server chosen without asking is still visible,
+// and warns — without moving anything — when that server stops claiming the repository.
+const destination = computed(() => {
+  const name = props.store.serviceStatus.serverName;
+  if (!name || repoId.value === null) return name ? `${name} · ` : "";
+  return `Notes save to ${name} · `;
+});
+// The warning replaces the routine label rather than joining it, so it is never the part
+// the status bar truncates.
+const label = computed(() => props.store.serviceStatus.claimLost
+  ? `${props.store.serviceStatus.serverName} no longer covers this repository · notes still save there`
+  : `${destination.value}${serviceLabel.value}`);
 
 const developmentLabel = computed(() => props.worktreeLabel
   ? `Development build · ${props.worktreeLabel}`
@@ -32,7 +47,9 @@ const serviceTitle = computed(() => {
   const status = props.store.serviceStatus;
   return status.state === "unreachable" || status.state === "incompatible"
     ? status.reason
-    : serviceLabel.value;
+    : props.store.serviceStatus.claimLost
+      ? `${props.store.serviceStatus.serverName} says it no longer covers this repository. Notes keep saving there until you change it.`
+      : serviceLabel.value;
 });
 
 // Re-read on a timer so "3 minutes ago" does not sit frozen at "just now".
@@ -71,13 +88,20 @@ const lastFetch = computed(() => {
     <span
       v-else
       class="service"
-      :class="{ down: store.serviceStatus.state === 'unreachable' || store.serviceStatus.state === 'incompatible', warning: store.serviceStatus.state === 'newer' }"
+      :class="{ down: store.serviceStatus.state === 'unreachable' || store.serviceStatus.state === 'incompatible', warning: store.serviceStatus.state === 'newer' || store.serviceStatus.claimLost }"
       :title="serviceTitle"
       role="status"
     >
       <span class="dot" />
-      <span class="service-label">{{ store.serviceStatus.serverName ? `${store.serviceStatus.serverName} · ` : "" }}{{ serviceLabel }}</span>
+      <span class="service-label">{{ label }}</span>
     </span>
+    <button
+      v-if="!store.localView && repoId !== null && store.serviceStatus.serverName"
+      type="button"
+      class="change-server"
+      :aria-label="`Change where ${repoId} saves notes`"
+      @click="$emit('changeServer', repoId)"
+    >Change</button>
 
     <span v-if="store.view || store.localView" class="sep">·</span>
     <span v-if="store.view || store.localView" class="fetch">{{ lastFetch }}</span>
@@ -133,6 +157,9 @@ const lastFetch = computed(() => {
 .toggle:hover, .toggle[aria-pressed="true"] { color: var(--workbench-foreground); }
 .service { display: flex; align-items: center; gap: 5px; min-width: 0; max-width: min(50vw, 62ch); }
 .service-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.change-server { flex: none; padding: 0 2px; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.change-server:hover { text-decoration: underline; }
+.change-server:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex: none; }
 .service.down { color: var(--danger); }
 .service.down .dot { background: var(--danger); }

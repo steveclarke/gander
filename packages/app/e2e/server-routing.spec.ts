@@ -21,7 +21,6 @@ test("two repositories keep separate servers through reviews, settings and resta
       { id: "personal", name: "Personal", url: world.serviceUrl, token: world.serviceToken },
       { id: "team", name: "Team", url: secondUrl, token: "second-token" },
     ];
-    config.ownerServers = [{ owner: "acme", serverId: "team" }];
     config.repos[0].serverId = "personal"; config.repos[1].serverId = "team";
     config.settings.workbench.colorTheme = "Gander Light";
     await writeFile(world.configPath, JSON.stringify(config), { mode: 0o600 });
@@ -47,8 +46,8 @@ test("two repositories keep separate servers through reviews, settings and resta
     const settings = new SettingsDriver(app.page);
     await settings.open(); await settings.openConnectionCategory();
     await expect(app.page.locator(".connection-status")).toHaveText(["Connected", "Connected"]);
-    await expect(app.page.getByLabel(`Server for ${personal.repoId}`)).toHaveValue("personal");
-    await expect(app.page.getByLabel(`Server for ${team.repoId}`)).toHaveValue("team");
+    await expect(settings.repository(personal.repoId)).toContainText("Notes save to Personal");
+    await expect(settings.repository(team.repoId)).toContainText("Notes save to Team");
     await app.page.setViewportSize({ width: 1360, height: 1000 });
     await app.page.screenshot({ path: join(images, "servers.png") });
     await testInfo.attach("servers", { path: join(images, "servers.png"), contentType: "image/png" });
@@ -75,8 +74,8 @@ test("two repositories keep separate servers through reviews, settings and resta
     expect(otherNote.id).toBe(originalNote.id);
     const changedSettings = new SettingsDriver(app.page);
     await changedSettings.open(); await changedSettings.openConnectionCategory();
-    await app.page.getByLabel(`Server for ${team.repoId}`).selectOption("personal");
-    await expect(app.page.locator(".notice")).toContainText("Repository server saved");
+    await changedSettings.changeServer(team.repoId, "Personal");
+    await expect(app.page.locator(".notice")).toContainText("Server changed");
     await app.page.getByRole("button", { name: "Close settings", exact: true }).click();
     await review.openNotes();
     await expect(app.page.locator(".note-item")).toContainText("QA note on the other server");
@@ -92,7 +91,7 @@ test("two repositories keep separate servers through reviews, settings and resta
   } finally { await service.close(); storage.close(); }
 });
 
-test("adds a tested server and owner default while existing repositories keep their migrated server", async ({ world }) => {
+test("adds a tested server while existing repositories keep their migrated server", async ({ world }) => {
   const repo = await world.addRepository({ repoId: "acme/atlas" });
   const app = await world.launch({ connectionFromEnvironment: false });
   const settings = new SettingsDriver(app.page);
@@ -106,16 +105,11 @@ test("adds a tested server and owner default while existing repositories keep th
   await app.page.locator("#connection-token").fill(world.serviceToken);
   await app.page.getByRole("button", { name: "Save server", exact: true }).click();
   await expect(app.page.locator(".server-row")).toHaveCount(2);
-  await expect(app.page.getByLabel(`Server for ${repo.repoId}`)).toHaveValue("default");
-  await app.page.getByLabel("Repository owner", { exact: true }).fill("acme");
-  await app.page.getByLabel("Review server", { exact: true }).selectOption({ label: "Second server" });
-  await app.page.getByRole("button", { name: "Save default", exact: true }).click();
-  await expect(app.page.locator(".rule-list")).toContainText("acme/* → Second server");
-  await expect(app.page.getByLabel(`Server for ${repo.repoId}`)).toHaveValue("default");
+  await expect(settings.repository(repo.repoId)).toContainText("Notes save to Review server");
+  await expect(app.page.getByText("Defaults by owner")).toHaveCount(0);
   await app.restart();
   const restarted = new SettingsDriver(app.page);
   await restarted.open(); await restarted.openConnectionCategory();
   await expect(app.page.locator(".server-row")).toHaveCount(2);
-  await expect(app.page.locator(".rule-list")).toContainText("acme/* → Second server");
-  await expect(app.page.getByLabel(`Server for ${repo.repoId}`)).toHaveValue("default");
+  await expect(restarted.repository(repo.repoId)).toContainText("Notes save to Review server");
 });

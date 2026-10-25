@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, shallowRef, watch } from "vue";
 import { X } from "@lucide/vue";
 import { api } from "./api.js";
-import { createStore } from "./store.js";
+import { createStore, readable } from "./store.js";
 import { createEditorSettingsStore } from "./editor-settings-store.js";
 import { effectiveTreeTypography } from "../../settings.js";
 import { basename } from "./paths.js";
@@ -14,6 +14,7 @@ import { useWindowZoom } from "./composables/use-window-zoom.js";
 import { useBackgroundRefresh } from "./composables/use-background-refresh.js";
 import ActivityRail from "./components/ActivityRail.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
+import ServerChoiceDialog from "./components/ServerChoiceDialog.vue";
 import KeymapHelp from "./components/KeymapHelp.vue";
 import LocalSurface from "./components/LocalSurface.vue";
 import ReviewSurface from "./components/ReviewSurface.vue";
@@ -112,6 +113,12 @@ function selectQuickFile(path: string): void {
   quickFileOpen.value = false;
 }
 
+// A change reaches the review through serversChanged, which reopens it on the new server.
+async function changeServer(repoId: string): Promise<void> {
+  try { await api.changeRepoServer(repoId); }
+  catch (err) { store.error = readable((err as Error).message); }
+}
+
 async function confirmRemoveRepo(): Promise<void> {
   const repoId = repoPendingRemoval.value;
   repoPendingRemoval.value = null;
@@ -200,7 +207,9 @@ async function confirmRemoveRepo(): Promise<void> {
       @toggle-tree="treeVisible = !treeVisible"
       @change-zoom="changeZoom"
       @open-zoom-settings="openSettings('workbench')"
+      @change-server="changeServer"
     />
+    <ServerChoiceDialog />
     <KeymapHelp v-if="helpOpen" @close="helpOpen = false" />
     <QuickFilePicker
       v-if="quickFileOpen && store.view"

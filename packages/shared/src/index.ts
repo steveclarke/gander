@@ -13,7 +13,7 @@ import { z } from "zod";
  *
  * Not the app's release version: releases happen far more often than the contract moves.
  */
-export const SERVICE_VERSION = "0.10.0";
+export const SERVICE_VERSION = "0.11.0";
 
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
@@ -155,6 +155,8 @@ export interface PrListItem extends PrSummary {
 export interface RepoEntry {
   /** The review server selected at registration; absent until one is configured. */
   serverId?: string;
+  /** "claim" when that server alone said it covers this repository; otherwise chosen. */
+  serverSource?: "claim" | "choice";
   repoId: string;
   url: string;
   /** A machine-local checkout used to discover worktrees. Never sent to the review service. */
@@ -215,6 +217,45 @@ export function repoIdFromUrl(url: string): string {
     url.match(/^ssh:\/\/git@github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
   if (!m) throw new Error(`Not a GitHub repository URL: ${url}`);
   return `${m[1]}/${m[2]}`;
+}
+
+/**
+ * A server's answer to "do you cover this repository?", asked with the full git remote so a
+ * fork and its upstream can belong to different servers. Services before 0.11 have no
+ * such route, and the app treats that as no claim.
+ */
+export const RepositoryClaimSchema = z.object({ claimed: z.boolean() });
+export type RepositoryClaim = z.infer<typeof RepositoryClaimSchema>;
+
+/** The repository owners a self-hosted service covers; "everything" claims any repository. */
+export type ClaimScope = "everything" | string[];
+
+/**
+ * Reads the service's `GANDER_CLAIM_OWNERS` setting: a comma-separated list of repository
+ * owners. Unset, empty or `*` covers everything, which is what a service did before claims
+ * existed, so an upgraded server changes nothing for repositories already assigned to it.
+ */
+export function parseClaimScope(raw: string | undefined): ClaimScope {
+  const owners = (raw ?? "").split(",").map((owner) => owner.trim()).filter(Boolean);
+  if (owners.length === 0 || owners.includes("*")) return "everything";
+  for (const owner of owners) {
+    if (/[\s/]/.test(owner)) throw new Error(`GANDER_CLAIM_OWNERS: "${owner}" is not a repository owner`);
+  }
+  return owners;
+}
+
+/** Whether a service with this scope claims the repository behind `remote`. */
+export function claimsRemote(scope: ClaimScope, remote: string): boolean {
+  let repoId: string;
+  try { repoId = repoIdFromUrl(remote); } catch { return false; }
+  return claimsRepoId(scope, repoId);
+}
+
+/** Whether a service with this scope claims the "owner/name" repository. */
+export function claimsRepoId(scope: ClaimScope, repoId: string): boolean {
+  if (scope === "everything") return true;
+  const owner = repoId.split("/")[0]!.toLowerCase();
+  return scope.some((entry) => entry.toLowerCase() === owner);
 }
 
 /** A repository, and optionally a pull request in it, that the app was asked to open. */

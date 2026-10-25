@@ -10,6 +10,7 @@ import {
 import type { OpenTarget } from "@gander/shared";
 import type { LocalViewUpdate } from "../main/local-viewer.js";
 import type { GithubViewedSyncStatus } from "../main/github-viewed-queue.js";
+import type { ServerChoiceRequest } from "../main/server-choice.js";
 import { DEFAULT_THEME_ID, THEME_IDS, type ThemeId } from "../themes.js";
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>;
@@ -91,8 +92,10 @@ export function createGanderApi(
     getServers: () => call("getServers"),
     saveServer: (server) => call("saveServer", server),
     removeServer: (id) => call("removeServer", id),
-    setOwnerServers: (rules) => call("setOwnerServers", rules),
     setRepoServer: (repoId, serverId) => call("setRepoServer", repoId, serverId),
+    changeRepoServer: (repoId) => call("changeRepoServer", repoId),
+    onChooseServer: (listener) => subscribe("gander:chooseServer", (request: ServerChoiceRequest) => listener(request)),
+    answerServerChoice: (requestId, serverId) => call("answerServerChoice", requestId, serverId),
     testConnection: (url, token) => call("testConnection", url, token),
     setGithubToken: (token) => call("setGithubToken", token),
     githubViewedSyncStatus: () => call("githubViewedSyncStatus"),

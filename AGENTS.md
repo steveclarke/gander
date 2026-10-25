@@ -162,11 +162,14 @@ time, not load time (`resolveServiceConnection` in `main/config.ts`) — otherwi
 saving config would write a machine-specific allocated port into
 `.gander/config.json`.
 
-App config stays strict. The single-server to multi-server upgrade is the one
-supported automatic migration; repository assignments and credentials survive it.
-Other stale configurations use `bin/fix-config`. New migrations need an explicit
-product requirement. Server routing and review caches are isolated by repository,
-server identity, URL and token. Owner defaults apply only during registration.
+App config stays strict. Two automatic migrations are supported: single server to
+server list, and owner defaults to remembered per-repository choices (owner rules were
+replaced by servers claiming repositories). Repository assignments and credentials
+survive both. Other stale configurations use `bin/fix-config`. New migrations need an
+explicit product requirement. Server routing and review caches are isolated by
+repository, server identity, URL and token. Servers are asked which repositories they
+cover only when a repository is first registered (`main/repository-claims.ts`); after
+that the remembered server is used, never redirected.
 
 `SCHEMA` in `storage.ts` is the current SQLite shape. Local databases are disposable
 while the project is young, but the hosted database contains authored production

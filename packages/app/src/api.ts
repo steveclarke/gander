@@ -1,4 +1,5 @@
-import type { ReviewServer, GanderConfig } from "./main/config.js";
+import type { ReviewServer } from "./main/config.js";
+import type { ServerChoiceRequest } from "./main/server-choice.js";
 import type { LocalFile, LocalFileEntry, LocalView, LocalWorktree, NewNote, OpenTarget, PrListItem, PrView, RepoEntry, UpdateNote } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
@@ -25,7 +26,7 @@ export interface InitialWindowState {
   worktreeLabel: string | null;
 }
 
-export type { ConnectionCheck, ServiceStatus };
+export type { ConnectionCheck, ServiceStatus, ServerChoiceRequest };
 
 export interface GanderApi {
   /** Fixed by the main process when the window is created; renderer code cannot change it. */
@@ -43,11 +44,15 @@ export interface GanderApi {
   onOpenTarget(listener: (target: OpenTarget) => void): () => void;
   /** Where the review service is, and whether the environment is deciding that. */
   onServersChanged(listener: () => void): () => void;
-  getServers(): Promise<{ servers: ReviewServer[]; ownerServers: GanderConfig["ownerServers"]; repos: RepoEntry[]; githubToken: string; fromEnvironment: boolean }>;
+  getServers(): Promise<{ servers: ReviewServer[]; repos: RepoEntry[]; githubToken: string; fromEnvironment: boolean }>;
   saveServer(server: ReviewServer): Promise<ConnectionCheck>;
   removeServer(id: string): Promise<void>;
-  setOwnerServers(rules: GanderConfig["ownerServers"]): Promise<void>;
   setRepoServer(repoId: string, serverId: string): Promise<void>;
+  /** Asks in the window which server the repository should use; true when it changed. */
+  changeRepoServer(repoId: string): Promise<boolean>;
+  /** Fires when the main process needs the reviewer to pick a repository's server. */
+  onChooseServer(listener: (request: ServerChoiceRequest) => void): () => void;
+  answerServerChoice(requestId: string, serverId: string | null): Promise<void>;
   /** Checks the token against GitHub, and saves it only if GitHub accepts it. Empty clears it. */
   setGithubToken(token: string): Promise<GithubTokenCheck>;
   githubViewedSyncStatus(): Promise<GithubViewedSyncStatus>;

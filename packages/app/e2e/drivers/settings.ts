@@ -28,6 +28,15 @@ export class SettingsDriver {
     await expect(this.page.getByRole("heading", { name: "Review servers", exact: true })).toBeVisible();
   }
 
+  repository(repoId: string) {
+    return this.page.locator(".repository-row").filter({ has: this.page.getByText(repoId, { exact: true }) });
+  }
+
+  async changeServer(repoId: string, serverName: string): Promise<void> {
+    await this.page.getByRole("button", { name: `Change server for ${repoId}`, exact: true }).click();
+    await chooseServer(this.page, serverName);
+  }
+
   async setEditorFont(family: string, size: number): Promise<void> {
     const familyInput = this.page.locator('input[name="editor.fontFamily"]');
     await familyInput.fill(family);
@@ -49,4 +58,13 @@ export class SettingsDriver {
     await expect(preview).toHaveCSS("font-family", new RegExp(family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     await expect(preview).toHaveCSS("font-size", `${size}px`);
   }
+}
+
+/** Answers the in-window server question, wherever it was asked from. */
+export async function chooseServer(page: Page, serverName: string): Promise<void> {
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("radio", { name: new RegExp(`^${serverName}\\b`) }).check();
+  await dialog.getByRole("button", { name: `Use ${serverName}`, exact: true }).click();
+  await expect(dialog).toBeHidden();
 }

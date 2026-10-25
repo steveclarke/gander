@@ -1,8 +1,9 @@
 {
-  "version": "0.10.0",
+  "version": "0.11.0",
   "routes": [
     "DELETE /api/reviews/:repoId/:prNumber/notes/:id",
     "DELETE /mcp",
+    "GET /api/repositories/claim",
     "GET /api/reviews/:repoId",
     "GET /api/reviews/:repoId/:prNumber",
     "GET /api/reviews/:repoId/:prNumber/notes",
@@ -666,6 +667,18 @@
       },
       "required": [
         "files"
+      ]
+    },
+    "RepositoryClaimSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "claimed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "claimed"
       ]
     },
     "ReviewStateSchema": {

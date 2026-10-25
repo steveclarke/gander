@@ -364,8 +364,11 @@ export function createGitEngine(clonesRoot: string): GitEngine {
       return (await git(cloneDir, ["rev-parse", ref])).trim();
     },
 
+    // The remote as configured, not as `url.<base>.insteadOf` rewrites it for transport:
+    // a repository's identity — and the remote servers are asked to claim — is what the
+    // reviewer named, even when fetches go through a mirror or another protocol.
     async originUrl(repoDir) {
-      return (await git(repoDir, ["remote", "get-url", "origin"])).trim();
+      return (await git(repoDir, ["config", "--get", "remote.origin.url"])).trim();
     },
 
     async worktreeRoot(repoDir) {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  claimsRemote,
+  claimsRepoId,
+  parseClaimScope,
   FileCheckoffSchema,
   PutFileStateSchema,
   ReviewStateSchema,
@@ -62,5 +65,30 @@ describe("unreachableReason", () => {
     expect(isUnreachableReason("No Gander service configured.")).toBe(false);
     expect(isUnreachableReason("http://x answered 500 on /healthz")).toBe(false);
     expect(isUnreachableReason("Could not reach GitHub: socket hang up")).toBe(false);
+  });
+});
+
+describe("claim scope", () => {
+  it("covers everything when unset, empty or *", () => {
+    expect(parseClaimScope(undefined)).toBe("everything");
+    expect(parseClaimScope(" , ")).toBe("everything");
+    expect(parseClaimScope("alice,*")).toBe("everything");
+  });
+
+  it("lists owners and rejects ones that cannot be owners", () => {
+    expect(parseClaimScope(" alice , alice-labs ")).toEqual(["alice", "alice-labs"]);
+    expect(() => parseClaimScope("alice/atlas")).toThrow(/not a repository owner/);
+  });
+
+  it("matches the remote's owner, never a substring", () => {
+    expect(claimsRemote(["alice"], "git@github.com:alice/atlas.git")).toBe(true);
+    expect(claimsRemote(["alice"], "git@github.com:alice-labs/atlas.git")).toBe(false);
+    expect(claimsRemote("everything", "not a remote")).toBe(false);
+  });
+
+  it("matches an owner/name repository the same way", () => {
+    expect(claimsRepoId(["Alice"], "alice/atlas")).toBe(true);
+    expect(claimsRepoId(["alice"], "alice-labs/atlas")).toBe(false);
+    expect(claimsRepoId("everything", "anyone/atlas")).toBe(true);
   });
 });

@@ -3,7 +3,7 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { type LocalView, type OpenTarget, type RepoEntry, type PrView, type UpdateNote } from "@gander/shared";
-import { connectionIsFromEnvironment, defaultServerForRepo, loadConfig, saveConfig, type GanderConfig } from "./config.js";
+import { connectionIsFromEnvironment, loadConfig, saveConfig, type GanderConfig } from "./config.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine, type GitEngine } from "./git.js";
 import { checkGithubToken, getGithubAccount, githubApiUrl, isPullRequestOpen, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
@@ -12,6 +12,8 @@ import { startOpenServer } from "./open-socket.js";
 import type { Reviewer, CheckoffResult } from "./review.js";
 import { createServerRouting, withReviewSession } from "./server-routing.js";
 import { registerServersIpc } from "./servers-ipc.js";
+import { createServerChooser } from "./server-choice.js";
+import { createRepositoryServers, type RepositoryServers } from "./repository-servers.js";
 import { registerSettingsIpc } from "./settings-ipc.js";
 import { buildMenuTemplate } from "./menu.js";
 import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.js";
@@ -60,25 +62,9 @@ function requireOpenWorktree(senderId: number, path: string): void {
   }
 }
 
-async function chooseRepositoryServer(cfg: GanderConfig, repoId: string): Promise<string | undefined> {
-  const preferred = defaultServerForRepo(cfg, repoId);
-  if (preferred || cfg.servers.length === 0) return preferred;
-  const choices = [...cfg.servers];
-  const { response } = await dialog.showMessageBox({
-    type: "question", title: "Choose a review server",
-    message: `Where should ${repoId}'s reviews be kept?`,
-    detail: "Gander remembers this choice for every review in this repository.",
-    buttons: [...choices.map((server) => server.name), "Cancel"],
-    cancelId: choices.length, noLink: true,
-  });
-  if (response === choices.length) throw new Error("Repository registration cancelled.");
-  const chosen = choices[response]!.id;
-  if (!cfg.servers.some((server) => server.id === chosen)) throw new Error("That server was removed. Open the repository again to choose another.");
-  return chosen;
-}
-
-async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubViewedQueue: GithubViewedQueue }> {
+async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubViewedQueue: GithubViewedQueue; repositoryServers: RepositoryServers }> {
   const cfg = loadConfig();
+  const repositoryServers = createRepositoryServers(cfg, createServerChooser(ipcMain, () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null));
   const git = createGitEngine(join(app.getPath("userData"), "clones"));
   // Resolved per request rather than captured: the reviewer can enter or change the
   // connection in settings, and it takes effect without a restart.
@@ -171,11 +157,11 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
       Object.assign(existing, entry);
       entry.serverId = existing.serverId;
     } else {
-      const serverId = await chooseRepositoryServer(cfg, entry.repoId);
+      const assignment = await repositoryServers.assign(entry.repoId, entry.url);
       const concurrent = cfg.repos.find((repo) => repo.repoId === entry.repoId);
       if (concurrent) Object.assign(concurrent, entry);
-      else cfg.repos.push({ ...entry, serverId });
-      entry.serverId = concurrent?.serverId ?? serverId;
+      else cfg.repos.push({ ...entry, ...assignment });
+      Object.assign(entry, concurrent ? { serverId: concurrent.serverId, serverSource: concurrent.serverSource } : assignment);
     }
     saveConfig(cfg);
     return entry;
@@ -243,7 +229,11 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => (await withReviewSession(routing, repoId, (reviewer) => reviewer.listPrsWithProgress(repoId))).result);
   ipcMain.handle("gander:serviceStatus", async (_e, repoId?: string) => {
     const session = routing(repoId);
-    return { ...await session.service.status(), serverName: session.name };
+    const [status, claimLost] = await Promise.all([
+      session.service.status(),
+      repoId === undefined ? false : repositoryServers.claimLost(repoId),
+    ]);
+    return { ...status, serverName: session.name, ...(claimLost ? { claimLost } : {}) };
   });
   ipcMain.handle("gander:githubViewedSyncStatus", async () => githubViewedQueue.status());
   ipcMain.handle("gander:retryGithubViewedSync", async () => githubViewedQueue.retryFailed());
@@ -276,7 +266,7 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   // editable as JSON in the app, and the token does not belong on screen in a text editor.
   registerServersIpc(ipcMain, cfg, saveConfig, () => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send("gander:serversChanged");
-  });
+  }, repositoryServers);
   ipcMain.handle("gander:setGithubToken", async (_e, token: string) => {
     const trimmed = token.trim();
     // Emptying it is how the reviewer goes back to whatever `gh` provides.
@@ -308,7 +298,7 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   });
 
   githubViewedQueue.start();
-  return { cfg, git, githubViewedQueue };
+  return { cfg, git, githubViewedQueue, repositoryServers };
 }
 
 function installMenu(updates: UpdateController | null): void {
@@ -447,8 +437,9 @@ app.whenReady().then(async () => {
   let cfg: GanderConfig;
   let git: GitEngine;
   let githubViewedQueue: GithubViewedQueue;
+  let repositoryServers: RepositoryServers;
   try {
-    ({ cfg, git, githubViewedQueue } = await bootstrap());
+    ({ cfg, git, githubViewedQueue, repositoryServers } = await bootstrap());
     if (launchTarget !== null) assertRepositoryRegistered(cfg.repos, launchTarget.repoId);
   } catch (err) {
     dialog.showErrorBox("Gander failed to start", (err as Error).message);
@@ -469,7 +460,7 @@ app.whenReady().then(async () => {
         // a folder dialog first. The request carries the checkout it came from, which is
         // the same evidence the picker collects.
         const added = await registerFromCheckout(git, () => cfg.repos, target.repoId, from, async (entry) => {
-          entry.serverId = await chooseRepositoryServer(cfg, entry.repoId);
+          Object.assign(entry, await repositoryServers.assign(entry.repoId, entry.url));
         });
         if (added !== null) saveConfig(cfg);
         deliver(target);
