@@ -91,4 +91,26 @@ describe("StatusBar", () => {
     expect(wrapper.get(".github-sync").classes()).toContain("failed");
     expect(wrapper.get(".github-sync").attributes("title")).toBe("Bad credentials");
   });
+
+  it("offers Retry and Dismiss for failed GitHub Viewed work", async () => {
+    const calls: string[] = [];
+    const failingStore = reactive({
+      ...store,
+      githubViewedSync: { pending: 0, failed: 2, message: "GitHub Viewed sync failed for a.rb: Something went wrong. The Gander review is saved." },
+      retryGithubViewedSync: async () => { calls.push("retry"); },
+      dismissGithubViewedSync: async () => { calls.push("dismiss"); },
+    }) as Store;
+    const wrapper = mount(StatusBar, {
+      props: { store: failingStore, treeVisible: true, isDevelopment: false, worktreeLabel: null, zoomLevel: 0 },
+    });
+
+    expect(wrapper.get("button.github-sync").attributes("popovertarget")).toBe("github-sync-menu");
+    expect(wrapper.get("#github-sync-menu").text()).toContain("The Gander review is saved.");
+    const [dismiss, retry] = wrapper.findAll("#github-sync-menu .actions button");
+    expect(dismiss!.text()).toBe("Dismiss");
+    expect(retry!.text()).toBe("Retry");
+    await retry!.trigger("click");
+    await dismiss!.trigger("click");
+    expect(calls).toEqual(["retry", "dismiss"]);
+  });
 });

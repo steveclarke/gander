@@ -20,19 +20,31 @@ const JobSchema = z.object({
   path: z.string().min(1),
   viewed: z.boolean(),
   revision: z.number().int().positive(),
+  // Absent from queues written before jobs expired. Such a job is never newer than its
+  // first scheduled attempt, so that stands in for when it was queued.
+  createdAt: z.number().int().nonnegative().optional(),
   attempts: z.number().int().nonnegative(),
   nextAttemptAt: z.number().int().nonnegative(),
   state: z.enum(["pending", "failed"]),
   error: z.string().nullable(),
 }).strict();
 const QueueFileSchema = z.object({ version: z.literal(1), jobs: z.array(JobSchema) }).strict();
-type Job = z.infer<typeof JobSchema>;
+type Job = z.infer<typeof JobSchema> & { createdAt: number };
+
+/**
+ * How long a mark keeps being retried. GitHub's Viewed state is a convenience mirror of
+ * the Gander review, which is already saved; a week-old mark GitHub still refuses is not
+ * worth a permanent warning.
+ */
+export const MAX_JOB_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface GithubViewedQueue {
   enqueue(account: GithubAccount, pullRequestId: string, paths: string[], viewed: boolean): void;
   start(): void;
   stop(): void;
   retryFailed(): void;
+  /** Forget the failed marks. The Gander review keeps them; only the GitHub mirror is dropped. */
+  dismissFailed(): void;
   status(): GithubViewedSyncStatus;
 }
 
@@ -40,6 +52,8 @@ interface QueueDeps {
   path: string;
   currentAccount(): Promise<GithubAccount>;
   send(job: Pick<Job, "account" | "pullRequestId" | "path" | "viewed">): Promise<void>;
+  /** Whether the pull request can still take Viewed marks: false once it is closed or merged. */
+  pullRequestOpen(job: Pick<Job, "account" | "pullRequestId">): Promise<boolean>;
   retryable(error: unknown): boolean;
   onStatus(status: GithubViewedSyncStatus): void;
   now?: () => number;
@@ -58,7 +72,7 @@ function loadJobs(path: string): Job[] {
     const detail = parsed.error.issues.map((issue) => `${issue.path.join(".") || "queue"}: ${issue.message}`).join(", ");
     throw new Error(`Invalid GitHub Viewed queue at ${path}: ${detail}`);
   }
-  return parsed.data.jobs;
+  return parsed.data.jobs.map((job) => ({ ...job, createdAt: job.createdAt ?? job.nextAttemptAt }));
 }
 
 function saveJobs(path: string, jobs: Job[]): void {
@@ -105,6 +119,27 @@ export function createGithubViewedQueue(deps: QueueDeps): GithubViewedQueue {
   function persist(): void {
     saveJobs(deps.path, jobs);
     publish();
+  }
+
+  function resetFailed(): void {
+    for (const job of jobs) {
+      if (job.state !== "failed") continue;
+      job.state = "pending";
+      job.attempts = 0;
+      job.nextAttemptAt = now();
+      job.error = null;
+    }
+  }
+
+  // A failure is the moment to ask whether the mark is still worth sending. Not knowing
+  // (GitHub unreachable) keeps the job: dropping it is only for a definite answer.
+  async function abandoned(job: Job): Promise<boolean> {
+    if (now() - job.createdAt > MAX_JOB_AGE_MS) return true;
+    try {
+      return !(await deps.pullRequestOpen(job));
+    } catch {
+      return false;
+    }
   }
 
   function schedule(delay = 0): void {
@@ -169,8 +204,15 @@ export function createGithubViewedQueue(deps: QueueDeps): GithubViewedQueue {
         persist();
         scheduleAfter = 0;
       } catch (error) {
+        const drop = await abandoned(snapshot);
         const current = jobs.find((candidate) => sameTarget(candidate, snapshot.account, snapshot.pullRequestId, snapshot.path));
         if (!current || current.revision !== snapshot.revision) {
+          scheduleAfter = 0;
+          return;
+        }
+        if (drop) {
+          jobs = jobs.filter((candidate) => candidate !== current);
+          persist();
           scheduleAfter = 0;
           return;
         }
@@ -197,7 +239,7 @@ export function createGithubViewedQueue(deps: QueueDeps): GithubViewedQueue {
         jobs = jobs.filter((job) => !sameTarget(job, account, pullRequestId, path));
         jobs.push({
           account: { ...account }, pullRequestId, path, viewed,
-          revision: ++revision, attempts: 0, nextAttemptAt: now(), state: "pending", error: null,
+          revision: ++revision, createdAt: now(), attempts: 0, nextAttemptAt: now(), state: "pending", error: null,
         });
       }
       persist();
@@ -205,7 +247,15 @@ export function createGithubViewedQueue(deps: QueueDeps): GithubViewedQueue {
     },
     start() {
       stopped = false;
-      publish();
+      // Each launch gives failed marks one more try: the GitHub outage or credential
+      // problem behind them has often passed, and a mark that fails again is dropped
+      // once its pull request has closed or it has aged out.
+      if (jobs.some((job) => job.state === "failed")) {
+        resetFailed();
+        persist();
+      } else {
+        publish();
+      }
       schedule();
     },
     stop() {
@@ -214,15 +264,14 @@ export function createGithubViewedQueue(deps: QueueDeps): GithubViewedQueue {
       timer = null;
     },
     retryFailed() {
-      for (const job of jobs) {
-        if (job.state !== "failed") continue;
-        job.state = "pending";
-        job.attempts = 0;
-        job.nextAttemptAt = now();
-        job.error = null;
-      }
+      resetFailed();
       persist();
       schedule();
+    },
+    dismissFailed() {
+      jobs = jobs.filter((job) => job.state !== "failed");
+      workerError = null;
+      persist();
     },
     status,
   };
