@@ -57,7 +57,7 @@ async function reset(): Promise<void> {
       <template #control>
         <select
           id="workbench-color-theme"
-          class="settings-control settings-select"
+          class="settings-select"
           name="workbench.colorTheme"
           :value="store.settings.workbench.colorTheme"
           :disabled="store.busy"
@@ -78,7 +78,7 @@ async function reset(): Promise<void> {
       <template #control>
         <select
           id="workbench-icon-theme"
-          class="settings-control settings-select"
+          class="settings-select"
           name="workbench.iconTheme"
           :value="store.settings.workbench.iconTheme"
           :disabled="store.busy"
@@ -102,11 +102,7 @@ async function reset(): Promise<void> {
 </template>
 
 <style scoped>
-.settings-select {
-  width: min(420px, 100%); margin-top: 8px; padding: 8px 34px 8px 10px;
-  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
-  background: var(--input-background); color: var(--workbench-foreground); font: inherit; font-size: 13px;
-}
+.settings-select { width: min(420px, 100%); margin-top: 8px; }
 .source { margin-top: 7px; }
 .swatches { display: flex; width: min(420px, 100%); height: 36px; overflow: hidden; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); }
 .swatches span { flex: 1; min-width: 2px; }

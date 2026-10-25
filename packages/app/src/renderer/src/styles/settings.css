@@ -49,10 +49,13 @@
   outline-offset: 2px;
 }
 
-.settings-control:focus-visible {
+/* Selects carry no styling here or in components: left alone, each platform draws its own
+   pop-up button and focus ring. A border or background swaps in Chromium's drawn fallback,
+   whose text the macOS menu no longer covers, so the old value shows through the list. */
+.settings-text-control:focus-visible {
   border-color: var(--accent);
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
 }
 
 .settings-field {
