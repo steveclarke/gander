@@ -38,7 +38,7 @@ function onInput(event: Event): void {
       <div :class="{ 'unit-row': $slots.unit }" :style="$slots.unit ? { width: `${unitWidth}px` } : undefined">
         <input
           :id="id"
-          class="settings-control settings-text-control"
+          class="settings-text-control"
           :name="name"
           :type="type"
           :value="modelValue"

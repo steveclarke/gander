@@ -13,6 +13,11 @@ export class SettingsDriver {
     await expect(this.page.locator('.settings-pane [role="status"]')).toHaveText("Saved automatically");
   }
 
+  async openWorkbenchCategory(): Promise<void> {
+    await this.page.getByRole("button", { name: "Workbench", exact: true }).click();
+    await expect(this.page.getByRole("heading", { name: "Workbench", exact: true })).toBeVisible();
+  }
+
   async openEditorCategory(): Promise<void> {
     await this.page.getByRole("button", { name: "Editor", exact: true }).click();
     await expect(this.page.getByRole("heading", { name: "Editor", exact: true })).toBeVisible();
