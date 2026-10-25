@@ -46,6 +46,34 @@ const retryableHttpError = (status: number, detail: string): boolean =>
   status === 408 || status === 429 || status >= 500
   || (status === 403 && /rate.?limit|secondary rate|abuse/i.test(detail));
 
+// GitHub reports its own server faults inside a 200 GraphQL response, most often as
+// "Something went wrong while executing your query". They clear on retry like a 5xx.
+const retryableGraphqlError = (detail: string): boolean =>
+  /something went wrong|internal|timeout|timed out|temporar|rate.?limit|try again/i.test(detail);
+
+async function graphql<T>(query: string, variables: Record<string, unknown>, token: string, fetchImpl: typeof fetch): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`${githubApiUrl()}/graphql`, {
+      method: "POST",
+      headers: { ...githubHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch (error) {
+    throw new GithubApiError(`Could not reach GitHub: ${(error as Error).message}`, true);
+  }
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new GithubApiError(`GitHub API ${res.status}: ${detail}`, retryableHttpError(res.status, detail));
+  }
+  const body = (await res.json()) as GraphqlResponse & { data?: T };
+  if (body.errors?.length) {
+    const detail = body.errors.map((error) => typeof error.message === "string" ? error.message : "Unknown GraphQL error").join("; ");
+    throw new GithubApiError(`GitHub GraphQL: ${detail}`, retryableGraphqlError(detail));
+  }
+  return body.data as T;
+}
+
 export async function getGithubAccount(token: string, fetchImpl: typeof fetch = fetch): Promise<GithubAccount> {
   let res: Response;
   try {
@@ -74,28 +102,23 @@ export async function setFileViewed(
 ): Promise<void> {
   const mutation = viewed ? "markFileAsViewed" : "unmarkFileAsViewed";
   const input = viewed ? "MarkFileAsViewedInput" : "UnmarkFileAsViewedInput";
-  let res: Response;
-  try {
-    res = await fetchImpl(`${githubApiUrl()}/graphql`, {
-      method: "POST",
-      headers: { ...githubHeaders(token), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `mutation MirrorFileViewed($input: ${input}!) { ${mutation}(input: $input) { clientMutationId } }`,
-        variables: { input: { pullRequestId, path } },
-      }),
-    });
-  } catch (error) {
-    throw new GithubApiError(`Could not reach GitHub: ${(error as Error).message}`, true);
-  }
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new GithubApiError(`GitHub API ${res.status}: ${detail}`, retryableHttpError(res.status, detail));
-  }
-  const body = (await res.json()) as GraphqlResponse;
-  if (body.errors?.length) {
-    const detail = body.errors.map((error) => typeof error.message === "string" ? error.message : "Unknown GraphQL error").join("; ");
-    throw new GithubApiError(`GitHub GraphQL: ${detail}`, /rate.?limit|temporar|timeout/i.test(detail));
-  }
+  await graphql(
+    `mutation MirrorFileViewed($input: ${input}!) { ${mutation}(input: $input) { clientMutationId } }`,
+    { input: { pullRequestId, path } },
+    token,
+    fetchImpl,
+  );
+}
+
+/** Whether a pull request is still open. A deleted one counts as closed: it cannot take marks either. */
+export async function isPullRequestOpen(pullRequestId: string, token: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  const data = await graphql<{ node: { state?: unknown } | null }>(
+    "query PullRequestState($id: ID!) { node(id: $id) { ... on PullRequest { state } } }",
+    { id: pullRequestId },
+    token,
+    fetchImpl,
+  );
+  return data.node?.state === "OPEN";
 }
 
 export async function listOpenPrs(repoId: string, token: string, fetchImpl: typeof fetch = fetch): Promise<PrSummary[]> {

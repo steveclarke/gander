@@ -49,6 +49,8 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     setGithubToken: async () => ({ ok: true as const, login: "octocat" }),
     githubViewedSyncStatus: async () => ({ pending: 0, failed: 0, message: null }),
     onGithubViewedSyncStatus: () => () => {},
+    retryGithubViewedSync: async () => {},
+    dismissGithubViewedSync: async () => {},
     testConnection: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
     saveServer: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
     onOpenTarget: () => () => {},
@@ -97,6 +99,36 @@ describe("store", () => {
 
     listeners[0]!({ pending: 0, failed: 0, message: null });
     expect(store.error).toBeNull();
+  });
+
+  it("shows a GitHub sync failure in the banner once, not on every status update", () => {
+    const listeners: Array<(status: { pending: number; failed: number; message: string | null }) => void> = [];
+    const store = createStore(fakeApi({
+      onGithubViewedSyncStatus: (next) => { listeners.push(next); return () => {}; },
+    }));
+    const failure = { pending: 0, failed: 2, message: "GitHub Viewed sync failed for a.rb: Something went wrong. The Gander review is saved." };
+
+    listeners[0]!(failure);
+    expect(store.error).toBe(failure.message);
+    store.dismissError();
+    listeners[0]!(failure);
+    expect(store.error).toBeNull();
+    expect(store.githubViewedSync.failed).toBe(2);
+
+    listeners[0]!({ pending: 0, failed: 0, message: null });
+    listeners[0]!(failure);
+    expect(store.error).toBe(failure.message);
+  });
+
+  it("retries and dismisses failed GitHub sync through the main process", async () => {
+    const calls: string[] = [];
+    const store = createStore(fakeApi({
+      retryGithubViewedSync: async () => { calls.push("retry"); },
+      dismissGithubViewedSync: async () => { calls.push("dismiss"); },
+    }));
+    await store.retryGithubViewedSync();
+    await store.dismissGithubViewedSync();
+    expect(calls).toEqual(["retry", "dismiss"]);
   });
 
   it("opens a target naming a repository and pull request", async () => {

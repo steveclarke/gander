@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { getGithubAccount, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
+import { getGithubAccount, isPullRequestOpen, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
 
 const ghPr = {
   node_id: "PR_kwDOExample",
@@ -137,6 +137,44 @@ describe("setFileViewed", () => {
     const rateLimited403 = setFileViewed("PR_123", "src/a.ts", true, "tok", (async () =>
       new Response("API rate limit exceeded", { status: 403 })) as typeof fetch);
     await expect(rateLimited403).rejects.toSatisfy(isRetryableGithubError);
+
+    const badGateway = setFileViewed("PR_123", "src/a.ts", true, "tok", (async () =>
+      new Response("Bad gateway", { status: 502 })) as typeof fetch);
+    await expect(badGateway).rejects.toSatisfy(isRetryableGithubError);
+  });
+
+  it("retries GitHub's own GraphQL server faults but not refusals", async () => {
+    const graphqlError = (message: string) => (async () =>
+      new Response(JSON.stringify({ errors: [{ message }] }), { status: 200 })) as typeof fetch;
+
+    await expect(setFileViewed("PR_123", "src/a.ts", true, "tok",
+      graphqlError("Something went wrong while executing your query. Please include `ABCD:1234` when reporting this issue.")))
+      .rejects.toSatisfy(isRetryableGithubError);
+    await expect(setFileViewed("PR_123", "src/a.ts", true, "tok", graphqlError("Resource not accessible by integration")))
+      .rejects.not.toSatisfy(isRetryableGithubError);
+  });
+});
+
+describe("isPullRequestOpen", () => {
+  const stateFetch = (node: unknown) => (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { query: string; variables: unknown };
+    expect(body.query).toContain("... on PullRequest { state }");
+    expect(body.variables).toEqual({ id: "PR_123" });
+    return new Response(JSON.stringify({ data: { node } }), { status: 200 });
+  }) as typeof fetch;
+
+  it.each([
+    [{ state: "OPEN" }, true],
+    [{ state: "CLOSED" }, false],
+    [{ state: "MERGED" }, false],
+    [null, false],
+  ])("reads %j as open=%s", async (node, open) => {
+    expect(await isPullRequestOpen("PR_123", "tok", stateFetch(node))).toBe(open);
+  });
+
+  it("throws rather than guessing when GitHub cannot answer", async () => {
+    await expect(isPullRequestOpen("PR_123", "tok", (async () =>
+      new Response("Bad gateway", { status: 502 })) as typeof fetch)).rejects.toThrow(/502/);
   });
 });
 

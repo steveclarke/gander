@@ -105,14 +105,31 @@ const lastFetch = computed(() => {
 
     <span v-if="store.view || store.localView" class="sep">·</span>
     <span v-if="store.view || store.localView" class="fetch">{{ lastFetch }}</span>
+    <template v-if="store.githubViewedSync.failed > 0">
+      <button
+        class="github-sync failed"
+        type="button"
+        popovertarget="github-sync-menu"
+        :title="store.githubViewedSync.message ?? undefined"
+        aria-haspopup="dialog"
+      >
+        GitHub sync · {{ store.githubViewedSync.failed }} failed
+      </button>
+      <div id="github-sync-menu" class="github-sync-menu" popover="auto" role="dialog" aria-label="GitHub sync failures">
+        <p>{{ store.githubViewedSync.message }}</p>
+        <div class="actions">
+          <button type="button" popovertarget="github-sync-menu" popovertargetaction="hide" @click="store.dismissGithubViewedSync()">Dismiss</button>
+          <button type="button" class="primary" popovertarget="github-sync-menu" popovertargetaction="hide" @click="store.retryGithubViewedSync()">Retry</button>
+        </div>
+      </div>
+    </template>
     <span
-      v-if="store.githubViewedSync.pending > 0 || store.githubViewedSync.failed > 0"
+      v-else-if="store.githubViewedSync.pending > 0"
       class="github-sync"
-      :class="{ failed: store.githubViewedSync.failed > 0 }"
       :title="store.githubViewedSync.message ?? 'GitHub Viewed changes are syncing in the background'"
       role="status"
     >
-      GitHub sync · {{ store.githubViewedSync.failed > 0 ? `${store.githubViewedSync.failed} failed` : `${store.githubViewedSync.pending} pending` }}
+      GitHub sync · {{ store.githubViewedSync.pending }} pending
     </span>
 
     <span class="spacer" />
@@ -153,7 +170,31 @@ const lastFetch = computed(() => {
 .spacer { flex: 1; }
 .working { color: var(--muted-foreground); }
 .github-sync { color: var(--muted-foreground); }
-.github-sync.failed { color: var(--danger); }
+.github-sync.failed {
+  anchor-name: --github-sync-trigger;
+  height: 22px; padding: 0 4px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--danger); cursor: pointer; font: inherit;
+}
+.github-sync.failed:hover, .github-sync.failed:focus-visible { background: var(--hover-background); }
+.github-sync-menu button:focus-visible, .github-sync.failed:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.github-sync-menu {
+  position: fixed; position-anchor: --github-sync-trigger; position-area: block-start span-inline-end;
+  width: min(44ch, calc(100vw - 16px)); margin: 0 0 7px; padding: 10px;
+  border: 1px solid var(--workbench-border); border-radius: var(--radius-md);
+  background: var(--elevated-background); color: var(--workbench-foreground);
+  box-shadow: 0 6px 18px var(--workbench-shadow); font-size: 12px;
+}
+.github-sync-menu p { margin: 0 0 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.github-sync-menu .actions { display: flex; justify-content: flex-end; gap: 6px; }
+.github-sync-menu .actions button {
+  height: 24px; padding: 0 10px; border: 1px solid var(--workbench-border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--workbench-foreground); cursor: pointer; font: inherit;
+}
+.github-sync-menu .actions button:hover { background: var(--hover-background); }
+.github-sync-menu .actions .primary { border-color: var(--accent); background: var(--accent); color: var(--accent-foreground); }
+@supports not (position-area: block-start) {
+  .github-sync-menu { inset: auto auto 30px 8px; }
+}
 .development { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 32ch; color: var(--warning); }
 .development-kind { flex: none; font-weight: 700; letter-spacing: 0.06em; }
 .worktree-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

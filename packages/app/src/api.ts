@@ -57,6 +57,8 @@ export interface GanderApi {
   setGithubToken(token: string): Promise<GithubTokenCheck>;
   githubViewedSyncStatus(): Promise<GithubViewedSyncStatus>;
   onGithubViewedSyncStatus(listener: (status: GithubViewedSyncStatus) => void): () => void;
+  retryGithubViewedSync(): Promise<void>;
+  dismissGithubViewedSync(): Promise<void>;
   testConnection(url: string, token: string): Promise<ConnectionCheck>;
   /** Checks first, and saves only a connection that answered. */
   serviceStatus(repoId?: string): Promise<ServiceStatus>;

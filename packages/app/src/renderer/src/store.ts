@@ -42,6 +42,10 @@ export interface Store {
   busy: boolean;
   loadRepos(): Promise<void>;
   loadGithubViewedSync(): Promise<void>;
+  /** Send the failed GitHub Viewed marks again. */
+  retryGithubViewedSync(): Promise<void>;
+  /** Give up on the failed GitHub Viewed marks; the Gander review already holds them. */
+  dismissGithubViewedSync(): Promise<void>;
   checkService(): Promise<void>;
   dismissError(): void;
   /** Reopen the pull request that was open when the app last closed. */
@@ -101,11 +105,20 @@ export function createStore(api: GanderApi): Store {
   let serviceStatusRequest = 0;
   let explorerMutation = Promise.resolve();
 
+  // The queue republishes its status whenever it does anything, so the same failure
+  // arrives again and again. The banner announces a failure once; after that the status
+  // bar carries it, and dismissing the banner keeps it dismissed.
+  let announcedSyncFailure: string | null = null;
   function applyGithubViewedSync(status: GithubViewedSyncStatus): void {
     const previousMessage = store.githubViewedSync.message;
     store.githubViewedSync = status;
-    if (status.failed > 0 && status.message) store.error = status.message;
-    else if (previousMessage !== null && store.error === previousMessage) store.error = null;
+    if (status.failed > 0 && status.message) {
+      if (status.message !== announcedSyncFailure) store.error = status.message;
+      announcedSyncFailure = status.message;
+      return;
+    }
+    announcedSyncFailure = null;
+    if (previousMessage !== null && store.error === previousMessage) store.error = null;
   }
 
   function syncCurrentProgress(): void {
@@ -148,6 +161,12 @@ export function createStore(api: GanderApi): Store {
     },
     async loadGithubViewedSync() {
       applyGithubViewedSync(await api.githubViewedSyncStatus());
+    },
+    async retryGithubViewedSync() {
+      await api.retryGithubViewedSync();
+    },
+    async dismissGithubViewedSync() {
+      await api.dismissGithubViewedSync();
     },
     async checkService() {
       const request = ++serviceStatusRequest;

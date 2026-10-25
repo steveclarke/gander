@@ -6,7 +6,7 @@ import { type LocalView, type OpenTarget, type RepoEntry, type PrView, type Upda
 import { connectionIsFromEnvironment, loadConfig, saveConfig, type GanderConfig } from "./config.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine, type GitEngine } from "./git.js";
-import { checkGithubToken, getGithubAccount, githubApiUrl, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
+import { checkGithubToken, getGithubAccount, githubApiUrl, isPullRequestOpen, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
 import { createGithubViewedQueue, type GithubAccount, type GithubViewedQueue } from "./github-viewed-queue.js";
 import { startOpenServer } from "./open-socket.js";
 import type { Reviewer, CheckoffResult } from "./review.js";
@@ -94,6 +94,7 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
       }
       await setFileViewed(job.pullRequestId, job.path, job.viewed, connection.token);
     },
+    pullRequestOpen: async (job) => isPullRequestOpen(job.pullRequestId, (await githubConnection()).token),
     retryable: isRetryableGithubError,
     onStatus: (status) => {
       for (const window of BrowserWindow.getAllWindows()) {
@@ -235,6 +236,8 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     return { ...status, serverName: session.name, ...(claimLost ? { claimLost } : {}) };
   });
   ipcMain.handle("gander:githubViewedSyncStatus", async () => githubViewedQueue.status());
+  ipcMain.handle("gander:retryGithubViewedSync", async () => githubViewedQueue.retryFailed());
+  ipcMain.handle("gander:dismissGithubViewedSync", async () => githubViewedQueue.dismissFailed());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {

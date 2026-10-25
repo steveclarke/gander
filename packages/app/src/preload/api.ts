@@ -100,6 +100,8 @@ export function createGanderApi(
     setGithubToken: (token) => call("setGithubToken", token),
     githubViewedSyncStatus: () => call("githubViewedSyncStatus"),
     onGithubViewedSyncStatus: (listener) => subscribe("gander:githubViewedSyncStatus", (status: GithubViewedSyncStatus) => listener(status)),
+    retryGithubViewedSync: () => call("retryGithubViewedSync"),
+    dismissGithubViewedSync: () => call("dismissGithubViewedSync"),
     getSettings: () => call("getSettings"),
     updateSettings: (settings) => call("updateSettings", settings),
     onOpenSettings: (listener) => subscribe("gander:openSettings", listener),

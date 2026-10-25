@@ -49,6 +49,8 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     busy: false,
     async loadRepos() {},
     async loadGithubViewedSync() {},
+    async retryGithubViewedSync() {},
+    async dismissGithubViewedSync() {},
     async restoreLastReview() {},
     async checkService() {},
     dismissError() {},
