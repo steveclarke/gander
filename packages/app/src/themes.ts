@@ -1,6 +1,6 @@
 import type { editor } from "monaco-editor";
 
-export const THEME_IDS = ["Catppuccin Mocha", "Gander Dark"] as const;
+export const THEME_IDS = ["Catppuccin Mocha", "Gander Dark", "Gander Light"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
 export interface WorkbenchThemeTokens {
@@ -180,6 +180,16 @@ const ganderDarkMonaco: editor.IStandaloneThemeData = {
   },
 };
 
+const ganderLightWorkbench: WorkbenchThemeTokens = {
+  background: "#ffffff", panelBackground: "#f6f8fa", secondaryPanelBackground: "#f0f3f6",
+  elevatedBackground: "#ffffff", inputBackground: "#ffffff", badgeBackground: "#e8edf2",
+  border: "#d0d7de", foreground: "#1f2328", mutedForeground: "#495563", faintForeground: "#596574",
+  accent: "#0969da", accentForeground: "#ffffff", success: "#1a7f37", danger: "#cf222e",
+  warning: "#9a6700", info: "#0550ae", hoverBackground: "#eaeef2", selectionBackground: "#ddedff",
+  focusRing: "#0969da66", overlay: "#1f232866", shadow: "#1f232833", successBackground: "#dafbe1",
+  dangerBackground: "#ffebe9", warningBackground: "#fff8c5", addedGutterBackground: "#aceebb", deletedGutterBackground: "#ffcecb",
+};
+
 export const THEME_REGISTRY: Readonly<Record<ThemeId, GanderTheme>> = Object.freeze({
   "Catppuccin Mocha": Object.freeze({
     id: "Catppuccin Mocha",
@@ -188,6 +198,13 @@ export const THEME_REGISTRY: Readonly<Record<ThemeId, GanderTheme>> = Object.fre
     workbench: Object.freeze(catppuccinMochaWorkbench),
     monacoName: "gander-catppuccin-mocha",
     monaco: Object.freeze(catppuccinMochaMonaco),
+  }),
+  "Gander Light": Object.freeze({
+    id: "Gander Light", label: "Gander Light", source: "Gander", workbench: Object.freeze(ganderLightWorkbench),
+    monacoName: "gander-light", monaco: Object.freeze({ base: "vs", inherit: true, rules: [], colors: {
+      "editor.background": "#ffffff", "editor.foreground": "#1f2328",
+      "diffEditor.insertedLineBackground": "#dafbe1", "diffEditor.removedLineBackground": "#ffebe9",
+    } } as editor.IStandaloneThemeData),
   }),
   "Gander Dark": Object.freeze({
     id: "Gander Dark",

@@ -44,12 +44,13 @@ if (!parsed.success) {
 // Only the keys the app itself writes. A stale top-level key (zoomLevel lived here once)
 // fails a strict parse just as an unknown settings key does.
 const after: Json = {
-  serviceUrl: typeof before.serviceUrl === "string" ? before.serviceUrl : "",
-  serviceToken: typeof before.serviceToken === "string" ? before.serviceToken : "",
+  servers: Array.isArray(before.servers) ? before.servers : typeof before.serviceUrl === "string" && before.serviceUrl !== ""
+    ? [{ id: "default", name: "Review server", url: before.serviceUrl, token: before.serviceToken }] : [],
+  ownerServers: Array.isArray(before.ownerServers) ? before.ownerServers : [],
   ...(typeof before.githubToken === "string" && before.githubToken !== "" ? { githubToken: before.githubToken } : {}),
   ...(isObject(before.lastReview) ? { lastReview: before.lastReview } : {}),
   settings: parsed.data,
-  repos: Array.isArray(before.repos) ? before.repos : [],
+  repos: Array.isArray(before.repos) ? before.repos.map((repo) => isObject(repo) && !Array.isArray(before.servers) && before.serviceUrl ? { ...repo, serverId: "default" } : repo) : [],
 };
 
 const repaired = ConfigSchema.safeParse(after);

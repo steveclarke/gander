@@ -47,7 +47,7 @@ describe("local repository registration", () => {
     const { fixture, git } = await repositoryFixture("acme/atlas");
     const repos: RepoEntry[] = [];
 
-    const added = await registerFromCheckout(git, repos, "acme/atlas", fixture.dir);
+    const added = await registerFromCheckout(git, () => repos, "acme/atlas", fixture.dir);
 
     expect(added).toEqual({ repoId: "acme/atlas", url: "https://github.com/acme/atlas.git", localPath: realpathSync(fixture.dir) });
     expect(repos).toHaveLength(1);
@@ -57,21 +57,38 @@ describe("local repository registration", () => {
     const { fixture, git } = await repositoryFixture("acme/atlas");
     const repos: RepoEntry[] = [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas.git", localPath: "/elsewhere" }];
 
-    await expect(registerFromCheckout(git, repos, "acme/atlas", fixture.dir)).resolves.toBeNull();
+    await expect(registerFromCheckout(git, () => repos, "acme/atlas", fixture.dir)).resolves.toBeNull();
     expect(repos[0]!.localPath).toBe("/elsewhere");
   });
 
   it("refuses a checkout that belongs to another repository", async () => {
     const { fixture, git } = await repositoryFixture("acme/beacon");
 
-    await expect(registerFromCheckout(git, [], "acme/atlas", fixture.dir))
+    await expect(registerFromCheckout(git, () => [], "acme/atlas", fixture.dir))
       .rejects.toThrow("That folder belongs to acme/beacon, not acme/atlas");
   });
 
   it("still asks for a folder when the request names no checkout", async () => {
     const { git } = await repositoryFixture("acme/atlas");
 
-    await expect(registerFromCheckout(git, [], "acme/atlas", null))
+    await expect(registerFromCheckout(git, () => [], "acme/atlas", null))
       .rejects.toThrow("acme/atlas is not registered. Open one of its checkout folders first.");
   });
+});
+
+it("commits registration into the current repo list after a concurrent settings replacement", async () => {
+  const { fixture, git } = await repositoryFixture("acme/atlas");
+  let repos: RepoEntry[] = [];
+  let release!: () => void;
+  let prepared!: () => void;
+  const waiting = new Promise<void>((resolve) => { release = resolve; });
+  const entered = new Promise<void>((resolve) => { prepared = resolve; });
+  const pending = registerFromCheckout(git, () => repos, "acme/atlas", fixture.dir, async (entry) => {
+    prepared(); await waiting; entry.serverId = "team";
+  });
+  await entered;
+  const old = repos; repos = [];
+  release(); await pending;
+  expect(old).toEqual([]);
+  expect(repos).toHaveLength(1); expect(repos[0]!.serverId).toBe("team");
 });

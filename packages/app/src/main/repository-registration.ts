@@ -36,15 +36,18 @@ export function assertRepositoryRegistered(repos: RepoEntry[], repoId: string): 
  */
 export async function registerFromCheckout(
   git: Pick<GitEngine, "worktreeRoot" | "originUrl">,
-  repos: RepoEntry[],
+  repos: () => RepoEntry[],
   repoId: string,
   checkoutPath: string | null,
+  prepare: (entry: RepoEntry) => Promise<void> = async () => {},
 ): Promise<RepoEntry | null> {
-  if (repos.some((repo) => repo.repoId === repoId)) return null;
+  if (repos().some((repo) => repo.repoId === repoId)) return null;
   if (checkoutPath === null) {
     throw new Error(`${repoId} is not registered. Open one of its checkout folders first.`);
   }
   const entry = await repositoryFromLocalPath(git, checkoutPath, repoId);
-  repos.push(entry);
+  await prepare(entry);
+  if (repos().some((repo) => repo.repoId === repoId)) return null;
+  repos().push(entry);
   return entry;
 }

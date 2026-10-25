@@ -53,8 +53,8 @@ bin/deploy --ref v0.2.0    # a tag
 
 ## Point the app at it
 
-In the installed app, open **Settings → Connection**, enter the hosted URL and
-token, then test and save the connection.
+In the installed app, open **Settings → Connection**, add a named server with its hosted URL and
+token, then test and save it.
 
 From a development checkout, use the checkout-local settings and start the app
 without its local service:

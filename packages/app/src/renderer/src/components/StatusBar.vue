@@ -76,7 +76,7 @@ const lastFetch = computed(() => {
       role="status"
     >
       <span class="dot" />
-      <span class="service-label">{{ serviceLabel }}</span>
+      <span class="service-label">{{ store.serviceStatus.serverName ? `${store.serviceStatus.serverName} · ` : "" }}{{ serviceLabel }}</span>
     </span>
 
     <span v-if="store.view || store.localView" class="sep">·</span>

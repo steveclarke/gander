@@ -13,8 +13,7 @@ function fixture(): {
   onSettingsChanged: ReturnType<typeof vi.fn>;
 } {
   const cfg: GanderConfig = {
-    serviceUrl: "http://localhost:8390",
-    serviceToken: "token",
+    servers: [], ownerServers: [],
     repos: [],
     settings: DEFAULT_APP_SETTINGS,
   };

@@ -42,12 +42,14 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     refreshPr: async () => prView(),
     lastReview: async () => null,
     initialTarget: async () => null,
-    getConnection: async () => ({ url: "http://service", token: "t", githubToken: "", fromEnvironment: false }),
+    onServersChanged: () => () => {},
+    getServers: async () => ({ servers: [{ id: "one", name: "One", url: "http://service", token: "t" }], ownerServers: [], repos: [], githubToken: "", fromEnvironment: false }),
+    removeServer: async () => {}, setOwnerServers: async () => {}, setRepoServer: async () => {},
     setGithubToken: async () => ({ ok: true as const, login: "octocat" }),
     githubViewedSyncStatus: async () => ({ pending: 0, failed: 0, message: null }),
     onGithubViewedSyncStatus: () => () => {},
     testConnection: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
-    setConnection: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
+    saveServer: async () => ({ ok: true, version: "0.1.0", compatibility: "compatible" }),
     onOpenTarget: () => () => {},
     serviceStatus: async () => ({ state: "connected", serviceVersion: "0.1.0", supportedVersion: "0.1.0" }),
     reviewedSnapshot: async () => null,
@@ -700,4 +702,36 @@ describe("store", () => {
       .toBe("The review service at http://x does not have GET /api/reviews/a%2Fb.");
     expect(readable("plain trouble")).toBe("plain trouble");
   });
+});
+
+it("does not let a slow old server status replace the selected repository's status", async () => {
+  let release!: (status: { state: "unreachable"; reason: string }) => void;
+  const slow = new Promise<{ state: "unreachable"; reason: string }>((resolve) => { release = resolve; });
+  const store = createStore(fakeApi({ serviceStatus: async (repoId) => repoId === "old/atlas" ? slow : { state: "connected", serviceVersion: "0.10.0", supportedVersion: "0.10.0", serverName: "New" } }));
+  store.targetRepoId = "old/atlas";
+  const pending = store.checkService();
+  store.targetRepoId = "new/atlas";
+  await store.checkService();
+  release({ state: "unreachable", reason: "Old server offline" });
+  await pending;
+  expect(store.serviceStatus).toMatchObject({ state: "connected", serverName: "New" });
+});
+
+it("discards an old server's delayed refresh after the server changes", async () => {
+  let release!: (view: PrView) => void;
+  const delayed = new Promise<PrView>((resolve) => { release = resolve; });
+  let newServer = false;
+  const store = createStore(fakeApi({
+    openPr: async () => ({ ...prView(), reviewSessionId: newServer ? "B" : "A", notes: [] }),
+    refreshPr: async () => delayed,
+  }));
+  await store.loadRepos(); await store.selectRepo("acme/atlas"); await store.openPr(1);
+  const pending = store.refresh();
+  newServer = true;
+  await store.reloadReviewServer();
+  expect(store.view?.reviewSessionId).toBe("B");
+  release({ ...prView(["a.rb"]), reviewSessionId: "A" });
+  await pending;
+  expect(store.view?.reviewSessionId).toBe("B");
+  expect(store.view?.files[0]!.checked).toBe(false);
 });

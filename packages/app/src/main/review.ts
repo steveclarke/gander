@@ -1,4 +1,4 @@
-import type { FileCheckoff, NewNote, PrFile, PrListItem, PrSummary, PrView, ReviewState, UpdateNote } from "@gander/shared";
+import type { FileCheckoff, NewNote, PrFile, PrListItem, PrSummary, PrView, ReviewState, UpdateNote, PutFileState } from "@gander/shared";
 import type { GitEngine } from "./git.js";
 import { ServiceConnectionError, STALE_SERVICE_DATA_WRITE_ERROR, type ServiceClient } from "./service-client.js";
 import type { ImagePreview, ImageSide } from "../image-preview.js";
@@ -204,22 +204,18 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
       if (!file) throw new Error(`${path} is not part of PR #${prNumber}`);
       return file;
     });
-    for (const file of files) {
-      const { path } = file;
-      if (checked) {
-        await writeServiceState(entry, () => deps.service.putFileState(repoId, prNumber, {
-          checked: true, path,
-          baseHash: file.baseHash, headHash: file.headHash,
-          baseContent: file.baseContent, headContent: file.headContent,
-          machine: deps.machine,
-        }));
-        file.checked = true;
-        file.changedSince = false;
-      } else {
-        await writeServiceState(entry, () => deps.service.putFileState(repoId, prNumber, { checked: false, path }));
-        file.checked = false;
+    const inputs: PutFileState[] = files.map((file) => checked ? {
+      checked: true, path: file.path,
+      baseHash: file.baseHash, headHash: file.headHash,
+      baseContent: file.baseContent, headContent: file.headContent, machine: deps.machine,
+    } : { checked: false, path: file.path });
+    await writeServiceState(entry, () => deps.service.putFileStates(repoId, prNumber, inputs, (saved) => {
+      for (const state of saved) {
+        const file = files.find((candidate) => candidate.path === state.path)!;
+        file.checked = state.checked;
+        if (state.checked) file.changedSince = false;
       }
-    }
+    }));
 
     let githubError: string | null = null;
     try {

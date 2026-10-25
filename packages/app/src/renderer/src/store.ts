@@ -56,6 +56,7 @@ export interface Store {
   loadLocalDirectory(directory: string): Promise<void>;
   showLocalSurface(surface: "explorer" | "changes"): void;
   refresh(): Promise<void>;
+  reloadReviewServer(): Promise<void>;
   /** The reviewer pressing Fetch origin: same work as refresh, but it clears a stale error. */
   fetchNow(): Promise<void>;
   /**
@@ -97,6 +98,7 @@ export function createStore(api: GanderApi): Store {
   let localFileRequest = 0;
   let localContextGeneration = 0;
   let targetContextRequest = 0;
+  let serviceStatusRequest = 0;
   let explorerMutation = Promise.resolve();
 
   function applyGithubViewedSync(status: GithubViewedSyncStatus): void {
@@ -148,8 +150,12 @@ export function createStore(api: GanderApi): Store {
       applyGithubViewedSync(await api.githubViewedSyncStatus());
     },
     async checkService() {
+      const request = ++serviceStatusRequest;
+      const repoId = store.currentRepoId ?? store.targetRepoId ?? undefined;
+      const status = await api.serviceStatus(repoId);
+      if (request !== serviceStatusRequest || repoId !== (store.currentRepoId ?? store.targetRepoId ?? undefined)) return;
       const previous = store.serviceStatus;
-      store.serviceStatus = await api.serviceStatus();
+      store.serviceStatus = status;
       // A read can fail during launch and leave exactly the health-check reason in the
       // banner. Opening a large local checkout can outlive the health poll that recovers,
       // then restore that old reason after the status is already connected; recognize the
@@ -284,6 +290,19 @@ export function createStore(api: GanderApi): Store {
       }
       if (surface === "explorer" && store.selectedPath) void selectLocalFile(store.selectedPath);
     },
+    async reloadReviewServer() {
+      const repoId = store.currentRepoId;
+      const prNumber = store.view?.pr.number;
+      const generation = ++localContextGeneration;
+      targetContextRequest++; serviceStatusRequest++;
+      store.view = null;
+      store.selectedPrNumber = null;
+      if (!store.localView) store.selectedPath = null;
+      await withBusy(() => guard(async () => {
+        if (repoId && prNumber !== undefined) await applyOpenedPr(repoId, prNumber, generation);
+        if (generation === localContextGeneration && store.targetRepoId) await loadContexts(store.targetRepoId);
+      }));
+    },
     async refresh() {
       await withBusy(() => guard(async () => {
         if (store.localView) {
@@ -304,7 +323,9 @@ export function createStore(api: GanderApi): Store {
           applyLocalView(refreshed);
           await refreshExplorer();
         } else if (store.currentRepoId && store.view) {
-          store.view = await api.refreshPr(store.currentRepoId, store.view.pr.number);
+          const view = await currentReview((context) => api.refreshPr(context.repoId, context.prNumber, context.reviewSessionId));
+          if (!view) return;
+          store.view = view;
           syncCurrentProgress();
           await store.checkService();
         } else return;
@@ -323,8 +344,8 @@ export function createStore(api: GanderApi): Store {
     },
     async setChecked(path: string, checked: boolean) {
       await guard(async () => {
-        const { repoId, prNumber } = requireOpenPr();
-        const result = await api.setChecked(repoId, prNumber, path, checked);
+        const result = await currentReview((context) => api.setChecked(context.repoId, context.prNumber, path, checked, context.reviewSessionId));
+        if (!result) return;
         store.view = result.view;
         store.error = result.githubError;
         syncCurrentProgress();
@@ -332,8 +353,8 @@ export function createStore(api: GanderApi): Store {
     },
     async setCheckedMany(paths: string[], checked: boolean) {
       await guard(async () => {
-        const { repoId, prNumber } = requireOpenPr();
-        const result = await api.setCheckedMany(repoId, prNumber, paths, checked);
+        const result = await currentReview((context) => api.setCheckedMany(context.repoId, context.prNumber, paths, checked, context.reviewSessionId));
+        if (!result) return;
         store.view = result.view;
         store.error = result.githubError;
         syncCurrentProgress();
@@ -341,29 +362,29 @@ export function createStore(api: GanderApi): Store {
     },
     async reviewedSnapshot(path: string) {
       if (!store.currentRepoId || !store.view) return null;
-      return api.reviewedSnapshot(store.currentRepoId, store.view.pr.number, path);
+      return (await currentReview((context) => api.reviewedSnapshot(context.repoId, context.prNumber, path, context.reviewSessionId))) ?? null;
     },
     async imagePreview(path: string) {
       if (store.localView) return api.localImagePreview(path);
       if (!store.currentRepoId || !store.view) return null;
-      return api.imagePreview(store.currentRepoId, store.view.pr.number, path);
+      return (await currentReview((context) => api.imagePreview(context.repoId, context.prNumber, path, context.reviewSessionId))) ?? null;
     },
     async addNote(text: string, path: string | null, line: number | null) {
       await guard(async () => {
-        const { repoId, prNumber } = requireOpenPr();
-        store.view = await api.addNote(repoId, prNumber, { path, line, text });
+        const view = await currentReview((context) => api.addNote(context.repoId, context.prNumber, { path, line, text }, context.reviewSessionId));
+        if (view) store.view = view;
       });
     },
     async deleteNote(id: number) {
       await guard(async () => {
-        const { repoId, prNumber } = requireOpenPr();
-        store.view = await api.deleteNote(repoId, prNumber, id);
+        const view = await currentReview((context) => api.deleteNote(context.repoId, context.prNumber, id, context.reviewSessionId));
+        if (view) store.view = view;
       });
     },
     async updateNote(id, input) {
       await guard(async () => {
-        const { repoId, prNumber } = requireOpenPr();
-        store.view = await api.updateNote(repoId, prNumber, id, input);
+        const view = await currentReview((context) => api.updateNote(context.repoId, context.prNumber, id, input, context.reviewSessionId));
+        if (view) store.view = view;
       });
     },
     select(path: string) {
@@ -479,9 +500,22 @@ export function createStore(api: GanderApi): Store {
       ?? null;
   }
 
-  function requireOpenPr(): { repoId: string; prNumber: number } {
+  function requireOpenPr(): { repoId: string; prNumber: number; reviewSessionId?: string } {
     if (!store.currentRepoId || !store.view) throw new Error("no PR open");
-    return { repoId: store.currentRepoId, prNumber: store.view.pr.number };
+    return { repoId: store.currentRepoId, prNumber: store.view.pr.number, reviewSessionId: store.view.reviewSessionId };
+  }
+
+  async function currentReview<T>(action: (context: ReturnType<typeof requireOpenPr>) => Promise<T>): Promise<T | undefined> {
+    const generation = localContextGeneration;
+    const context = requireOpenPr();
+    try {
+      const result = await action(context);
+      if (generation !== localContextGeneration || context.reviewSessionId !== store.view?.reviewSessionId) return undefined;
+      return result;
+    } catch (error) {
+      if (generation !== localContextGeneration) return undefined;
+      throw error;
+    }
   }
 
   /** Makes a repository the target and loads its pull requests and worktrees. */

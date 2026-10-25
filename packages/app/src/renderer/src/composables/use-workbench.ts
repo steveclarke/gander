@@ -48,7 +48,8 @@ export function useWorkbench(store: Store, api: GanderApi): Workbench {
   ));
 
   async function refreshConnectionState(): Promise<void> {
-    unconfigured.value = (await api.getConnection()).url === "";
+    const connection = await api.getServers();
+    unconfigured.value = connection.servers.length === 0 && !connection.fromEnvironment;
     await store.checkService();
   }
 
@@ -181,8 +182,10 @@ export function useWorkbench(store: Store, api: GanderApi): Workbench {
   // `bin/gander` is run against this window.
   let unsubscribeOpenTarget: (() => void) | null = null;
   let unsubscribeOpenSettings: (() => void) | null = null;
+  let unsubscribeServers: (() => void) | null = null;
 
   onMounted(async () => {
+    unsubscribeServers = api.onServersChanged(() => { void store.reloadReviewServer(); });
     unsubscribeOpenTarget = api.onOpenTarget((target) => { void openExternalTarget(target); });
     unsubscribeOpenSettings = api.onOpenSettings(() => openSettings());
     await start();
@@ -191,6 +194,7 @@ export function useWorkbench(store: Store, api: GanderApi): Workbench {
   onBeforeUnmount(() => {
     unsubscribeOpenTarget?.();
     unsubscribeOpenSettings?.();
+    unsubscribeServers?.();
   });
 
   return {

@@ -57,6 +57,15 @@ planned replacement and current security boundaries.
 See `DEVSTACK.md` for the dev stack, and `docs/STATE.md` for where the project
 stands.
 
+## Review servers
+
+1. Settings → Connection → Add server accepts a name, service URL and token. Save server checks the connection before keeping it.
+2. Defaults by owner chooses a server for new repositories from that owner, such as `acme/*`.
+3. Opening a repository folder remembers its server. When no owner default matches and several servers are available, Gander asks once.
+4. Switching repositories automatically uses the remembered server. Settings shows every assignment; changing one leaves old reviews on their original server.
+
+Existing single-server settings upgrade automatically with every repository on the same server. Tokens remain in the owner-only config file and outside Settings JSON. Folder checkoff uses atomic batches with service contract 0.10.0; 0.9 services retain single-file writes. A failed server never redirects a repository to another server.
+
 ## Settings
 
 Gander exposes VS Code-style public keys in its Settings JSON view. File-tree

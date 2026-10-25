@@ -37,15 +37,15 @@ if ! grep -q '^GANDER_TOKEN=' .env 2>/dev/null; then
 fi
 
 # A repo-local config keeps ~/.config/gander/config.json untouched, and keeps
-# each worktree's registered repos separate. serviceUrl and serviceToken here
-# are placeholders — the live values come from .env at runtime.
+# each worktree's registered repos separate. The development connection comes
+# from .env at runtime; saved review servers stay independent of allocated ports.
 if [ ! -f .gander/config.json ]; then
   echo "==> Seeding .gander/config.json"
   mkdir -p .gander
   cat > .gander/config.json <<'JSON'
 {
-  "serviceUrl": "http://127.0.0.1:8390",
-  "serviceToken": "placeholder-overridden-by-env",
+  "servers": [],
+  "ownerServers": [],
   "settings": {
     "editor": {
       "fontFamily": "'JetBrainsMono NF', 'FiraCode NF', 'Jetbrains Mono', 'Fira Code', Consolas, 'Courier New', monospace",

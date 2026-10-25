@@ -7,8 +7,7 @@ import { createZoomController } from "./zoom-controller.js";
 describe("zoom controller", () => {
   it("persists, applies, and announces one clamped zoom state to every window", () => {
     const cfg: GanderConfig = {
-      serviceUrl: "",
-      serviceToken: "",
+      servers: [], ownerServers: [],
       repos: [],
       settings: DEFAULT_APP_SETTINGS,
     };
@@ -32,8 +31,7 @@ describe("zoom controller", () => {
 
   it("applies a settings change without persisting it twice", () => {
     const cfg: GanderConfig = {
-      serviceUrl: "",
-      serviceToken: "",
+      servers: [], ownerServers: [],
       repos: [],
       settings: DEFAULT_APP_SETTINGS,
     };

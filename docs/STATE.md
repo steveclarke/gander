@@ -131,3 +131,7 @@ keyboard focus, images, local worktrees, the real `bin/gander` command, and clon
 concurrency. The suite uses real Git,
 Fastify, SQLite, IPC, preload, and renderer boundaries; only GitHub's REST and
 GraphQL HTTP endpoints are represented by a local fake.
+
+## Repository servers
+
+Settings keeps multiple named review servers and their tokens. Each repository keeps its server; owner defaults apply when a repository is first registered. Existing single-server settings migrate automatically. Review caches and connection recovery remain separate across repositories and servers. Contract 0.10.0 adds atomic bulk checkoffs, with single-file fallback for contract 0.9. The workbench also offers Gander Light.
