@@ -1,15 +1,34 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { type ClaimScope, claimsRepoId } from "@gander/shared";
 import type { Storage } from "./storage.js";
+
+/** Which repositories this service covers, and where the rest are reviewed. */
+export interface Coverage {
+  claimScope: ClaimScope;
+  otherServer: string | null;
+}
 
 /**
  * Agents read notes and record work outcomes. Explicit reviewer direction also lets
  * them resolve or reopen notes. Git and gh remain the tools for reading code;
  * MCP carries review notes and their durable state, without touching checkoffs.
  */
-export function buildMcpServer(storage: Storage, version: string): McpServer {
+export function buildMcpServer(storage: Storage, version: string, coverage: Coverage): McpServer {
   const server = new McpServer({ name: "gander", version });
+
+  /**
+   * "No notes" from a server that doesn't cover the repository reads to an agent as a clean
+   * review. Say where its reviews are instead, unless the reviewer chose this server for it
+   * anyway and something is stored here.
+   */
+  function reviewedElsewhere(repo: string): string | null {
+    if (claimsRepoId(coverage.claimScope, repo) || storage.hasRepository(repo)) return null;
+    return coverage.otherServer === null
+      ? `${repo} is not reviewed on this server.`
+      : `${repo} is not reviewed on this server; its reviews live on ${coverage.otherServer} (use its Gander tools).`;
+  }
 
   /** Agents know their own repository and branch; the pull request number they usually don't. */
   function resolvePr(repo: string, prNumber?: number, branch?: string): number | string {
@@ -43,6 +62,9 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
       },
     },
     async ({ repo, branch, prNumber, includeAddressed, includeResolved, since }) => {
+      const notHere = reviewedElsewhere(repo);
+      if (notHere !== null) return { content: [{ type: "text", text: notHere }], isError: true };
+
       const resolved = resolvePr(repo, prNumber, branch);
       if (typeof resolved === "string") return { content: [{ type: "text", text: resolved }], isError: true };
 
@@ -222,13 +244,14 @@ export function buildMcpServer(storage: Storage, version: string): McpServer {
 export async function handleMcpRequest(
   storage: Storage,
   version: string,
+  coverage: Coverage,
   req: import("node:http").IncomingMessage,
   res: import("node:http").ServerResponse,
   body: unknown,
 ): Promise<void> {
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => void transport.close());
-  const server = buildMcpServer(storage, version);
+  const server = buildMcpServer(storage, version, coverage);
   await server.connect(transport);
   // Fastify has already read and parsed the body; handing it over here stops the
   // transport waiting forever on a stream that will never emit again.

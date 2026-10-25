@@ -60,6 +60,8 @@ export interface Storage {
   /** Every pull request recorded as part of the same stack, with how many open notes each holds. */
   listStackMembers(repoId: string, stackId: number): Array<{ prNumber: number; headRef: string | null; title: string | null; position: number | null; openNotes: number }>;
   findPrByHeadRef(repoId: string, headRef: string): number | null;
+  /** Whether anything at all is stored for the repository. */
+  hasRepository(repoId: string): boolean;
   getNote(id: number): Note | null;
   markNoteInProgress(id: number, input: MarkInProgress): Note | null;
   markNoteAddressed(id: number, input: MarkAddressed): Note | null;
@@ -199,6 +201,10 @@ export function openStorage(dbPath: string): Storage {
         headRef: row.head_ref, title: row.title ?? "", headSha: row.head_sha,
         stackId: row.stack_id, stackSize: row.stack_size, stackPosition: row.stack_position,
       };
+    },
+
+    hasRepository(repoId) {
+      return db.prepare("SELECT 1 FROM reviews WHERE repo_id = ? LIMIT 1").get(repoId) !== undefined;
     },
 
     findPrByHeadRef(repoId, headRef) {

@@ -30,6 +30,8 @@ export function buildServer(opts: {
   version: string;
   /** Which repositories this service says it covers. Defaults to every repository. */
   claimScope?: ClaimScope;
+  /** Where repositories outside the claim scope are reviewed, named to agents that ask here. */
+  otherServer?: string | null;
   /** Called for each route as it is registered. The contract snapshot reads the route table this way. */
   onRoute?: (method: string, path: string) => void;
 }): FastifyInstance {
@@ -181,7 +183,8 @@ export function buildServer(opts: {
   // Agents reach the same notes the app writes, over MCP. Same bearer token as
   // /api — one credential per install, not two.
   app.all("/mcp", async (req, reply) => {
-    await handleMcpRequest(opts.storage, opts.version, req.raw, reply.raw, req.body);
+    const coverage = { claimScope: opts.claimScope ?? "everything", otherServer: opts.otherServer ?? null };
+    await handleMcpRequest(opts.storage, opts.version, coverage, req.raw, reply.raw, req.body);
     // The transport writes and ends the raw response itself; telling Fastify the reply
     // is already sent stops it appending a second one.
     reply.hijack();

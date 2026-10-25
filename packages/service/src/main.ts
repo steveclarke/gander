@@ -9,7 +9,8 @@ const token = process.env.GANDER_TOKEN;
 if (!token) { console.error("GANDER_TOKEN is required"); process.exit(1); }
 
 const claimScope = parseClaimScope(process.env.GANDER_CLAIM_OWNERS);
+const otherServer = process.env.GANDER_OTHER_SERVER?.trim() || null;
 
 const storage = openStorage(dbPath);
-const server = buildServer({ storage, token, version: SERVICE_VERSION, claimScope });
+const server = buildServer({ storage, token, version: SERVICE_VERSION, claimScope, otherServer });
 server.listen({ port, host }).then(() => console.log(`gander service on http://${host}:${port}`));

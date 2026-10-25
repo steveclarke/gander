@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   claimsRemote,
+  claimsRepoId,
   parseClaimScope,
   FileCheckoffSchema,
   PutFileStateSchema,
@@ -83,5 +84,11 @@ describe("claim scope", () => {
     expect(claimsRemote(["alice"], "git@github.com:alice/atlas.git")).toBe(true);
     expect(claimsRemote(["alice"], "git@github.com:alice-labs/atlas.git")).toBe(false);
     expect(claimsRemote("everything", "not a remote")).toBe(false);
+  });
+
+  it("matches an owner/name repository the same way", () => {
+    expect(claimsRepoId(["Alice"], "alice/atlas")).toBe(true);
+    expect(claimsRepoId(["alice"], "alice-labs/atlas")).toBe(false);
+    expect(claimsRepoId("everything", "anyone/atlas")).toBe(true);
   });
 });
