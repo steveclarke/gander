@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { ClaimScope } from "@gander/shared";
 import { openStorage, type Storage } from "./storage.js";
 import { buildServer } from "./server.js";
 
@@ -34,13 +35,17 @@ const textOf = (result: { content?: unknown }): string => {
   return first?.text ?? "";
 };
 
-beforeEach(async () => {
-  dir = mkdtempSync(join(tmpdir(), "gander-mcp-"));
-  storage = openStorage(join(dir, "t.db"));
-  server = buildServer({ storage, token: "test-token", version: "0.1.0" });
+async function listen(coverage: { claimScope?: ClaimScope; otherServer?: string | null } = {}): Promise<void> {
+  server = buildServer({ storage, token: "test-token", version: "0.1.0", ...coverage });
   await server.listen({ port: 0, host: "127.0.0.1" });
   const addr = server.addresses()[0]!;
   baseUrl = `http://127.0.0.1:${addr.port}`;
+}
+
+beforeEach(async () => {
+  dir = mkdtempSync(join(tmpdir(), "gander-mcp-"));
+  storage = openStorage(join(dir, "t.db"));
+  await listen();
 });
 afterEach(async () => {
   await server.close();
@@ -390,5 +395,40 @@ describe("MCP endpoint", () => {
     expect(moved.headSha).toBe("sha-2");
     expect(moved.notes[0]).toMatchObject({ capturedAtSha: "sha-1", lineMayHaveMoved: true });
     await client.close();
+  });
+
+  describe("on a server that covers only some owners", () => {
+    const notes = async (repo: string) => {
+      const client = await connect();
+      const result = await client.callTool({ name: "get_review_notes", arguments: { repo, prNumber: 7 } });
+      await client.close();
+      return { isError: result.isError === true, text: textOf(result as { content?: unknown }) };
+    };
+    const restart = async (coverage: { claimScope: ClaimScope; otherServer?: string | null }) => {
+      await server.close();
+      await listen(coverage);
+    };
+
+    it("names the server that reviews a repository it does not cover, instead of reporting no notes", async () => {
+      await restart({ claimScope: ["acme"], otherServer: "the team server" });
+      expect(await notes("other/harbor")).toEqual({
+        isError: true,
+        text: "other/harbor is not reviewed on this server; its reviews live on the team server (use its Gander tools).",
+      });
+    });
+
+    it("says only that it is not reviewed here when no other server is configured", async () => {
+      await restart({ claimScope: ["acme"] });
+      expect(await notes("other/harbor")).toEqual({ isError: true, text: "other/harbor is not reviewed on this server." });
+    });
+
+    it("still answers for covered repositories, and for ones the reviewer chose to keep here", async () => {
+      await restart({ claimScope: ["Acme"], otherServer: "the team server" });
+      expect((await notes("acme/atlas")).text).toContain("No notes exist for this pull request.");
+      storage.addNote("other/harbor", 3, { path: null, line: null, text: "Kept here", headSha: null, sourceContext: null });
+      const kept = await notes("other/harbor");
+      expect(kept.isError).toBe(false);
+      expect(kept.text).not.toContain("not reviewed on this server");
+    });
   });
 });

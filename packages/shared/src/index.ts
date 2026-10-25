@@ -248,6 +248,11 @@ export function parseClaimScope(raw: string | undefined): ClaimScope {
 export function claimsRemote(scope: ClaimScope, remote: string): boolean {
   let repoId: string;
   try { repoId = repoIdFromUrl(remote); } catch { return false; }
+  return claimsRepoId(scope, repoId);
+}
+
+/** Whether a service with this scope claims the "owner/name" repository. */
+export function claimsRepoId(scope: ClaimScope, repoId: string): boolean {
   if (scope === "everything") return true;
   const owner = repoId.split("/")[0]!.toLowerCase();
   return scope.some((entry) => entry.toLowerCase() === owner);
