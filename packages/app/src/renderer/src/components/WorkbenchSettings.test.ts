@@ -27,6 +27,7 @@ describe("WorkbenchSettings", () => {
     expect(select.findAll("option").map((option) => option.text())).toEqual([
       "Catppuccin Mocha",
       "Gander Dark",
+      "Gander Light",
     ]);
     expect((iconSelect.element as HTMLSelectElement).value).toBe("catppuccin-mocha");
     expect(iconSelect.findAll("option").map((option) => option.text())).toEqual(["Catppuccin Mocha"]);

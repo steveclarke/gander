@@ -34,3 +34,11 @@ describe("theme runtime", () => {
     expect(monacoThemeApi.setTheme).toHaveBeenLastCalledWith("gander-dark");
   });
 });
+
+it("applies the light palette and the matching light Monaco base", () => {
+  const root = document.createElement("html");
+  applyAppTheme("Gander Light", root, { defineTheme() {}, setTheme() {} });
+  expect(root.style.colorScheme).toBe("light");
+  expect(root.style.getPropertyValue("--workbench-background")).toBe("#ffffff");
+  expect(themeFor("Gander Light").monaco.base).toBe("vs");
+});

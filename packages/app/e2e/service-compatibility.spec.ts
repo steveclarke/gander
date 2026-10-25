@@ -34,7 +34,6 @@ test("reports a bad saved token in connection settings", async ({ world }) => {
 
   await settings.open();
   await settings.openConnectionCategory();
-  await app.page.getByRole("button", { name: "Test", exact: true }).click();
-  await expect(app.page.locator(".connection-settings").getByRole("status"))
+  await expect(app.page.locator(".connection-status"))
     .toHaveText("The service rejected that token.");
 });

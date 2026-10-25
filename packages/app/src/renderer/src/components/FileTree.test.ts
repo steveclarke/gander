@@ -60,6 +60,7 @@ function fakeStore(view: PrView): { store: Store; calls: Calls } {
     async openLocal() {},
     async loadLocalDirectory() {},
     showLocalSurface() {},
+    async reloadReviewServer() {},
     async refresh() {},
     async fetchNow() {},
     async refreshPrs() {},

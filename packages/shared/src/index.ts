@@ -13,7 +13,7 @@ import { z } from "zod";
  *
  * Not the app's release version: releases happen far more often than the contract moves.
  */
-export const SERVICE_VERSION = "0.9.0";
+export const SERVICE_VERSION = "0.10.0";
 
 export const FileStatusSchema = z.enum(["A", "M", "D", "R"]);
 export type FileStatus = z.infer<typeof FileStatusSchema>;
@@ -48,6 +48,7 @@ export const PutFileStateSchema = z.discriminatedUnion("checked", [
   z.object({ checked: z.literal(false), path: z.string().min(1) }),
 ]);
 export type PutFileState = z.infer<typeof PutFileStateSchema>;
+export const PutFileStatesSchema = z.object({ files: z.array(PutFileStateSchema).min(1).max(500) });
 
 export const NoteStateSchema = z.enum(["open", "in_progress", "addressed", "resolved"]);
 export type NoteState = z.infer<typeof NoteStateSchema>;
@@ -152,6 +153,8 @@ export interface PrListItem extends PrSummary {
 }
 
 export interface RepoEntry {
+  /** The review server selected at registration; absent until one is configured. */
+  serverId?: string;
   repoId: string;
   url: string;
   /** A machine-local checkout used to discover worktrees. Never sent to the review service. */
@@ -174,7 +177,7 @@ export interface PrFile extends ChangedFile {
   changedSince: boolean;
 }
 
-export interface PrView { pr: PrSummary; files: PrFile[]; notes: Note[]; }
+export interface PrView { /** Desktop IPC identity; never sent to the review service. */ reviewSessionId?: string; pr: PrSummary; files: PrFile[]; notes: Note[]; }
 
 export interface LocalWorktree {
   path: string;

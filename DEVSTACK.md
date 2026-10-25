@@ -82,8 +82,8 @@ checkout is being used to review other work, start only its Electron app:
 bin/dev --hosted
 ```
 
-On the first hosted run, open **Settings → Connection**, enter the hosted URL
-and token, then test and save the connection. Gander stores them in this
+On the first hosted run, open **Settings → Connection**, add a named server with its hosted URL
+and token, then test and save it. Gander stores them in this
 worktree's gitignored `.gander/config.json`; saving applies owner-only
 permissions. Keep the token out of shell history and committed files. Future
 hosted runs reuse the saved connection. `bin/dev --hosted -D` provides the same

@@ -34,7 +34,7 @@ describe("bin/fix-config", () => {
     const result = run();
 
     expect(result.status, result.stderr).toBe(0);
-    expect(loadConfig(configPath).serviceUrl).toBe("http://localhost:8390");
+    expect(loadConfig(configPath).servers[0]?.url).toBe("http://localhost:8390");
     expect(JSON.parse(readFileSync(configPath, "utf8"))).not.toHaveProperty("zoomLevel");
     expect(existsSync(`${configPath}.bak`)).toBe(true);
   });

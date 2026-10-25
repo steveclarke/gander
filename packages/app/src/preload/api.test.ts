@@ -51,8 +51,8 @@ describe("preload API", () => {
     const invoke = vi.fn(async () => ({}));
     const api = createGanderApi(invoke, vi.fn());
 
-    await api.imagePreview("acme/atlas", 7, "assets/logo.png");
-    expect(invoke).toHaveBeenLastCalledWith("gander:imagePreview", "acme/atlas", 7, "assets/logo.png");
+    await api.imagePreview("acme/atlas", 7, "assets/logo.png", "server-session");
+    expect(invoke).toHaveBeenLastCalledWith("gander:imagePreview", "acme/atlas", 7, "assets/logo.png", "server-session");
   });
 
   it("routes local views through separate read-only IPC channels", async () => {

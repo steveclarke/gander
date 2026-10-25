@@ -52,6 +52,7 @@ export interface Storage {
   /** Reviews with file state, fetched together for repository-level progress summaries. */
   listReviews(repoId: string): ReviewState[];
   putFileState(repoId: string, prNumber: number, input: PutFileState): FileCheckoff;
+  putFileStates(repoId: string, prNumber: number, inputs: PutFileState[]): FileCheckoff[];
   getSnapshot(repoId: string, prNumber: number, path: string): { baseContent: string | null; headContent: string | null } | null;
   /** Records what the app knows about a pull request, so agents can be told which one they are on. */
   setPrContext(repoId: string, prNumber: number, context: PrContext): void;
@@ -154,6 +155,10 @@ export function openStorage(dbPath: string): Storage {
       }
       const row = db.prepare(`SELECT ${FILE_STATE_COLUMNS} FROM file_states WHERE review_id = ? AND path = ?`).get(rid, input.path) as FileStateRow;
       return rowToCheckoff(row);
+    },
+
+    putFileStates(repoId, prNumber, inputs) {
+      return db.transaction(() => inputs.map((input) => this.putFileState(repoId, prNumber, input)))();
     },
 
     getSnapshot(repoId, prNumber, path) {

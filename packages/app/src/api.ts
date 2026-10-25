@@ -1,3 +1,4 @@
+import type { ReviewServer, GanderConfig } from "./main/config.js";
 import type { LocalFile, LocalFileEntry, LocalView, LocalWorktree, NewNote, OpenTarget, PrListItem, PrView, RepoEntry, UpdateNote } from "@gander/shared";
 import type { AppSettings } from "./settings.js";
 import type { ThemeId } from "./themes.js";
@@ -41,21 +42,25 @@ export interface GanderApi {
   /** Fires when an already-running app is handed a target by a later `gander` command. */
   onOpenTarget(listener: (target: OpenTarget) => void): () => void;
   /** Where the review service is, and whether the environment is deciding that. */
-  getConnection(): Promise<{ url: string; token: string; githubToken: string; fromEnvironment: boolean }>;
+  onServersChanged(listener: () => void): () => void;
+  getServers(): Promise<{ servers: ReviewServer[]; ownerServers: GanderConfig["ownerServers"]; repos: RepoEntry[]; githubToken: string; fromEnvironment: boolean }>;
+  saveServer(server: ReviewServer): Promise<ConnectionCheck>;
+  removeServer(id: string): Promise<void>;
+  setOwnerServers(rules: GanderConfig["ownerServers"]): Promise<void>;
+  setRepoServer(repoId: string, serverId: string): Promise<void>;
   /** Checks the token against GitHub, and saves it only if GitHub accepts it. Empty clears it. */
   setGithubToken(token: string): Promise<GithubTokenCheck>;
   githubViewedSyncStatus(): Promise<GithubViewedSyncStatus>;
   onGithubViewedSyncStatus(listener: (status: GithubViewedSyncStatus) => void): () => void;
   testConnection(url: string, token: string): Promise<ConnectionCheck>;
   /** Checks first, and saves only a connection that answered. */
-  setConnection(url: string, token: string): Promise<ConnectionCheck>;
-  serviceStatus(): Promise<ServiceStatus>;
+  serviceStatus(repoId?: string): Promise<ServiceStatus>;
   openPr(repoId: string, prNumber: number): Promise<PrView>;
-  setChecked(repoId: string, prNumber: number, path: string, checked: boolean): Promise<CheckoffResult>;
-  setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean): Promise<CheckoffResult>;
-  refreshPr(repoId: string, prNumber: number): Promise<PrView>;
-  reviewedSnapshot(repoId: string, prNumber: number, path: string): Promise<string | null>;
-  imagePreview(repoId: string, prNumber: number, path: string): Promise<ImagePreview>;
+  setChecked(repoId: string, prNumber: number, path: string, checked: boolean, reviewSessionId?: string): Promise<CheckoffResult>;
+  setCheckedMany(repoId: string, prNumber: number, paths: string[], checked: boolean, reviewSessionId?: string): Promise<CheckoffResult>;
+  refreshPr(repoId: string, prNumber: number, reviewSessionId?: string): Promise<PrView>;
+  reviewedSnapshot(repoId: string, prNumber: number, path: string, reviewSessionId?: string): Promise<string | null>;
+  imagePreview(repoId: string, prNumber: number, path: string, reviewSessionId?: string): Promise<ImagePreview>;
   openLocal(repoId: string, path: string): Promise<LocalView>;
   /** Lists one directory only. Descendants are requested when the reviewer expands it. */
   listLocalFiles(path: string, directory?: string): Promise<LocalFileEntry[]>;
@@ -64,9 +69,9 @@ export interface GanderApi {
   localImagePreview(path: string): Promise<ImagePreview>;
   closeLocal(): Promise<void>;
   onLocalViewChanged(listener: (update: LocalViewUpdate) => void): () => void;
-  addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha" | "sourceContext">): Promise<PrView>;
-  updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Promise<PrView>;
-  deleteNote(repoId: string, prNumber: number, id: number): Promise<PrView>;
+  addNote(repoId: string, prNumber: number, input: Omit<NewNote, "headSha" | "sourceContext">, reviewSessionId?: string): Promise<PrView>;
+  updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote, reviewSessionId?: string): Promise<PrView>;
+  deleteNote(repoId: string, prNumber: number, id: number, reviewSessionId?: string): Promise<PrView>;
   getSettings(): Promise<AppSettings>;
   updateSettings(settings: AppSettings): Promise<AppSettings>;
   onOpenSettings(listener: () => void): () => void;

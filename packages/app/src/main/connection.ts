@@ -14,11 +14,11 @@ export type ConnectionCheck =
   | { ok: true; version: string; compatibility: "compatible" | "newer" }
   | { ok: false; reason: string };
 
-export type ServiceStatus =
+export type ServiceStatus = (
   | { state: "connected"; serviceVersion: string; supportedVersion: string }
   | { state: "newer"; serviceVersion: string; supportedVersion: string }
   | { state: "incompatible"; serviceVersion: string; supportedVersion: string; reason: string }
-  | { state: "unreachable"; reason: string };
+  | { state: "unreachable"; reason: string }) & { serverName?: string };
 
 const PROBE = "/api/reviews/gander%2Fconnection-check/1";
 
@@ -38,6 +38,11 @@ export function compareServiceVersion(version: string): ServiceStatus {
       supportedVersion: SERVICE_VERSION,
       reason: `Gander service version ${version} is not a supported version. Update the service to ${SERVICE_VERSION}.`,
     };
+  }
+  // 0.10 adds only optional bulk writes. The complete 0.9 contract remains supported;
+  // clients use single-file writes there until that server is upgraded.
+  if (actual[0] === 0 && actual[1] === 9) {
+    return { state: "connected", serviceVersion: version, supportedVersion: SERVICE_VERSION };
   }
   const comparison = actual.findIndex((part, index) => part !== supported[index]);
   if (comparison === -1) {
@@ -72,7 +77,7 @@ export async function checkServiceStatus(url: string): Promise<ServiceStatus> {
 
   let health: Response;
   try {
-    health = await fetch(`${base}/healthz`);
+    health = await fetch(`${base}/healthz`, { signal: AbortSignal.timeout(5_000) });
   } catch (err) {
     return { state: "unreachable", reason: unreachableReason(base, describeNetworkError(err)) };
   }
@@ -101,7 +106,7 @@ export async function checkConnection(url: string, token: string): Promise<Conne
 
   let probe: Response;
   try {
-    probe = await fetch(`${base}${PROBE}`, { headers: { Authorization: `Bearer ${token.trim()}` } });
+    probe = await fetch(`${base}${PROBE}`, { headers: { Authorization: `Bearer ${token.trim()}` }, signal: AbortSignal.timeout(5_000) });
   } catch (err) {
     return { ok: false, reason: unreachableReason(base, describeNetworkError(err)) };
   }

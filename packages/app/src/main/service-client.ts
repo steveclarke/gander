@@ -1,3 +1,4 @@
+import { checkoffBatches } from "./checkoff-batches.js";
 import { z } from "zod";
 import { describeNetworkError } from "./network-error.js";
 import { FileCheckoffSchema, NoteSchema, ReviewStateSchema, unreachableReason, type FileCheckoff, type NewNote, type PrContext, type PutFileState, type Note, type ReviewState, type UpdateNote } from "@gander/shared";
@@ -10,6 +11,7 @@ export interface ServiceClient {
   getReview(repoId: string, prNumber: number): Promise<ReviewState>;
   listReviews(repoId: string): Promise<ReviewState[]>;
   putFileState(repoId: string, prNumber: number, input: PutFileState): Promise<FileCheckoff>;
+  putFileStates(repoId: string, prNumber: number, inputs: PutFileState[], onSaved?: (files: FileCheckoff[]) => void): Promise<FileCheckoff[]>;
   listNotes(repoId: string, prNumber: number): Promise<Note[]>;
   addNote(repoId: string, prNumber: number, input: NewNote): Promise<Note>;
   updateNote(repoId: string, prNumber: number, id: number, input: UpdateNote): Promise<Note>;
@@ -167,6 +169,32 @@ export function createServiceClient(connection: Connection): ServiceClient {
     putFileState: async (repoId, prNumber, input) => {
       const path = `${reviewPath(repoId, prNumber)}/files`;
       return validate(FileCheckoffSchema, path, await req("PUT", path, input, { reviewKey: reviewKey(repoId, prNumber) }));
+    },
+    putFileStates: async (repoId, prNumber, inputs, onSaved) => {
+      const batches = checkoffBatches(inputs);
+      if (batches.length === 0) return [];
+      await ensureCompatible(connection().url);
+      const status = checkedConnection!.status;
+      const legacy = (status.state === "connected" || status.state === "newer") && /^0\.9\./.test(status.serviceVersion);
+      const results: FileCheckoff[] = [];
+      const path = `${reviewPath(repoId, prNumber)}/files`;
+      for (const batch of batches) {
+        if (legacy) {
+          for (const input of batch) {
+            const saved = validate(FileCheckoffSchema, path, await req("PUT", path, input, { reviewKey: reviewKey(repoId, prNumber) }));
+            results.push(saved);
+            onSaved?.([saved]);
+          }
+        } else {
+          const saved = validate(FileCheckoffSchema.array(), `${path}/bulk`, await req("PUT", `${path}/bulk`, { files: batch }, { reviewKey: reviewKey(repoId, prNumber) }));
+          if (saved.length !== batch.length || saved.some((file, index) => file.path !== batch[index]!.path || file.checked !== batch[index]!.checked)) {
+            throw new Error("The review service returned mismatched bulk checkoffs. Refresh the review before continuing.");
+          }
+          results.push(...saved);
+          onSaved?.(saved);
+        }
+      }
+      return results;
     },
     listNotes: async (repoId, prNumber) => {
       const path = `${reviewPath(repoId, prNumber)}/notes`;

@@ -27,10 +27,9 @@ credential reference, a release step, the binding design.
 `docs/STATE.md` says where the project stands. Interface work is tracked in GitHub
 issues.
 
-Settings are validated strictly, so a config written by an earlier version stops
-the app from starting. While the shape is still settling there are no migrations:
-`bin/fix-config` keeps the values the schema still knows, fills in the new ones,
-and drops the rest.
+Settings are validated strictly. The single-server config upgrades automatically
+to a server list with every existing repository assigned to that server. Other
+stale shapes use `bin/fix-config`, which keeps recognized values and fills defaults.
 
 `SERVICE_VERSION` in `@gander/shared` is the app-to-service contract version, and the
 app checks it when it connects. **Bump it in the same change that alters the
@@ -163,11 +162,11 @@ time, not load time (`resolveServiceConnection` in `main/config.ts`) — otherwi
 saving config would write a machine-specific allocated port into
 `.gander/config.json`.
 
-App config is intentionally not backward-compatible while its shape remains in
-major flux and there is only one maintainer install. Keep validation strict; when
-the user asks to repair a stale local config, update that file directly instead of
-adding migrations or compatibility branches. Add explicit schema versions and
-migrations only when backward compatibility becomes a product requirement.
+App config stays strict. The single-server to multi-server upgrade is the one
+supported automatic migration; repository assignments and credentials survive it.
+Other stale configurations use `bin/fix-config`. New migrations need an explicit
+product requirement. Server routing and review caches are isolated by repository,
+server identity, URL and token. Owner defaults apply only during registration.
 
 `SCHEMA` in `storage.ts` is the current SQLite shape. Local databases are disposable
 while the project is young, but the hosted database contains authored production

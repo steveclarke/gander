@@ -1,5 +1,5 @@
 {
-  "version": "0.9.0",
+  "version": "0.10.0",
   "routes": [
     "DELETE /api/reviews/:repoId/:prNumber/notes/:id",
     "DELETE /mcp",
@@ -16,6 +16,7 @@
     "POST /mcp",
     "PUT /api/reviews/:repoId/:prNumber/context",
     "PUT /api/reviews/:repoId/:prNumber/files",
+    "PUT /api/reviews/:repoId/:prNumber/files/bulk",
     "PUT /mcp",
     "QUERY /mcp",
     "TRACE /mcp"
@@ -564,6 +565,107 @@
             "path"
           ]
         }
+      ]
+    },
+    "PutFileStatesSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "files": {
+          "minItems": 1,
+          "maxItems": 500,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "checked": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "baseHash": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "headHash": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "baseContent": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "headContent": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "machine": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "checked",
+                  "path",
+                  "baseHash",
+                  "headHash",
+                  "baseContent",
+                  "headContent",
+                  "machine"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "checked": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "checked",
+                  "path"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "files"
       ]
     },
     "ReviewStateSchema": {

@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import type { ZodError } from "zod";
-import { NewNoteSchema, PrContextSchema, PutFileStateSchema, UpdateNoteSchema } from "@gander/shared";
+import { NewNoteSchema, PrContextSchema, PutFileStateSchema, PutFileStatesSchema, UpdateNoteSchema } from "@gander/shared";
 import { handleMcpRequest } from "./mcp.js";
 import type { Storage } from "./storage.js";
 
@@ -75,6 +75,18 @@ export function buildServer(opts: {
       const parsed = PutFileStateSchema.safeParse(req.body);
       if (!parsed.success) return badRequest(reply, parsed.error);
       return opts.storage.putFileState(req.params.repoId, prNumber, parsed.data);
+    },
+  );
+
+  app.put<{ Params: { repoId: string; prNumber: string } }>(
+    "/api/reviews/:repoId/:prNumber/files/bulk",
+    { bodyLimit: FILE_SNAPSHOT_BODY_LIMIT },
+    async (req, reply) => {
+      const prNumber = positiveInt("prNumber", req.params.prNumber, reply);
+      if (prNumber === undefined) return;
+      const parsed = PutFileStatesSchema.safeParse(req.body);
+      if (!parsed.success) return badRequest(reply, parsed.error);
+      return opts.storage.putFileStates(req.params.repoId, prNumber, parsed.data.files);
     },
   );
 

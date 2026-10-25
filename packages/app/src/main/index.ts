@@ -2,16 +2,16 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "e
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { type LocalView, type OpenTarget, type RepoEntry, type UpdateNote } from "@gander/shared";
-import { connectionIsFromEnvironment, loadConfig, resolveServiceConnection, saveConfig, type GanderConfig } from "./config.js";
-import { checkConnection } from "./connection.js";
+import { type LocalView, type OpenTarget, type RepoEntry, type PrView, type UpdateNote } from "@gander/shared";
+import { connectionIsFromEnvironment, defaultServerForRepo, loadConfig, saveConfig, type GanderConfig } from "./config.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine, type GitEngine } from "./git.js";
 import { checkGithubToken, getGithubAccount, githubApiUrl, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
 import { createGithubViewedQueue, type GithubAccount, type GithubViewedQueue } from "./github-viewed-queue.js";
 import { startOpenServer } from "./open-socket.js";
-import { createReviewer } from "./review.js";
-import { createServiceClient } from "./service-client.js";
+import type { Reviewer, CheckoffResult } from "./review.js";
+import { createServerRouting, withReviewSession } from "./server-routing.js";
+import { registerServersIpc } from "./servers-ipc.js";
 import { registerSettingsIpc } from "./settings-ipc.js";
 import { buildMenuTemplate } from "./menu.js";
 import { updateNativeWindowTheme, windowAppearance } from "./window-appearance.js";
@@ -60,12 +60,28 @@ function requireOpenWorktree(senderId: number, path: string): void {
   }
 }
 
+async function chooseRepositoryServer(cfg: GanderConfig, repoId: string): Promise<string | undefined> {
+  const preferred = defaultServerForRepo(cfg, repoId);
+  if (preferred || cfg.servers.length === 0) return preferred;
+  const choices = [...cfg.servers];
+  const { response } = await dialog.showMessageBox({
+    type: "question", title: "Choose a review server",
+    message: `Where should ${repoId}'s reviews be kept?`,
+    detail: "Gander remembers this choice for every review in this repository.",
+    buttons: [...choices.map((server) => server.name), "Cancel"],
+    cancelId: choices.length, noLink: true,
+  });
+  if (response === choices.length) throw new Error("Repository registration cancelled.");
+  const chosen = choices[response]!.id;
+  if (!cfg.servers.some((server) => server.id === chosen)) throw new Error("That server was removed. Open the repository again to choose another.");
+  return chosen;
+}
+
 async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubViewedQueue: GithubViewedQueue }> {
   const cfg = loadConfig();
   const git = createGitEngine(join(app.getPath("userData"), "clones"));
   // Resolved per request rather than captured: the reviewer can enter or change the
   // connection in settings, and it takes effect without a restart.
-  const service = createServiceClient(() => resolveServiceConnection(cfg));
   // Resolved per call for the same reason, and lazily: an installed app launched from
   // Finder gets a minimal PATH with no `gh` on it, which must leave the window open and
   // the settings reachable rather than killing the launch.
@@ -104,8 +120,8 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     if (!entry) throw new Error(`Repo ${repoId} is not registered`);
     return entry;
   };
-  const reviewer = createReviewer({
-    git, service,
+  const routing = createServerRouting(cfg, {
+    git,
     listPrs: async (repoId) => {
       const token = await githubToken();
       const [account, prs] = await Promise.all([
@@ -123,6 +139,19 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     machine: hostname(),
   });
 
+  const viewOnServer = async (repoId: string, action: (reviewer: Reviewer) => Promise<PrView>, expected?: string) => {
+    const { result, sessionId } = await withReviewSession(routing, repoId, action, expected);
+    return { ...result, reviewSessionId: sessionId };
+  };
+  const checkOnServer = async (repoId: string, action: (reviewer: Reviewer) => Promise<CheckoffResult>, expected: string) => {
+    const { result, sessionId } = await withReviewSession(routing, repoId, action, expected);
+    return { ...result, view: { ...result.view, reviewSessionId: sessionId } };
+  };
+  const requireSession = (sessionId: unknown): string => {
+    if (typeof sessionId !== "string") throw new Error("Reopen the review before making changes.");
+    return sessionId;
+  };
+
   ipcMain.handle("gander:listRepos", async () => cfg.repos);
   ipcMain.handle("gander:chooseLocalRepo", async (event, expectedRepoId?: string): Promise<RepoEntry | null> => {
     const owner = BrowserWindow.fromWebContents(event.sender);
@@ -137,8 +166,16 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     if (result.canceled || !selected) return null;
     const entry = await repositoryFromLocalPath(git, selected, expectedRepoId);
     const existing = cfg.repos.find((repo) => repo.repoId === entry.repoId);
-    if (existing) Object.assign(existing, entry);
-    else cfg.repos.push(entry);
+    if (existing) {
+      Object.assign(existing, entry);
+      entry.serverId = existing.serverId;
+    } else {
+      const serverId = await chooseRepositoryServer(cfg, entry.repoId);
+      const concurrent = cfg.repos.find((repo) => repo.repoId === entry.repoId);
+      if (concurrent) Object.assign(concurrent, entry);
+      else cfg.repos.push({ ...entry, serverId });
+      entry.serverId = concurrent?.serverId ?? serverId;
+    }
     saveConfig(cfg);
     return entry;
   });
@@ -202,15 +239,18 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     nextLocalOpenGeneration(event.sender.id);
     closeLocalView(event.sender.id);
   });
-  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => reviewer.listPrsWithProgress(repoId));
-  ipcMain.handle("gander:serviceStatus", async () => service.status());
+  ipcMain.handle("gander:listPrs", async (_e, repoId: string) => (await withReviewSession(routing, repoId, (reviewer) => reviewer.listPrsWithProgress(repoId))).result);
+  ipcMain.handle("gander:serviceStatus", async (_e, repoId?: string) => {
+    const session = routing(repoId);
+    return { ...await session.service.status(), serverName: session.name };
+  });
   ipcMain.handle("gander:githubViewedSyncStatus", async () => githubViewedQueue.status());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
   ipcMain.handle("gander:initialTarget", async () => launchTarget);
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
     const senderId = event.sender.id;
     const generation = nextLocalOpenGeneration(senderId);
-    const view = await reviewer.openPr(repoId, n);
+    const view = await viewOnServer(repoId, (reviewer) => reviewer.openPr(repoId, n));
     if (localOpenGenerations.get(senderId) !== generation) return view;
     // Preserve the live local view when opening the PR fails. The renderer keeps showing
     // that context, so its watcher and validated file-reading state must remain usable too.
@@ -221,22 +261,19 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     saveConfig(cfg);
     return view;
   });
-  ipcMain.handle("gander:refreshPr", async (_e, repoId: string, n: number) => reviewer.refreshPr(repoId, n));
-  ipcMain.handle("gander:setChecked", async (_e, repoId: string, n: number, path: string, checked: boolean) => reviewer.setChecked(repoId, n, path, checked));
-  ipcMain.handle("gander:reviewedSnapshot", async (_e, repoId: string, n: number, path: string) => reviewer.reviewedSnapshot(repoId, n, path));
-  ipcMain.handle("gander:imagePreview", async (_e, repoId: string, n: number, path: string) => reviewer.imagePreview(repoId, n, path));
-  ipcMain.handle("gander:addNote", async (_e, repoId: string, n: number, input: { path: string | null; line: number | null; text: string }) => reviewer.addNote(repoId, n, input));
-  ipcMain.handle("gander:updateNote", async (_e, repoId: string, n: number, id: number, input: UpdateNote) => reviewer.updateNote(repoId, n, id, input));
-  ipcMain.handle("gander:deleteNote", async (_e, repoId: string, n: number, id: number) => reviewer.deleteNote(repoId, n, id));
-  ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean) => reviewer.setCheckedMany(repoId, n, paths, checked));
+  ipcMain.handle("gander:refreshPr", async (_e, repoId: string, n: number, sessionId?: string) => viewOnServer(repoId, (reviewer) => reviewer.refreshPr(repoId, n), sessionId));
+  ipcMain.handle("gander:setChecked", async (_e, repoId: string, n: number, path: string, checked: boolean, sessionId: string) => checkOnServer(repoId, (reviewer) => reviewer.setChecked(repoId, n, path, checked), requireSession(sessionId)));
+  ipcMain.handle("gander:reviewedSnapshot", async (_e, repoId: string, n: number, path: string, sessionId: string) => (await withReviewSession(routing, repoId, (reviewer) => reviewer.reviewedSnapshot(repoId, n, path), requireSession(sessionId))).result);
+  ipcMain.handle("gander:imagePreview", async (_e, repoId: string, n: number, path: string, sessionId: string) => (await withReviewSession(routing, repoId, (reviewer) => reviewer.imagePreview(repoId, n, path), requireSession(sessionId))).result);
+  ipcMain.handle("gander:addNote", async (_e, repoId: string, n: number, input: { path: string | null; line: number | null; text: string }, sessionId: string) => viewOnServer(repoId, (reviewer) => reviewer.addNote(repoId, n, input), requireSession(sessionId)));
+  ipcMain.handle("gander:updateNote", async (_e, repoId: string, n: number, id: number, input: UpdateNote, sessionId: string) => viewOnServer(repoId, (reviewer) => reviewer.updateNote(repoId, n, id, input), requireSession(sessionId)));
+  ipcMain.handle("gander:deleteNote", async (_e, repoId: string, n: number, id: number, sessionId: string) => viewOnServer(repoId, (reviewer) => reviewer.deleteNote(repoId, n, id), requireSession(sessionId)));
+  ipcMain.handle("gander:setCheckedMany", async (_e, repoId: string, n: number, paths: string[], checked: boolean, sessionId: string) => checkOnServer(repoId, (reviewer) => reviewer.setCheckedMany(repoId, n, paths, checked), requireSession(sessionId)));
   // Connection is deliberately not part of the settings document: that document is
   // editable as JSON in the app, and the token does not belong on screen in a text editor.
-  ipcMain.handle("gander:getConnection", async () => ({
-    url: cfg.serviceUrl,
-    token: cfg.serviceToken,
-    githubToken: cfg.githubToken ?? "",
-    fromEnvironment: connectionIsFromEnvironment(),
-  }));
+  registerServersIpc(ipcMain, cfg, saveConfig, () => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send("gander:serversChanged");
+  });
   ipcMain.handle("gander:setGithubToken", async (_e, token: string) => {
     const trimmed = token.trim();
     // Emptying it is how the reviewer goes back to whatever `gh` provides.
@@ -258,18 +295,6 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     githubViewedQueue.retryFailed();
     return result;
   });
-  ipcMain.handle("gander:testConnection", async (_e, url: string, token: string) => checkConnection(url, token));
-  ipcMain.handle("gander:setConnection", async (_e, url: string, token: string) => {
-    const result = await checkConnection(url, token);
-    // Saved only once it answers. A connection that has never worked is not worth
-    // keeping, and finding out at the next launch is worse than finding out now.
-    if (!result.ok) return result;
-    cfg.serviceUrl = url.trim().replace(/\/+$/, "");
-    cfg.serviceToken = token.trim();
-    saveConfig(cfg);
-    return result;
-  });
-
   zoomController = createZoomController(cfg, () => BrowserWindow.getAllWindows());
   ipcMain.handle("gander:getZoomLevel", async () => zoomController.current());
   ipcMain.handle("gander:setZoomLevel", async (_event, level: number) => zoomController.set(level));
@@ -440,7 +465,10 @@ app.whenReady().then(async () => {
         // An agent that just pushed a branch should not need the reviewer to click through
         // a folder dialog first. The request carries the checkout it came from, which is
         // the same evidence the picker collects.
-        if (await registerFromCheckout(git, cfg.repos, target.repoId, from) !== null) saveConfig(cfg);
+        const added = await registerFromCheckout(git, () => cfg.repos, target.repoId, from, async (entry) => {
+          entry.serverId = await chooseRepositoryServer(cfg, entry.repoId);
+        });
+        if (added !== null) saveConfig(cfg);
         deliver(target);
       },
     });

@@ -20,7 +20,7 @@ export class SettingsDriver {
 
   async openConnectionCategory(): Promise<void> {
     await this.page.getByRole("button", { name: "Connection", exact: true }).click();
-    await expect(this.page.getByRole("heading", { name: "Connection", exact: true })).toBeVisible();
+    await expect(this.page.getByRole("heading", { name: "Review servers", exact: true })).toBeVisible();
   }
 
   async setEditorFont(family: string, size: number): Promise<void> {
