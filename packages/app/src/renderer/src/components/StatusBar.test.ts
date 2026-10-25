@@ -91,4 +91,22 @@ describe("StatusBar", () => {
     expect(wrapper.get(".github-sync").classes()).toContain("failed");
     expect(wrapper.get(".github-sync").attributes("title")).toBe("Bad credentials");
   });
+
+  it("says where a repository's notes go, offers Change, and warns when the claim is gone", async () => {
+    const routed = reactive({
+      ...store, currentRepoId: "acme/harbor", targetRepoId: null, localView: null,
+      serviceStatus: { state: "connected", serviceVersion: "0.11.0", supportedVersion: "0.11.0", serverName: "Team" },
+    }) as unknown as Store;
+    const wrapper = mount(StatusBar, { props: { store: routed, treeVisible: true, isDevelopment: false, worktreeLabel: null, zoomLevel: 0 } });
+
+    expect(wrapper.get(".service-label").text()).toBe("Notes save to Team · Service connected · 0.11.0");
+    await wrapper.get(".change-server").trigger("click");
+    expect(wrapper.emitted("changeServer")).toEqual([["acme/harbor"]]);
+
+    routed.serviceStatus = { ...routed.serviceStatus, claimLost: true };
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".service-label").text()).toBe("Team no longer covers this repository · notes still save there");
+    expect(wrapper.get(".service").classes()).toContain("warning");
+    wrapper.unmount();
+  });
 });

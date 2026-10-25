@@ -34,6 +34,15 @@ describe("local repository registration", () => {
     });
   });
 
+  it("keeps the configured remote when an insteadOf rule rewrites its transport", async () => {
+    const { fixture, git } = await repositoryFixture("acme/atlas");
+    await fixture.git(["config", "url.file:///mirror/atlas.git.insteadOf", "https://github.com/acme/atlas.git"]);
+
+    await expect(repositoryFromLocalPath(git, fixture.dir)).resolves.toMatchObject({
+      repoId: "acme/atlas", url: "https://github.com/acme/atlas.git",
+    });
+  });
+
   it("does not relocate a repository to a checkout belonging to another origin", async () => {
     const { fixture, git } = await repositoryFixture("acme/beacon");
 

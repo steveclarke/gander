@@ -60,11 +60,12 @@ stands.
 ## Review servers
 
 1. Settings → Connection → Add server accepts a name, service URL and token. Save server checks the connection before keeping it.
-2. Defaults by owner chooses a server for new repositories from that owner, such as `acme/*`.
-3. Opening a repository folder remembers its server. When no owner default matches and several servers are available, Gander asks once.
-4. Switching repositories automatically uses the remembered server. Settings shows every assignment; changing one leaves old reviews on their original server.
+2. Opening a repository asks every server whether it covers that repository's git remote. When exactly one says yes, Gander uses it without asking and the status bar shows "Notes save to <server>" with a Change link.
+3. When none or several say yes, or a server cannot be reached, Gander asks once in the window and remembers the answer.
+4. Switching repositories uses the remembered server. Settings lists every repository with a Change button; changing one leaves old reviews on their original server.
+5. A server that later stops covering a repository is reported in the status bar. Notes keep going to the remembered server until the reviewer changes it.
 
-Existing single-server settings upgrade automatically with every repository on the same server. Tokens remain in the owner-only config file and outside Settings JSON. Folder checkoff uses atomic batches with service contract 0.10.0; 0.9 services retain single-file writes. A failed server never redirects a repository to another server.
+A self-hosted service covers every repository unless `GANDER_CLAIM_OWNERS` lists the owners it is for (`docs/deploy.md`). Services before contract 0.11.0 count as not covering anything, and remain usable. Existing single-server settings upgrade automatically with every repository on the same server; owner defaults from earlier versions become each unassigned repository's remembered choice. Tokens remain in the owner-only config file and outside Settings JSON. Folder checkoff uses atomic batches from contract 0.10.0; 0.9 services retain single-file writes. A failed server never redirects a repository to another server.
 
 ## Settings
 

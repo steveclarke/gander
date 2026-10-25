@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { TestInfo } from "@playwright/test";
-import { SERVICE_VERSION } from "@gander/shared";
+import { SERVICE_VERSION, type ClaimScope } from "@gander/shared";
 import type { AppSettings } from "../../src/settings.js";
 import { DEFAULT_APP_SETTINGS } from "../../src/settings.js";
 import { buildServer } from "../../../service/src/server.js";
@@ -136,19 +136,20 @@ export class GanderWorld {
     this.serviceRunning = false;
   }
 
-  async startService(options: { version?: string; token?: string } = {}): Promise<void> {
+  async startService(options: { version?: string; token?: string; claimScope?: ClaimScope } = {}): Promise<void> {
     if (this.serviceRunning) throw new Error("The E2E service is already running");
     this.service = buildServer({
       storage: this.storage,
       token: options.token ?? this.serviceToken,
       version: options.version ?? SERVICE_VERSION,
+      ...(options.claimScope ? { claimScope: options.claimScope } : {}),
     });
     const port = Number(new URL(this.serviceUrl).port);
     await this.service.listen({ host: "127.0.0.1", port });
     this.serviceRunning = true;
   }
 
-  async restartService(options: { version?: string; token?: string } = {}): Promise<void> {
+  async restartService(options: { version?: string; token?: string; claimScope?: ClaimScope } = {}): Promise<void> {
     await this.stopService();
     await this.startService(options);
   }
@@ -167,8 +168,11 @@ export class GanderWorld {
     return application.launch();
   }
 
-  async runCli(repository: RepositoryFixture): Promise<string> {
-    const checkout = join(this.root, "cli-checkout");
+  /**
+   * Runs the real `bin/gander`. By default from a folder outside any repository; pass the
+   * repository's own checkout to have the app register it from there, as an agent's would.
+   */
+  async runCli(repository: RepositoryFixture, checkout = join(this.root, "cli-checkout")): Promise<string> {
     const bin = join(checkout, "bin");
     await mkdir(bin, { recursive: true });
     const realCli = resolve(import.meta.dirname, "../../../../bin/gander");

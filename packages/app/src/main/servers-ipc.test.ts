@@ -35,11 +35,10 @@ it("saves only authenticated servers, assigns pre-connection repositories once a
   await call("saveServer", { id: "new", name: "Team", url, token: "test" });
   expect(cfg.servers).toHaveLength(2); expect(cfg.repos[0]!.serverId).toBe(first);
   expect(cfg.settings).not.toHaveProperty("servers");
-  await expect(call("removeServer", first)).rejects.toThrow(/assigned/);
-  await call("setOwnerServers", [{ owner: "acme", serverId: cfg.servers[1]!.id }]);
-  expect(cfg.repos[0]!.serverId).toBe(first);
+  await expect(call("removeServer", first)).rejects.toThrow(/still save notes/);
   await expect(call("setRepoServer", "acme/atlas", "missing")).rejects.toThrow(/unknown server/);
   await call("setRepoServer", "acme/atlas", cfg.servers[1]!.id);
+  expect(cfg.repos[0]).toMatchObject({ serverId: cfg.servers[1]!.id, serverSource: "choice" });
   await call("removeServer", first); expect(cfg.servers).toHaveLength(1);
 });
 it("keeps both disk and running state unchanged when a server save fails to persist", async () => {

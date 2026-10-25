@@ -12,6 +12,12 @@ const RepoSchema = z.object({
   repoId: RepoIdSchema, url: z.string(),
   localPath: z.string().min(1).refine(isAbsolute, "must be an absolute path"),
   serverId: z.string().min(1).optional(),
+  /**
+   * "claim" when the server was picked because it alone said it covers this repository.
+   * Only those assignments warn when the claim later disappears; a server the reviewer
+   * chose stays theirs without comment.
+   */
+  serverSource: z.enum(["claim", "choice"]).optional(),
 }).strict();
 export const ServerSchema = z.object({
   id: z.string().min(1), name: z.string().trim().min(1),
@@ -27,20 +33,14 @@ const common = {
 export const ConfigSchema = z.object({
   ...common,
   servers: z.array(ServerSchema),
-  ownerServers: z.array(z.object({ owner: z.string().trim().regex(/^[^\s/]+$/), serverId: z.string().min(1) }).strict()),
   repos: z.array(RepoSchema),
 }).strict().superRefine((cfg, ctx) => {
   const ids = new Set(cfg.servers.map((server) => server.id));
   if (ids.size !== cfg.servers.length) ctx.addIssue({ code: "custom", path: ["servers"], message: "server ids must be unique" });
   const names = cfg.servers.map((server) => server.name.toLowerCase());
   if (new Set(names).size !== names.length) ctx.addIssue({ code: "custom", path: ["servers"], message: "server names must be unique" });
-  const owners = cfg.ownerServers.map((rule) => rule.owner.toLowerCase());
-  if (new Set(owners).size !== owners.length) ctx.addIssue({ code: "custom", path: ["ownerServers"], message: "owners must be unique" });
   for (const [index, repo] of cfg.repos.entries()) {
     if (repo.serverId && !ids.has(repo.serverId)) ctx.addIssue({ code: "custom", path: ["repos", index, "serverId"], message: "unknown server" });
-  }
-  for (const [index, rule] of cfg.ownerServers.entries()) {
-    if (!ids.has(rule.serverId)) ctx.addIssue({ code: "custom", path: ["ownerServers", index, "serverId"], message: "unknown server" });
   }
 });
 // This is the one supported upgrade: the approved multi-server change preserves every
@@ -48,8 +48,14 @@ export const ConfigSchema = z.object({
 const SingleServerSchema = z.object({
   ...common,
   serviceUrl: z.string().url().or(z.literal("")), serviceToken: z.string(),
-  repos: z.array(RepoSchema.omit({ serverId: true })),
+  repos: z.array(RepoSchema.omit({ serverId: true, serverSource: true })),
 }).strict();
+// Owner defaults were replaced by servers claiming repositories. A rule only ever applied
+// when a repository was registered, so it carries over as the remembered choice for any
+// repository still without one, and is otherwise dropped: no assigned repository moves.
+const OwnerDefaultsSchema = z.object({
+  ownerServers: z.array(z.object({ owner: z.string(), serverId: z.string() }).strict()),
+}).passthrough();
 export type GanderConfig = z.infer<typeof ConfigSchema>;
 export interface LastReview { repoId: string; prNumber: number; }
 
@@ -57,7 +63,7 @@ const defaultPath = (): string => process.env.GANDER_CONFIG ?? join(homedir(), "
 
 /** The shape a first run starts from: no connection, no repositories, stock settings. */
 export function unconfigured(): GanderConfig {
-  return { servers: [], ownerServers: [], settings: DEFAULT_APP_SETTINGS, repos: [] };
+  return { servers: [], settings: DEFAULT_APP_SETTINGS, repos: [] };
 }
 
 export function loadConfig(path = defaultPath()): GanderConfig {
@@ -70,9 +76,26 @@ export function loadConfig(path = defaultPath()): GanderConfig {
     if (!old.success) throw new Error(`Invalid config at ${path}: ${old.error.message}`);
     const { serviceUrl, serviceToken, ...rest } = old.data;
     const servers = serviceUrl === "" ? [] : [{ id: "default", name: "Review server", url: serviceUrl, token: serviceToken }];
-    const migrated = ConfigSchema.parse({ ...rest, servers, ownerServers: [], repos: rest.repos.map((repo) => ({ ...repo, ...(servers.length ? { serverId: "default" } : {}) })) });
+    const migrated = ConfigSchema.parse({ ...rest, servers, repos: rest.repos.map((repo) => ({ ...repo, ...(servers.length ? { serverId: "default" } : {}) })) });
     saveConfig(migrated, path);
     return migrated;
+  }
+  const withDefaults = OwnerDefaultsSchema.safeParse(raw);
+  if (withDefaults.success) {
+    const { ownerServers, ...rest } = withDefaults.data;
+    const parsed = ConfigSchema.safeParse(rest);
+    if (parsed.success) {
+      const owned = (repoId: string) => ownerServers.find((rule) => rule.owner.toLowerCase() === repoId.split("/")[0]!.toLowerCase());
+      const migrated: GanderConfig = {
+        ...parsed.data,
+        repos: parsed.data.repos.map((repo) => {
+          const serverId = repo.serverId ?? owned(repo.repoId)?.serverId;
+          return serverId && parsed.data.servers.some((server) => server.id === serverId) ? { ...repo, serverId } : repo;
+        }),
+      };
+      saveConfig(migrated, path);
+      return migrated;
+    }
   }
   const parsed = ConfigSchema.safeParse(raw);
   if (!parsed.success) {
@@ -108,17 +131,15 @@ export function resolveServiceConnection(
 ): { url: string; token: string } {
   const repo = cfg.repos.find((entry) => entry.repoId === repoId);
   const server = repoId === undefined ? cfg.servers[0] : cfg.servers.find((entry) => entry.id === repo?.serverId);
+  return serverConnection(server);
+}
+
+/** One server's connection, with the same environment override as every review request. */
+export function serverConnection(server: Pick<ReviewServer, "url" | "token"> | undefined): { url: string; token: string } {
   return {
     url: process.env.GANDER_SERVICE_URL ?? server?.url ?? "",
     token: process.env.GANDER_TOKEN ?? server?.token ?? "",
   };
-}
-
-/** Only registration consults owner defaults; changing a rule never moves existing data. */
-export function defaultServerForRepo(cfg: Pick<GanderConfig, "servers" | "ownerServers">, repoId: string): string | undefined {
-  const owner = repoId.split("/")[0]!.toLowerCase();
-  return cfg.ownerServers.find((rule) => rule.owner.toLowerCase() === owner)?.serverId
-    ?? (cfg.servers.length === 1 ? cfg.servers[0]!.id : undefined);
 }
 
 /** True when the environment is deciding the connection, and the settings pane cannot. */

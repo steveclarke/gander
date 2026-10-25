@@ -46,7 +46,6 @@ if (!parsed.success) {
 const after: Json = {
   servers: Array.isArray(before.servers) ? before.servers : typeof before.serviceUrl === "string" && before.serviceUrl !== ""
     ? [{ id: "default", name: "Review server", url: before.serviceUrl, token: before.serviceToken }] : [],
-  ownerServers: Array.isArray(before.ownerServers) ? before.ownerServers : [],
   ...(typeof before.githubToken === "string" && before.githubToken !== "" ? { githubToken: before.githubToken } : {}),
   ...(isObject(before.lastReview) ? { lastReview: before.lastReview } : {}),
   settings: parsed.data,

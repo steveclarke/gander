@@ -2,18 +2,15 @@
 import { onMounted, shallowRef } from "vue";
 import { readable } from "../store.js";
 import { api, type ConnectionCheck } from "../api.js";
-import type { ReviewServer, GanderConfig } from "../../../main/config.js";
+import type { ReviewServer } from "../../../main/config.js";
 import type { RepoEntry } from "@gander/shared";
 import ServerForm from "./ServerForm.vue";
 
 const emit = defineEmits<{ connected: [] }>();
 const servers = shallowRef<ReviewServer[]>([]);
 const repos = shallowRef<RepoEntry[]>([]);
-const rules = shallowRef<GanderConfig["ownerServers"]>([]);
 const statuses = shallowRef<Record<string, ConnectionCheck>>({});
 const editing = shallowRef<ReviewServer | null | undefined>(undefined);
-const owner = shallowRef("");
-const ruleServer = shallowRef("");
 const error = shallowRef("");
 const notice = shallowRef("");
 const fromEnvironment = shallowRef(false);
@@ -23,9 +20,8 @@ let generation = 0;
 async function load(): Promise<void> {
   const current = ++generation;
   const data = await api.getServers();
-  servers.value = data.servers; rules.value = data.ownerServers; repos.value = data.repos;
+  servers.value = data.servers; repos.value = data.repos;
   fromEnvironment.value = data.fromEnvironment;
-  ruleServer.value = ruleServer.value || data.servers[0]?.id || "";
   statuses.value = {};
   await Promise.all(data.servers.map(async (server) => {
     const result = await api.testConnection(server.url, server.token);
@@ -39,18 +35,14 @@ async function act(action: () => Promise<void>, message = ""): Promise<void> {
   finally { busy.value = false; }
 }
 async function saved(): Promise<void> { editing.value = undefined; await act(async () => {}, "Server saved."); }
-function addRule(): void {
-  const value = owner.value.trim().replace(/\/\*$/, "");
-  if (!value || !ruleServer.value) { error.value = "Enter a repository owner and choose a server."; return; }
-  void act(async () => {
-    await api.setOwnerServers([...rules.value.filter((rule) => rule.owner.toLowerCase() !== value.toLowerCase()), { owner: value, serverId: ruleServer.value }]);
-    owner.value = "";
-  }, "Owner default saved. Existing repositories keep their server.");
+function destination(repo: RepoEntry): string {
+  const server = servers.value.find((entry) => entry.id === repo.serverId);
+  return server ? `Notes save to ${server.name}` : "No server chosen";
 }
-function serverName(id?: string): string { return servers.value.find((server) => server.id === id)?.name ?? "Choose a server"; }
-function assign(repoId: string, event: Event): void {
-  const serverId = (event.target as HTMLSelectElement).value;
-  if (serverId) void act(() => api.setRepoServer(repoId, serverId), "Repository server saved. Existing reviews stay on their original server.");
+async function change(repo: RepoEntry): Promise<void> {
+  let changed = false;
+  await act(async () => { changed = await api.changeRepoServer(repo.repoId); });
+  if (changed) notice.value = "Server changed. Existing reviews stay on the server they were saved to.";
 }
 onMounted(() => { void act(async () => {}); });
 </script>
@@ -72,30 +64,21 @@ onMounted(() => { void act(async () => {}); });
           </span>
         </div>
         <button type="button" :disabled="busy" :aria-label="`Edit ${server.name}`" @click="editing = server">Edit</button>
-        <button type="button" :disabled="busy || repos.some(repo => repo.serverId === server.id) || rules.some(rule => rule.serverId === server.id)" :aria-label="`Remove ${server.name}`" title="Assigned servers must be unassigned before removal" @click="act(() => api.removeServer(server.id))">Remove</button>
+        <button type="button" :disabled="busy || repos.some(repo => repo.serverId === server.id)" :aria-label="`Remove ${server.name}`" title="Repositories that save notes here must be changed to another server first" @click="act(() => api.removeServer(server.id))">Remove</button>
       </li>
     </ul>
     <p v-else class="settings-description">Add a server to save reviews. Local browsing works without one.</p>
     <ServerForm v-if="editing !== undefined" :key="editing?.id ?? 'new'" :server="editing ?? undefined" @saved="saved" @cancel="editing = undefined" />
     <button v-else type="button" class="add-server" :disabled="busy" @click="editing = null">Add server</button>
 
-    <section v-if="servers.length" class="defaults" aria-labelledby="owner-defaults-title">
-      <h3 id="owner-defaults-title">Defaults by owner</h3>
-      <p class="settings-description">New repositories use their owner's server. Existing choices stay as they are.</p>
-      <ul v-if="rules.length" class="rule-list">
-        <li v-for="rule in rules" :key="rule.owner"><span>{{ rule.owner }}/* → {{ serverName(rule.serverId) }}</span><button type="button" :disabled="busy" :aria-label="`Remove default for ${rule.owner}`" @click="act(() => api.setOwnerServers(rules.filter(entry => entry.owner !== rule.owner)))">Remove</button></li>
-      </ul>
-      <form class="rule-form" @submit.prevent="addRule">
-        <label>Repository owner<input v-model="owner" placeholder="acme" :disabled="busy" class="settings-control settings-text-control"></label>
-        <label>Review server<select aria-label="Review server" v-model="ruleServer" :disabled="busy" class="settings-control"><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></label>
-        <button type="submit" :disabled="busy">Save default</button>
-      </form>
-    </section>
     <section v-if="repos.length && servers.length" aria-labelledby="repository-servers-title">
       <h3 id="repository-servers-title">Repositories</h3>
-      <p class="settings-description">Changing a choice leaves existing reviews on their original server.</p>
-      <ul class="repository-list">
-        <li v-for="repo in repos" :key="repo.repoId"><label :for="`repo-${repo.repoId}`">{{ repo.repoId }}</label><select :id="`repo-${repo.repoId}`" :aria-label="`Server for ${repo.repoId}`" class="settings-control" :value="repo.serverId ?? ''" :disabled="busy" @change="assign(repo.repoId, $event)"><option value="" disabled>Choose a server</option><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></li>
+      <p class="settings-description">Each repository saves its notes to one server. Changing it leaves existing reviews where they are.</p>
+      <ul class="repository-list" aria-label="Repositories">
+        <li v-for="repo in repos" :key="repo.repoId" class="repository-row">
+          <div class="repository-identity"><strong>{{ repo.repoId }}</strong><span class="repository-destination" :class="{ unset: !servers.some(server => server.id === repo.serverId) }">{{ destination(repo) }}</span></div>
+          <button type="button" :disabled="busy" :aria-label="`Change server for ${repo.repoId}`" @click="change(repo)">Change</button>
+        </li>
       </ul>
     </section>
   </section>
@@ -117,13 +100,13 @@ ul { list-style: none; margin: 0; padding: 0; }
 .notice { color: var(--muted-foreground); }
 button { flex: none; padding: 6px 12px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); color: var(--workbench-foreground); background: var(--input-background); font: inherit; font-size: 12px; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .add-server { align-self: flex-start; color: var(--accent); }
-.rule-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 16px; }
-.rule-form label { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 140px; font-size: 12px; }
-.rule-form input { margin: 0; }
-select { padding: 6px 8px; color: var(--workbench-foreground); background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-md); font: inherit; }
-.rule-list li, .repository-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 8px; border-bottom: 1px solid var(--workbench-border); }
-.repository-list label { overflow-wrap: anywhere; }
+.repository-list { margin-top: 12px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); }
+.repository-row { display: flex; align-items: center; gap: 8px; padding: 12px 16px; }
+.repository-row + .repository-row { border-top: 1px solid var(--workbench-border); }
+.repository-identity { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.repository-destination { color: var(--muted-foreground); font-size: 12px; }
+.repository-destination.unset { color: var(--warning); }
 @media (max-width: 640px) { .server-row { flex-wrap: wrap; } .server-identity { flex-basis: 100%; } }
 </style>
