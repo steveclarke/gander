@@ -86,8 +86,8 @@ onMounted(() => { void act(async () => {}); });
         <li v-for="rule in rules" :key="rule.owner"><span>{{ rule.owner }}/* → {{ serverName(rule.serverId) }}</span><button type="button" :disabled="busy" :aria-label="`Remove default for ${rule.owner}`" @click="act(() => api.setOwnerServers(rules.filter(entry => entry.owner !== rule.owner)))">Remove</button></li>
       </ul>
       <form class="rule-form" @submit.prevent="addRule">
-        <label>Repository owner<input v-model="owner" placeholder="acme" :disabled="busy" class="settings-control settings-text-control"></label>
-        <label>Review server<select aria-label="Review server" v-model="ruleServer" :disabled="busy" class="settings-control"><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></label>
+        <label>Repository owner<input v-model="owner" placeholder="acme" :disabled="busy" class="settings-text-control"></label>
+        <label>Review server<select aria-label="Review server" v-model="ruleServer" :disabled="busy" class="settings-select"><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></label>
         <button type="submit" :disabled="busy">Save default</button>
       </form>
     </section>
@@ -95,7 +95,7 @@ onMounted(() => { void act(async () => {}); });
       <h3 id="repository-servers-title">Repositories</h3>
       <p class="settings-description">Changing a choice leaves existing reviews on their original server.</p>
       <ul class="repository-list">
-        <li v-for="repo in repos" :key="repo.repoId"><label :for="`repo-${repo.repoId}`">{{ repo.repoId }}</label><select :id="`repo-${repo.repoId}`" :aria-label="`Server for ${repo.repoId}`" class="settings-control" :value="repo.serverId ?? ''" :disabled="busy" @change="assign(repo.repoId, $event)"><option value="" disabled>Choose a server</option><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></li>
+        <li v-for="repo in repos" :key="repo.repoId"><label :for="`repo-${repo.repoId}`">{{ repo.repoId }}</label><select :id="`repo-${repo.repoId}`" class="settings-select" :aria-label="`Server for ${repo.repoId}`" :value="repo.serverId ?? ''" :disabled="busy" @change="assign(repo.repoId, $event)"><option value="" disabled>Choose a server</option><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></li>
       </ul>
     </section>
   </section>
@@ -117,12 +117,11 @@ ul { list-style: none; margin: 0; padding: 0; }
 .notice { color: var(--muted-foreground); }
 button { flex: none; padding: 6px 12px; border: 1px solid var(--workbench-border); border-radius: var(--radius-md); color: var(--workbench-foreground); background: var(--input-background); font: inherit; font-size: 12px; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .add-server { align-self: flex-start; color: var(--accent); }
 .rule-form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 16px; }
 .rule-form label { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 140px; font-size: 12px; }
 .rule-form input { margin: 0; }
-select { padding: 6px 8px; color: var(--workbench-foreground); background: var(--input-background); border: 1px solid var(--workbench-border); border-radius: var(--radius-md); font: inherit; }
 .rule-list li, .repository-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 8px; border-bottom: 1px solid var(--workbench-border); }
 .repository-list label { overflow-wrap: anywhere; }
 @media (max-width: 640px) { .server-row { flex-wrap: wrap; } .server-identity { flex-basis: 100%; } }
