@@ -87,7 +87,7 @@ onMounted(() => { void act(async () => {}); });
       </ul>
       <form class="rule-form" @submit.prevent="addRule">
         <label>Repository owner<input v-model="owner" placeholder="acme" :disabled="busy" class="settings-text-control"></label>
-        <label>Review server<select aria-label="Review server" v-model="ruleServer" :disabled="busy"><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></label>
+        <label>Review server<select aria-label="Review server" v-model="ruleServer" :disabled="busy" class="settings-select"><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></label>
         <button type="submit" :disabled="busy">Save default</button>
       </form>
     </section>
@@ -95,7 +95,7 @@ onMounted(() => { void act(async () => {}); });
       <h3 id="repository-servers-title">Repositories</h3>
       <p class="settings-description">Changing a choice leaves existing reviews on their original server.</p>
       <ul class="repository-list">
-        <li v-for="repo in repos" :key="repo.repoId"><label :for="`repo-${repo.repoId}`">{{ repo.repoId }}</label><select :id="`repo-${repo.repoId}`" :aria-label="`Server for ${repo.repoId}`" :value="repo.serverId ?? ''" :disabled="busy" @change="assign(repo.repoId, $event)"><option value="" disabled>Choose a server</option><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></li>
+        <li v-for="repo in repos" :key="repo.repoId"><label :for="`repo-${repo.repoId}`">{{ repo.repoId }}</label><select :id="`repo-${repo.repoId}`" class="settings-select" :aria-label="`Server for ${repo.repoId}`" :value="repo.serverId ?? ''" :disabled="busy" @change="assign(repo.repoId, $event)"><option value="" disabled>Choose a server</option><option v-for="server in servers" :key="server.id" :value="server.id">{{ server.name }}</option></select></li>
       </ul>
     </section>
   </section>
