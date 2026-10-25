@@ -1,36 +1,31 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { Locator, Page } from "@playwright/test";
+import type { Locator } from "@playwright/test";
 import { test, expect } from "./fixtures/test.js";
 import { SettingsDriver } from "./drivers/settings.js";
 
 const BOX_PROPERTIES = [
-  "appearance", "background-color", "border-top-style", "border-top-width", "border-top-color",
-  "border-top-left-radius", "padding-top", "padding-left",
+  "appearance", "background-color", "background-image", "border-top-style", "border-top-width",
+  "border-top-color", "border-top-left-radius", "padding-top", "padding-left", "font-size", "height",
 ];
 
-// A select keeps the platform's own control (the Aqua pop-up button on macOS) only while the
-// page leaves its box alone. Styling its border or background swaps in Chromium's drawn
-// fallback, whose text no longer lines up under the native menu, so the old value shows
-// through the translucent list. Comparing against a bare select catches any such styling.
-async function boxStyle(page: Page, select?: Locator): Promise<Record<string, string>> {
-  const element = select ? await select.elementHandle() : null;
-  return page.evaluate(({ element, properties }) => {
-    const target = element ?? document.body.appendChild(document.createElement("select"));
-    const style = getComputedStyle(target);
-    const values = Object.fromEntries(properties.map((property) => [property, style.getPropertyValue(property)]));
-    if (!element) target.remove();
-    return values;
-  }, { element, properties: BOX_PROPERTIES });
+async function boxStyle(control: Locator): Promise<Record<string, string>> {
+  return control.evaluate((element, properties) => {
+    const style = getComputedStyle(element);
+    return Object.fromEntries(properties.map((property) => [property, style.getPropertyValue(property)]));
+  }, BOX_PROPERTIES);
 }
 
-async function expectNativeSelect(page: Page, select: Locator): Promise<void> {
-  expect.soft(await boxStyle(page, select)).toEqual(await boxStyle(page));
-  await select.focus();
-  await expect.soft(select).toHaveCSS("outline-style", "auto");
+// One ring: the border takes the ring's colour and the outline sits flush against it, rather
+// than a second outline floating outside an accent border.
+async function expectOneFocusRing(control: Locator): Promise<void> {
+  await control.focus();
+  await expect.soft(control).toHaveCSS("outline-offset", "0px");
+  const ring = await control.evaluate((element) => getComputedStyle(element).outlineColor);
+  await expect.soft(control).toHaveCSS("border-top-color", ring);
 }
 
-test("settings dropdowns are the platform's own control with one focus ring", async ({ world }) => {
+test("settings dropdowns share one drawn look with one focus ring", async ({ world }) => {
   const atlas = await world.addRepository({ repoId: "example/atlas", title: "QA example" });
   const harbor = await world.addRepository({ repoId: "acme/harbor", title: "QA example" });
   const config = JSON.parse(await readFile(world.configPath, "utf8"));
@@ -50,27 +45,32 @@ test("settings dropdowns are the platform's own control with one focus ring", as
   await mkdir(images, { recursive: true });
   const settings = new SettingsDriver(app.page);
   await settings.open();
+  await settings.openWorkbenchCategory();
+
+  // Chromium's own select is a square box on macOS whose text the native menu does not
+  // cover, so the old value ghosts through the open list. Every settings select is drawn.
+  const workbench = [
+    app.page.locator('select[name="workbench.iconTheme"]'),
+    app.page.locator('select[name="workbench.colorTheme"]'),
+  ];
+  const look = await boxStyle(workbench[0]!);
+  expect(look.appearance).toBe("none");
+  for (const select of workbench) {
+    expect.soft(await boxStyle(select)).toEqual(look);
+    await expectOneFocusRing(select);
+  }
+  await app.page.screenshot({ path: join(images, "workbench.png") });
+
   await settings.openConnectionCategory();
-
-  // One ring: the border takes the ring's colour and the outline sits flush against it,
-  // rather than a second outline floating outside an accent border.
-  const owner = app.page.getByPlaceholder("acme");
-  await owner.focus();
-  await expect.soft(owner).toHaveCSS("outline-offset", "0px");
-  const ring = await owner.evaluate((element) => getComputedStyle(element).outlineColor);
-  await expect.soft(owner).toHaveCSS("border-top-color", ring);
-
+  await expectOneFocusRing(app.page.getByPlaceholder("acme"));
   const ruleServer = app.page.getByLabel("Review server", { exact: true });
   for (const select of [
     app.page.getByLabel(`Server for ${atlas.repoId}`),
     app.page.getByLabel(`Server for ${harbor.repoId}`),
     ruleServer,
-  ]) await expectNativeSelect(app.page, select);
-  await app.page.screenshot({ path: join(images, "connection.png") });
-
-  await app.page.getByRole("button", { name: "Workbench", exact: true }).click();
-  for (const name of ["workbench.iconTheme", "workbench.colorTheme"]) {
-    await expectNativeSelect(app.page, app.page.locator(`select[name="${name}"]`));
+  ]) {
+    expect.soft(await boxStyle(select)).toEqual(look);
+    await expectOneFocusRing(select);
   }
-  await app.page.screenshot({ path: join(images, "workbench.png") });
+  await app.page.screenshot({ path: join(images, "connection.png") });
 });
