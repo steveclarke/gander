@@ -134,4 +134,4 @@ GraphQL HTTP endpoints are represented by a local fake.
 
 ## Repository servers
 
-Settings keeps multiple named review servers and their tokens. Each repository keeps its server; owner defaults apply when a repository is first registered. Existing single-server settings migrate automatically. Review caches and connection recovery remain separate across repositories and servers. Contract 0.10.0 adds atomic bulk checkoffs, with single-file fallback for contract 0.9. The workbench also offers Gander Light.
+Settings keeps multiple named review servers and their tokens. Each repository keeps its server. When a repository is first opened, every server is asked whether it covers its remote: one claimant is used without asking, otherwise the reviewer chooses once in the window (contract 0.11.0). Existing single-server settings migrate automatically. Review caches and connection recovery remain separate across repositories and servers. Contract 0.10.0 adds atomic bulk checkoffs, with single-file fallback for contract 0.9. The workbench also offers Gander Light.

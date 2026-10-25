@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import type { ZodError } from "zod";
-import { NewNoteSchema, PrContextSchema, PutFileStateSchema, PutFileStatesSchema, UpdateNoteSchema } from "@gander/shared";
+import { type ClaimScope, claimsRemote, NewNoteSchema, PrContextSchema, PutFileStateSchema, PutFileStatesSchema, UpdateNoteSchema } from "@gander/shared";
 import { handleMcpRequest } from "./mcp.js";
 import type { Storage } from "./storage.js";
 
@@ -28,6 +28,8 @@ export function buildServer(opts: {
   storage: Storage;
   token: string;
   version: string;
+  /** Which repositories this service says it covers. Defaults to every repository. */
+  claimScope?: ClaimScope;
   /** Called for each route as it is registered. The contract snapshot reads the route table this way. */
   onRoute?: (method: string, path: string) => void;
 }): FastifyInstance {
@@ -50,6 +52,15 @@ export function buildServer(opts: {
     if (req.headers.authorization !== `Bearer ${opts.token}`) {
       await reply.code(401).send({ error: "missing or invalid bearer token" });
     }
+  });
+
+  // The app asks every configured server this when a repository is first opened, so one
+  // that covers it can be chosen without asking the reviewer. Answers for a malformed or
+  // non-GitHub remote are "no", never an error: the app then asks the reviewer instead.
+  app.get<{ Querystring: { remote?: string } }>("/api/repositories/claim", async (req, reply) => {
+    const remote = req.query.remote;
+    if (typeof remote !== "string" || remote.trim() === "") return reply.code(400).send({ error: "remote is required" });
+    return { claimed: claimsRemote(opts.claimScope ?? "everything", remote.trim()) };
   });
 
   app.get<{ Params: { repoId: string; prNumber: string } }>(

@@ -26,20 +26,12 @@ async function expectOneFocusRing(control: Locator): Promise<void> {
 }
 
 test("settings dropdowns share one drawn look with one focus ring", async ({ world }) => {
-  const atlas = await world.addRepository({ repoId: "example/atlas", title: "QA example" });
-  const harbor = await world.addRepository({ repoId: "acme/harbor", title: "QA example" });
+  await world.addRepository({ repoId: "example/atlas", title: "QA example" });
   const config = JSON.parse(await readFile(world.configPath, "utf8"));
-  delete config.serviceUrl; delete config.serviceToken;
-  config.servers = [
-    { id: "qa-personal", name: "QA Personal", url: world.serviceUrl, token: world.serviceToken },
-    { id: "qa-team", name: "QA Team", url: world.serviceUrl, token: world.serviceToken },
-  ];
-  config.ownerServers = [{ owner: "acme", serverId: "qa-team" }];
-  config.repos[0].serverId = "qa-personal"; config.repos[1].serverId = "qa-team";
   config.settings.workbench.colorTheme = "Gander Light";
   await writeFile(world.configPath, JSON.stringify(config), { mode: 0o600 });
 
-  const app = await world.launch({ connectionFromEnvironment: false });
+  const app = await world.launch();
   await app.page.setViewportSize({ width: 1180, height: 860 });
   const images = resolve(import.meta.dirname, "../../../docs/qa/settings-controls");
   await mkdir(images, { recursive: true });
@@ -61,16 +53,8 @@ test("settings dropdowns share one drawn look with one focus ring", async ({ wor
   }
   await app.page.screenshot({ path: join(images, "workbench.png") });
 
+
+  // Connection has no dropdowns: a repository's server changes through its Change button.
   await settings.openConnectionCategory();
-  await expectOneFocusRing(app.page.getByPlaceholder("acme"));
-  const ruleServer = app.page.getByLabel("Review server", { exact: true });
-  for (const select of [
-    app.page.getByLabel(`Server for ${atlas.repoId}`),
-    app.page.getByLabel(`Server for ${harbor.repoId}`),
-    ruleServer,
-  ]) {
-    expect.soft(await boxStyle(select)).toEqual(look);
-    await expectOneFocusRing(select);
-  }
-  await app.page.screenshot({ path: join(images, "connection.png") });
+  await expect(app.page.locator(".server-settings select")).toHaveCount(0);
 });

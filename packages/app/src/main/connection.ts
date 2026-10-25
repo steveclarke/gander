@@ -18,7 +18,11 @@ export type ServiceStatus = (
   | { state: "connected"; serviceVersion: string; supportedVersion: string }
   | { state: "newer"; serviceVersion: string; supportedVersion: string }
   | { state: "incompatible"; serviceVersion: string; supportedVersion: string; reason: string }
-  | { state: "unreachable"; reason: string }) & { serverName?: string };
+  | { state: "unreachable"; reason: string }) & {
+    serverName?: string;
+    /** The server this repository was routed to by its claim now says it does not cover it. */
+    claimLost?: boolean;
+  };
 
 const PROBE = "/api/reviews/gander%2Fconnection-check/1";
 
@@ -39,9 +43,10 @@ export function compareServiceVersion(version: string): ServiceStatus {
       reason: `Gander service version ${version} is not a supported version. Update the service to ${SERVICE_VERSION}.`,
     };
   }
-  // 0.10 adds only optional bulk writes. The complete 0.9 contract remains supported;
-  // clients use single-file writes there until that server is upgraded.
-  if (actual[0] === 0 && actual[1] === 9) {
+  // Each minor since 0.9 has only added optional routes. 0.10 brought bulk writes, which
+  // a 0.9 server answers with single-file writes; 0.11 brought repository claims, which an
+  // older server answers as "no claim". Both remain fully usable.
+  if (actual[0] === 0 && (actual[1] === 9 || actual[1] === 10)) {
     return { state: "connected", serviceVersion: version, supportedVersion: SERVICE_VERSION };
   }
   const comparison = actual.findIndex((part, index) => part !== supported[index]);

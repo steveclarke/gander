@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { platform } from "node:process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadConfig, resolveServiceConnection, saveConfig, defaultServerForRepo, unconfigured } from "./config.js";
+import { loadConfig, resolveServiceConnection, saveConfig, unconfigured } from "./config.js";
 import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_FONT_FAMILY } from "../settings.js";
 
 let dir: string; let cfgPath: string;
@@ -16,7 +16,7 @@ describe("config", () => {
     expect(() => loadConfig(cfgPath)).toThrow(/Invalid config/);
   });
   it("round-trips repos through save/load", () => {
-    saveConfig({ servers: [{ id: "default", name: "Review", url: "http://h:8390", token: "t" }], ownerServers: [], settings: DEFAULT_APP_SETTINGS, repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", localPath: "/tmp/atlas" }] }, cfgPath);
+    saveConfig({ servers: [{ id: "default", name: "Review", url: "http://h:8390", token: "t" }], settings: DEFAULT_APP_SETTINGS, repos: [{ repoId: "acme/atlas", url: "https://github.com/acme/atlas", localPath: "/tmp/atlas" }] }, cfgPath);
     const cfg = loadConfig(cfgPath);
     expect(cfg.repos[0]?.repoId).toBe("acme/atlas");
     expect(cfg.repos[0]?.localPath).toBe("/tmp/atlas");
@@ -29,7 +29,7 @@ describe("config", () => {
 
   it("persists editor settings across save and load", () => {
     saveConfig({
-      servers: [{ id: "default", name: "Review", url: "http://h:8390", token: "t" }], ownerServers: [], repos: [],
+      servers: [{ id: "default", name: "Review", url: "http://h:8390", token: "t" }], repos: [],
       settings: {
         editor: { fontFamily: "'Fira Code', monospace", fontSize: 18.5 },
         window: { zoomLevel: 0.5 },
@@ -95,7 +95,7 @@ describe("config", () => {
 
   // chmod bits aren't meaningful on Windows.
   (platform === "win32" ? it.skip : it)("writes the config file and its directory with owner-only permissions", () => {
-    saveConfig({ servers: [{ id: "default", name: "Review", url: "http://h:8390", token: "t" }], ownerServers: [], settings: DEFAULT_APP_SETTINGS, repos: [] }, cfgPath);
+    saveConfig({ servers: [{ id: "default", name: "Review", url: "http://h:8390", token: "t" }], settings: DEFAULT_APP_SETTINGS, repos: [] }, cfgPath);
     expect(statSync(cfgPath).mode & 0o777).toBe(0o600);
     expect(statSync(dir).mode & 0o777).toBe(0o700);
   });
@@ -113,7 +113,7 @@ describe("config", () => {
       if (saved.token === undefined) delete process.env.GANDER_TOKEN; else process.env.GANDER_TOKEN = saved.token;
     });
 
-    const fileCfg = { servers: [{ id: "default", name: "Review", url: "http://from-file:8390", token: "file-token" }], ownerServers: [], settings: DEFAULT_APP_SETTINGS, repos: [] };
+    const fileCfg = { servers: [{ id: "default", name: "Review", url: "http://from-file:8390", token: "file-token" }], settings: DEFAULT_APP_SETTINGS, repos: [] };
 
     it("falls back to the config file when the env is unset", () => {
       delete process.env.GANDER_SERVICE_URL;
@@ -187,16 +187,38 @@ it("silently migrates every repository, preserves credentials and settings, and 
   expect(statSync(cfgPath).mode & 0o777).toBe(0o600);
 });
 
-it("matches owner defaults case-insensitively without changing existing assignments", () => {
+it("resolves each repository's own server and refuses an unknown one", () => {
   const cfg = { ...unconfigured(), servers: [
     { id: "one", name: "One", url: "https://one.example.test", token: "one" },
     { id: "two", name: "Two", url: "https://two.example.test", token: "two" },
-  ], ownerServers: [{ owner: "ACME", serverId: "two" }], repos: [{ repoId: "acme/atlas", url: "url", localPath: "/tmp/atlas", serverId: "one" }] };
-  expect(defaultServerForRepo(cfg, "acme/new")).toBe("two");
-  expect(defaultServerForRepo(cfg, "acme-extra/new")).toBeUndefined();
+  ], repos: [{ repoId: "acme/atlas", url: "url", localPath: "/tmp/atlas", serverId: "one" }] };
   expect(resolveServiceConnection(cfg, "acme/atlas").url).toBe("https://one.example.test");
   cfg.repos[0]!.serverId = "missing";
   expect(resolveServiceConnection(cfg, "acme/atlas").url).toBe("");
   saveConfig(cfg, cfgPath);
   expect(() => loadConfig(cfgPath)).toThrow(/unknown server/);
+});
+
+it("turns owner defaults into remembered choices without moving any assigned repository", () => {
+  const servers = [
+    { id: "one", name: "One", url: "https://one.example.test", token: "one" },
+    { id: "two", name: "Two", url: "https://two.example.test", token: "two" },
+  ];
+  writeFileSync(cfgPath, JSON.stringify({
+    servers, settings: DEFAULT_APP_SETTINGS,
+    ownerServers: [{ owner: "ACME", serverId: "two" }, { owner: "gone", serverId: "removed" }],
+    repos: [
+      { repoId: "acme/atlas", url: "u1", localPath: "/tmp/atlas", serverId: "one" },
+      { repoId: "acme/harbor", url: "u2", localPath: "/tmp/harbor" },
+      { repoId: "gone/lost", url: "u3", localPath: "/tmp/lost" },
+      { repoId: "other/plain", url: "u4", localPath: "/tmp/plain" },
+    ],
+  }));
+  const loaded = loadConfig(cfgPath);
+  expect(loaded.repos.map((repo) => [repo.repoId, repo.serverId])).toEqual([
+    ["acme/atlas", "one"], ["acme/harbor", "two"], ["gone/lost", undefined], ["other/plain", undefined],
+  ]);
+  const saved = JSON.parse(readFileSync(cfgPath, "utf8"));
+  expect(saved).not.toHaveProperty("ownerServers");
+  expect(loadConfig(cfgPath)).toEqual(loaded);
 });

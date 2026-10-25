@@ -8,6 +8,8 @@ services:
     environment:
       # No default. The service refuses to start without it.
       GANDER_TOKEN: ${GANDER_TOKEN:?set GANDER_TOKEN in .env}
+      # Empty covers every repository. See docs/deploy.md.
+      GANDER_CLAIM_OWNERS: ${GANDER_CLAIM_OWNERS:-}
     ports:
       - "${GANDER_PUBLISH_PORT:-8390}:8390"
     volumes:
