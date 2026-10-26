@@ -68,6 +68,8 @@ stands.
 4. Switching repositories uses the remembered server. Settings lists every repository with a Change button; changing one leaves old reviews on their original server.
 5. A server that later stops covering a repository is reported in the status bar. Notes keep going to the remembered server until the reviewer changes it.
 
+[The Gander protocol](docs/protocol.md) describes what a review server serves, for anyone writing one.
+
 A self-hosted service covers every repository unless `GANDER_CLAIM_OWNERS` lists the owners it is for, and `GANDER_OTHER_SERVER` names where agents should look for the rest (`docs/deploy.md`). Services before contract 0.11.0 count as not covering anything, and remain usable. Existing single-server settings upgrade automatically with every repository on the same server; owner defaults from earlier versions become each unassigned repository's remembered choice. Tokens remain in the owner-only config file and outside Settings JSON. Folder checkoff uses atomic batches from contract 0.10.0; 0.9 services retain single-file writes. A failed server never redirects a repository to another server.
 
 ## Settings
