@@ -6,6 +6,9 @@
 
 ## Install
 
+New to Gander? [Setting up Gander](docs/setup.md) goes from installing the app to an
+agent reading your first review notes.
+
 Packaged releases are available from [GitHub Releases](https://github.com/steveclarke/gander/releases):
 
 - On Apple silicon macOS, open the versioned `.dmg` and drag Gander to Applications.
