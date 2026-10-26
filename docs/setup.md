@@ -67,8 +67,9 @@ to.
 ### Outport (team server)
 
 1. Sign in to Outport and open <https://outport.app/settings/api-tokens>.
-2. Choose **New token**. Describe it as "Gander", set **Permission** to
-   **Write**, and choose **Create token**. Copy the token: Outport shows it once.
+2. Choose **New token**. Under **What's this token for?** enter "Gander", set
+   **Permission** to **Write**, and choose **Create token**. Leave **Expires at**
+   empty for a token that does not expire. Copy the token: Outport shows it once.
 3. In Gander's **Settings → Connection**, under **Review servers**, choose **Add
    server** and fill in:
 
@@ -82,11 +83,14 @@ to.
 5. Choose **Save server**.
 
 A Read token can connect but cannot save checkoffs or notes, so the token must be
-Write. Reviews on Outport are private: other people on the team do not see them.
+Write. Outport answers 404 to an account that does not have Gander switched on,
+so **Test** fails for a new person until Outport's maintainers turn Gander on for
+that account. Reviews on Outport are private: other people on the team do not see them.
 
 ### A self-hosted server
 
-1. Run the service with `docs/deploy.md`, which ends with a URL and a token.
+1. Run the service with `docs/deploy.md`, which creates the token and shows where
+   the service listens.
 2. Add it the same way, with that URL and token, and a name such as `Personal`.
 
 ## 4. Open a repository
@@ -102,8 +106,8 @@ Write. Reviews on Outport are private: other people on the team do not see them.
    **Repositories** list in **Settings → Connection**, moves the repository to
    another server. Existing reviews stay on the server they were written to.
 
-Outport says yes for a repository when it is registered on an Outport project
-the signed-in person can see, and Outport's GitHub App is installed on it.
+Outport decides which repositories it covers. To have a repository covered, ask
+Outport's maintainers.
 
 ## 5. Review a pull request
 
@@ -136,7 +140,9 @@ claude mcp add --scope user --transport http outport https://outport.app/mcp
 ```
 
 `--scope user` makes the server available in every checkout; without it,
-Claude Code registers it for the current folder only. Then run `/mcp` in Claude Code and sign in to Outport when asked. The `out`
+Claude Code registers it for the current folder only.
+
+Then run `/mcp` in Claude Code and sign in to Outport when asked. The `out`
 command reads the same notes: `out gander notes list owner/name --prNumber 42`.
 
 ### A self-hosted server
@@ -162,7 +168,8 @@ address them". A note moves through four states:
 | Message | What to do |
 |---|---|
 | **No GitHub token.** | Save a GitHub token (step 2), or sign in with `gh auth login` and restart Gander |
-| **The service rejected that token.** (on Test) | The server token is wrong, revoked or expired: create a new one |
+| **The service rejected that token.** (on Test) | The server token is wrong, revoked or expired (an Outport token with an **Expires at** date stops working on it): create a new one |
+| Test answers 404 on Outport | Gander is not switched on for the account: ask Outport's maintainers to turn it on |
 | Checkoffs or notes fail to save after a passing Test | On Outport, the token is Read: create a Write token and edit the server |
 | **… is newer than this app understands** | Update Gander (**Check for Updates…**) |
 | **… is too old for this app** | The server needs updating; for Outport, tell its maintainers |
