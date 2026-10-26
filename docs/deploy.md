@@ -89,7 +89,7 @@ Agents read your notes over MCP at `/mcp` on the same service, with the same
 token. Registered once against a hosted service, rather than per checkout:
 
 ```bash
-claude mcp add --transport http gander https://gander.example.internal/mcp \
+claude mcp add --scope user --transport http gander https://gander.example.internal/mcp \
   --header "Authorization: Bearer $GANDER_TOKEN"
 ```
 
