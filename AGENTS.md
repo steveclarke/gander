@@ -37,7 +37,8 @@ contract** — a route added or removed, a field the app comes to rely on. Leavi
 alone lets a stale service answer "the version you wanted", and the mismatch surfaces
 later as a 404 in the middle of a review.
 
-`packages/service/contract.json` records that contract — routes, payload schemas, MCP
+`docs/protocol.md` describes the contract for people writing a server or client; keep it
+in step when the contract changes. `packages/service/contract.json` records that contract — routes, payload schemas, MCP
 tools — and a test compares it against a running server, so a change fails until the
 version moves. After changing the contract deliberately: bump `SERVICE_VERSION`, then
 run `bin/contract-snapshot`. It refuses while the version is unchanged.
