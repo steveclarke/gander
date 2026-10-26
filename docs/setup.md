@@ -132,16 +132,17 @@ Outport serves the notes through its own MCP server, with the tools
 In Claude Code:
 
 ```bash
-claude mcp add --transport http outport https://outport.app/mcp
+claude mcp add --scope user --transport http outport https://outport.app/mcp
 ```
 
-Then run `/mcp` in Claude Code and sign in to Outport when asked. The `out`
+`--scope user` makes the server available in every checkout; without it,
+Claude Code registers it for the current folder only. Then run `/mcp` in Claude Code and sign in to Outport when asked. The `out`
 command reads the same notes: `out gander notes list owner/name --prNumber 42`.
 
 ### A self-hosted server
 
 ```bash
-claude mcp add --transport http gander https://gander.example.internal/mcp \
+claude mcp add --scope user --transport http gander https://gander.example.internal/mcp \
   --header "Authorization: Bearer $GANDER_TOKEN"
 ```
 
