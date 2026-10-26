@@ -45,6 +45,7 @@ the version it was built for, `SERVICE_VERSION`:
 | 0.9.x or 0.10.x | Connects, without the features added since: 0.9 servers get single-file writes instead of batches; servers before 0.11 claim no repositories |
 | Older otherwise | Refuses: "too old for this app" |
 | Newer minor or major | Refuses: "newer than this app understands" |
+| Not a valid semantic version | Refuses: "not a supported version" |
 
 A change to the contract (a route added or removed, a field the app comes to rely
 on) bumps the version in the same change, then `bin/contract-snapshot` records it.
@@ -145,8 +146,11 @@ A stored `Note` adds `id`, `number`, `state`, `inProgressNote`, `commitRef`,
 | `addressed` | Agent | Work is done; `summary` and optionally `commitRef` record the outcome |
 | `resolved` | Reviewer | Accepted. Re-checking the file does this for addressed notes |
 
-An agent can go straight from `open` to `addressed`. An agent cannot claim or
-address a resolved note. Resolving and reopening happen on the reviewer's word,
+An agent can go straight from `open` to `addressed`. An agent can claim a note
+(`in_progress`) only from `open` or `in_progress`, so claiming an addressed or
+resolved note is refused ("Note N is already addressed"). Addressing an already
+addressed note is allowed and corrects the recorded outcome; addressing a
+resolved note is refused. Resolving and reopening happen on the reviewer's word,
 from the app or by an agent the reviewer has told to.
 
 ### Pull request context
@@ -215,8 +219,8 @@ same bearer token. It has five tools.
   captured.
 - `stack`, for a stacked pull request, gives its `position`, `size` and
   `members` (each with `prNumber`, `branch`, `title`, `position`, `openNotes`).
-  When this pull request has no open notes but a sibling does, the answer adds a
-  line naming it.
+  When the call returns no notes (none exist, or `since` or the default filters
+  hide them all) and a sibling has open notes, the answer adds a line naming it.
 - `since` returns only notes with a greater `id`; pass the last `lastNoteId` to
   poll for new notes.
 - With `branch` and no `prNumber`, the server looks for the newest pull request
@@ -227,7 +231,7 @@ same bearer token. It has five tools.
   rather than an empty list, so an agent does not mistake it for a clean review.
   With `GANDER_OTHER_SERVER` set, the error names where its reviews live.
 
-Errors (an unknown note id, a resolved note an agent tries to claim) come back as
+Errors (an unknown note id, an addressed or resolved note an agent tries to claim) come back as
 tool results with `isError: true` and a sentence saying what was wrong.
 
 ## Other servers
@@ -238,4 +242,6 @@ Outport serves it at `https://outport.app/gander`, with per-person private
 reviews. Its agent tools are on its own MCP server, under the names
 `gander_get_review_notes`, `gander_mark_note_in_progress`,
 `gander_mark_note_addressed`, `gander_resolve_note` and `gander_reopen_note`,
-with the same arguments.
+with the same arguments. Outport wraps each reply in its own response envelope,
+so the `get_review_notes` example above shows the standalone service's reply, not
+the bytes an Outport client receives.
