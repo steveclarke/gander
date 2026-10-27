@@ -44,6 +44,7 @@ async function change(repo: RepoEntry): Promise<void> {
   await act(async () => { changed = await api.changeRepoServer(repo.repoId); });
   if (changed) notice.value = "Server changed. Existing reviews stay on the server they were saved to.";
 }
+async function remove(server: ReviewServer): Promise<void> { await act(() => api.removeServer(server.id)); }
 onMounted(() => { void act(async () => {}); });
 </script>
 
@@ -64,7 +65,7 @@ onMounted(() => { void act(async () => {}); });
           </span>
         </div>
         <button type="button" :disabled="busy" :aria-label="`Edit ${server.name}`" @click="editing = server">Edit</button>
-        <button type="button" :disabled="busy || repos.some(repo => repo.serverId === server.id)" :aria-label="`Remove ${server.name}`" title="Repositories that save notes here must be changed to another server first" @click="act(() => api.removeServer(server.id))">Remove</button>
+        <button type="button" :disabled="busy || repos.some(repo => repo.serverId === server.id)" :aria-label="`Remove ${server.name}`" title="Repositories that save notes here must be changed to another server first" @click="remove(server)">Remove</button>
       </li>
     </ul>
     <p v-else class="settings-description">Add a server to save reviews. Local browsing works without one.</p>
