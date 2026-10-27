@@ -41,28 +41,6 @@ The Electron window stays hidden by default, while its renderer continues to
 paint for Playwright assertions, screenshots, and traces. To watch one scenario
 while debugging, run `GANDER_E2E_HEADFUL=1 pnpm test:e2e:run <file>`.
 
-### When the app cannot start Electron
-
-`electron` downloads its archive in a package lifecycle script. Electron 33's
-`extract-zip` step can silently stop after the first archive entry when it runs
-under Node 24. `electron/dist` then ends up a few hundred kilobytes rather than
-roughly 250 MB while the install script still reports success and exits 0.
-`bin/dev` then fails with `Error: Electron uninstall`, or Electron starts and
-dies with `DevToolsActivePort file doesn't exist`.
-
-Check for it, from the repository root:
-
-```bash
-./packages/app/node_modules/.bin/electron --version
-```
-
-A working install prints the version. A truncated one raises
-`Electron failed to install correctly`. The root `postinstall` hook runs
-`bin/repair-electron` after every `pnpm install`. If the binaries are incomplete,
-it keeps pnpm and native module builds on Node 24 but reruns only the official
-Electron download script under Node 22 through mise. Run `bin/repair-electron`
-to repair an existing checkout.
-
 ## Processes
 
 | Process | Command | Waits for |

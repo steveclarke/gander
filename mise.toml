@@ -1,5 +1,3 @@
 [tools]
-# Keep the app and native module builds on Node 24. bin/setup uses Node 22 only
-# for Electron's archive download scripts when their Node 24 extraction fails.
 node = "24"
 pnpm = "11"
