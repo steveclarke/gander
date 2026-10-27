@@ -6,8 +6,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "==> Installing dependencies"
-# The root postinstall hook runs bin/repair-electron, so the Electron download
-# repair happens here too.
 pnpm install
 
 echo "==> Allocating ports"

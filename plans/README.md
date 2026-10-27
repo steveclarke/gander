@@ -22,7 +22,7 @@ re-audited.
 |------|-------|----------|--------|------------|--------|
 | 001 | Batch the per-file blob reads through one `git cat-file --batch` | P2 | M | — | TODO |
 | 002 | Make the main-process IPC handlers testable, and test them | P2 | M | — | TODO |
-| 003 | Upgrade Electron 33 → 43 and delete the repair workaround | P3 | L | 002 | TODO |
+| 003 | Upgrade Electron 33 → 43 and delete the repair workaround | P3 | L | 002 | DONE (landed as Electron 45) |
 
 Unplanned but recorded, in rough leverage order:
 

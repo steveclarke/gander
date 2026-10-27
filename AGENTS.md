@@ -98,15 +98,6 @@ labeled QA data across the states needed to exercise the feature, then leave the
 relevant surface open in Gander. Never seed or alter the hosted review database
 for QA.
 
-**Electron install trap:** Electron 33's extract-zip silently truncates under
-Node 24, leaving a `node_modules/electron/dist` of a few hundred KB while the
-install script exits 0. Electron then fails to launch. The root `postinstall` hook runs
-`bin/repair-electron`, which detects this and re-runs only the Electron download
-scripts under Node 22 via mise, so every `pnpm install` repairs itself. If the
-binaries are broken anyway, run `bin/repair-electron` rather than debugging
-them. Both the script and the hook come out when Electron is upgraded past the
-broken extract-zip.
-
 ## Architecture
 
 Three packages in a pnpm workspace, ESM-only, TypeScript strict with
