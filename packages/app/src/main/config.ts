@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
@@ -114,8 +114,12 @@ export function saveConfig(cfg: GanderConfig, path = defaultPath()): void {
   // explicitly, not just passed to mkdir/writeFile, since neither call changes the mode of a
   // directory/file that already existed with looser permissions from before this fix.
   chmodSync(dir, 0o700);
-  writeFileSync(path, JSON.stringify(cfg, null, 2), { mode: 0o600 });
-  chmodSync(path, 0o600);
+  // Written beside the real file and renamed over it, so a reader or a crash mid-save never
+  // sees an empty or half-written config.
+  const tmp = `${path}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, path);
 }
 
 /**
