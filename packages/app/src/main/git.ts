@@ -265,6 +265,10 @@ export function createGitEngine(clonesRoot: string): GitEngine {
   // the first finishes. Without this, both would clone into the same destination and destroy
   // each other's partial work. Concurrent callers for the same repo share one clone.
   const inFlightClones = new Map<string, Promise<string>>();
+  // Opening a PR and refreshing the PR list both fetch into the same clone, and both update
+  // the same base ref. Run concurrently, the slower fetch finds the ref moved under it and
+  // fails with "cannot lock ref". Fetches into one clone run one after another.
+  const fetchQueues = new Map<string, Promise<void>>();
   let tmpCounter = 0;
 
   async function clone(dir: string, url: string): Promise<string> {
@@ -284,13 +288,21 @@ export function createGitEngine(clonesRoot: string): GitEngine {
     return dir;
   }
 
-  async function fetchPrs(cloneDir: string, prs: Array<{ number: number; baseRef: string }>): Promise<void> {
+  function fetchPrs(cloneDir: string, prs: Array<{ number: number; baseRef: string }>): Promise<void> {
     const bases = [...new Set(prs.map((pr) => pr.baseRef))];
-    await git(cloneDir, [
-      "fetch", "--force", "origin",
-      ...prs.map((pr) => `+refs/pull/${pr.number}/head:refs/gander/pr/${pr.number}`),
-      ...bases.map((baseRef) => `+refs/heads/${baseRef}:refs/gander/base/${baseRef}`),
-    ], FETCH_TIMEOUT_MS);
+    const run = async () => {
+      await git(cloneDir, [
+        "fetch", "--force", "origin",
+        ...prs.map((pr) => `+refs/pull/${pr.number}/head:refs/gander/pr/${pr.number}`),
+        ...bases.map((baseRef) => `+refs/heads/${baseRef}:refs/gander/base/${baseRef}`),
+      ], FETCH_TIMEOUT_MS);
+    };
+    const previous = fetchQueues.get(cloneDir) ?? Promise.resolve();
+    const fetched = previous.then(run, run);
+    const settled = fetched.catch(() => {});
+    fetchQueues.set(cloneDir, settled);
+    void settled.then(() => { if (fetchQueues.get(cloneDir) === settled) fetchQueues.delete(cloneDir); });
+    return fetched;
   }
 
   return {
