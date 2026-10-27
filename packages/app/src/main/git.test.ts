@@ -50,6 +50,20 @@ describe("git engine", () => {
     expect(files.map((f) => f.path)).toContain("c.rb");
   });
 
+  it("concurrent fetches into one clone do not race on the base ref", async () => {
+    // Opening a PR while the PR list refreshes ran two fetches at once; the slower one failed
+    // with "cannot lock ref" because the other had already moved refs/gander/base/main.
+    const clone = await engine.ensureClone("acme/atlas", fixture.dir);
+    await engine.fetchPr(clone, 1, "main");
+    writeFileSync(join(fixture.dir, "d.rb"), "class D\nend\n");
+    await fixture.git(["add", "-A"]); await fixture.git(["commit", "-m", "advance main"]);
+    const tip = await fixture.git(["rev-parse", "HEAD"]);
+
+    await Promise.all(Array.from({ length: 8 }, (_, i) =>
+      i % 2 ? engine.fetchPrs(clone, [{ number: 1, baseRef: "main" }]) : engine.fetchPr(clone, 1, "main")));
+    expect(await engine.resolveRef(clone, "refs/gander/base/main")).toBe(tip.trim());
+  });
+
   it("concurrent ensureClone calls for the same repo share one clone", async () => {
     // Overlapping openPr calls (a second click while the first clone is still running) used
     // to clone into the same destination and delete each other's in-progress pack files.
