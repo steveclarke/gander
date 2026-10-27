@@ -46,12 +46,12 @@ Unplanned but recorded, in rough leverage order:
 - **`store.ts` is a god module** (518 lines, four hand-rolled concurrency counters).
   The ~200-line local/Explorer half is separable. Maintainability only — coverage there
   is genuinely good, so this is not urgent.
-- **Two TypeScript majors in one workspace.** Root is `^7.0.2`; `packages/app` pins
-  `5.9.3` and typechecks with `vue-tsc`, so the largest package never sees TS 7.
-  `@types/node` is `^22` in the app and `^26` in the service while `mise.toml` pins Node
-  24. Align `@types/node` first — that half is safe and independent. Whether the TS pin
-  is a `vue-tsc` constraint or drift needs checking before touching it; if it is a
-  constraint, leave a comment at the pin saying so.
+- **Two TypeScript majors in one workspace.** Root and service are on TypeScript 7;
+  `packages/app` stays on `5.9.3` because it typechecks with `vue-tsc`, whose latest
+  release (3.3.13) loads `typescript/lib/tsc`, a path TypeScript 7 no longer exports
+  (`ERR_PACKAGE_PATH_NOT_EXPORTED`). Move the app pin when a `vue-tsc` release supports
+  TypeScript 7. `@types/node` is `^24` in the app, matching the Node 24 that Electron 45
+  ships, and `^26` in the service.
 - **No smoke test on the packaged build** (issue #91). Nothing exercises preload
   wiring, IPC channel registration, or packaged boot. Plan 003 is materially riskier
   without one.

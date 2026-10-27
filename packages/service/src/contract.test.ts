@@ -18,6 +18,30 @@ change answers exactly the version the app expects, the connection check passes,
 the mismatch turns up later as a 404 in the middle of a review.
 `;
 
+function contractWith(schema: unknown): Contract {
+  return { version: "0", routes: [], schemas: { schema }, mcpTools: [] };
+}
+
+describe("comparing contract surfaces", () => {
+  it("treats the two JSON Schema spellings of a nullable type as the same", () => {
+    const anyOf = contractWith({ anyOf: [{ type: "string" }, { type: "null" }] });
+    const list = contractWith({ type: ["null", "string"] });
+    expect(surfaceOf(anyOf)).toEqual(surfaceOf(list));
+  });
+
+  it("still tells a changed type apart", () => {
+    const text = contractWith({ type: ["string", "null"] });
+    const number = contractWith({ anyOf: [{ type: "number" }, { type: "null" }] });
+    expect(surfaceOf(text)).not.toEqual(surfaceOf(number));
+  });
+
+  it("leaves a union of structured branches alone", () => {
+    const union = contractWith({ anyOf: [{ type: "string", minLength: 1 }, { type: "null" }] });
+    expect(surfaceOf(union)).toEqual(surfaceOf(union));
+    expect(surfaceOf(union).schemas.schema).toHaveProperty("anyOf");
+  });
+});
+
 describe("the app-to-service contract", () => {
   it("matches the recorded snapshot", async () => {
     const current = await describeContract();

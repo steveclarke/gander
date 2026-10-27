@@ -81,8 +81,37 @@ export async function describeContract(): Promise<Contract> {
   }
 }
 
+/**
+ * JSON Schema has two spellings for "a string or null": `anyOf: [{type: "string"}, {type: "null"}]`
+ * and `type: ["string", "null"]`. They accept the same values; Zod switched from the first to
+ * the second between releases. Comparing the surface folds the first into the second, so a
+ * library upgrade that only changes the spelling is not mistaken for a contract change.
+ */
+function foldNullableTypes(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(foldNullableTypes);
+  if (node === null || typeof node !== "object") return node;
+
+  const folded: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) folded[key] = foldNullableTypes(value);
+
+  // The order of a type list carries no meaning, and Zod has emitted it both ways.
+  if (Array.isArray(folded.type)) folded.type = [...folded.type].sort();
+
+  const { anyOf, ...rest } = folded;
+  if (!Array.isArray(anyOf)) return folded;
+  const types: string[] = [];
+  for (const branch of anyOf) {
+    const keys = branch !== null && typeof branch === "object" ? Object.keys(branch) : [];
+    const type = (branch as { type?: unknown }).type;
+    if (keys.length !== 1 || typeof type !== "string") return folded;
+    types.push(type);
+  }
+  if ("type" in rest) return folded;
+  return { ...rest, type: types.sort() };
+}
+
 /** The surface without the version, which is what has to be identical between two releases. */
 export function surfaceOf(contract: Contract): Omit<Contract, "version"> {
   const { version: _version, ...surface } = contract;
-  return surface;
+  return foldNullableTypes(surface) as Omit<Contract, "version">;
 }

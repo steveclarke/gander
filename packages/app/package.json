@@ -17,22 +17,22 @@
     "@gander/shared": "workspace:*",
     "@lucide/vue": "^1.61.0",
     "electron-updater": "^6.8.11",
-    "monaco-editor": "^0.52.2",
+    "monaco-editor": "^0.57.0",
     "vue": "^3.5.44",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@gander/service": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "@playwright/test": "1.62.1",
-    "@types/node": "^22.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@playwright/test": "1.64.1",
+    "@types/node": "^24.19.2",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/test-utils": "^2.5.1",
     "electron": "^45.0.0",
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "fastify": "^5.12.7",
-    "tsx": "4.22.4",
+    "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vite": "^8.3.5",
     "vue-tsc": "^3.3.13"
