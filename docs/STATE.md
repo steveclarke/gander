@@ -112,6 +112,16 @@ snapshots, changed-since state, or notes. One bounded poller follows the selecte
 worktree's files, index, HEAD, and refs and refreshes both the diff and Explorer
 when derived content changes.
 
+## Windows
+
+One review per window; macOS groups them as native tabs (`tabbingIdentifier`). The main
+process keeps each window's review (`windowStates` in `src/main/index.ts`) and routes
+outside opens with `routeOpen` (`src/main/window-routing.ts`): the window showing that
+pull request, then an empty one, then a new tab, marked until seen when the reviewer is
+already in Gander. The list of review windows is saved as `windows` in the config and
+restored at launch. A second copy of the app no longer takes the open socket from a
+running one. Background tabs skip the 30-second poll.
+
 ## Still open
 
 Packaged macOS and Linux releases are published on GitHub. Packaged builds check

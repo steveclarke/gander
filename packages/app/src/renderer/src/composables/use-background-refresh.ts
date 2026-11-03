@@ -15,13 +15,15 @@ export function useBackgroundRefresh(store: Store, hasLoadedView: () => boolean)
   let refreshing = false;
 
   async function refreshOnce(): Promise<void> {
-    if (refreshing || !hasLoadedView()) return;
+    // A tab behind another one is not being read; it refreshes when it comes forward.
+    if (refreshing || !hasLoadedView() || document.visibilityState === "hidden") return;
     refreshing = true;
     try { await store.refresh(); } finally { refreshing = false; }
   }
 
   const poll = setInterval(() => void refreshOnce(), POLL_MS);
-  const health = setInterval(() => void store.checkService(), HEALTH_MS);
+  // Coming forward runs both through onFocus, so a hidden tab skips them.
+  const health = setInterval(() => { if (document.visibilityState !== "hidden") void store.checkService(); }, HEALTH_MS);
 
   function onFocus(): void {
     void store.checkService();

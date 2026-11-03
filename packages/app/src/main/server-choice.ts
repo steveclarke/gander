@@ -24,10 +24,12 @@ export interface ServerChoiceRequest {
 export type ServerChooser = (request: Omit<ServerChoiceRequest, "requestId">) => Promise<string | null>;
 
 export function createServerChooser(ipc: Pick<IpcMain, "handle">, window: () => BrowserWindow | null): ServerChooser {
-  const pending = new Map<string, (serverId: string | null) => void>();
-  ipc.handle("gander:answerServerChoice", async (_event, requestId: string, serverId: string | null) => {
-    const resolve = pending.get(requestId);
-    if (!resolve) return;
+  const pending = new Map<string, { asked: number; resolve: (serverId: string | null) => void }>();
+  ipc.handle("gander:answerServerChoice", async (event, requestId: string, serverId: string | null) => {
+    const entry = pending.get(requestId);
+    // Only the window that was asked can answer.
+    if (!entry || entry.asked !== event.sender.id) return;
+    const { resolve } = entry;
     pending.delete(requestId);
     resolve(typeof serverId === "string" ? serverId : null);
   });
@@ -43,7 +45,7 @@ export function createServerChooser(ipc: Pick<IpcMain, "handle">, window: () => 
         resolve(serverId);
       };
       const cancel = (): void => { if (pending.delete(requestId)) resolve(null); };
-      pending.set(requestId, finish);
+      pending.set(requestId, { asked: target.webContents.id, resolve: finish });
       target.once("closed", cancel);
       target.webContents.send("gander:chooseServer", { ...question, requestId } satisfies ServerChoiceRequest);
     });

@@ -17,7 +17,7 @@ defineProps<{
   typography: EffectiveTreeTypography;
   jumpTargets: ReadonlyMap<string, JumpTarget>;
 }>();
-defineEmits<{ selectPr: [prNumber: number] }>();
+defineEmits<{ selectPr: [prNumber: number, inNewWindow: boolean] }>();
 
 // The scrollbar is invisible until the tree is in use, so that a still sidebar is just
 // filenames. Scrolling counts as use for a moment after it stops.
@@ -49,7 +49,7 @@ onBeforeUnmount(() => { clearTimeout(settle); });
       :icon-theme="iconTheme"
       :typography="typography"
       :jump-targets="jumpTargets"
-      @select-pr="$emit('selectPr', $event)"
+      @select-pr="(prNumber, inNewWindow) => $emit('selectPr', prNumber, inNewWindow)"
       @scroll="onScroll"
     />
   </div>

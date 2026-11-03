@@ -1,5 +1,5 @@
 import { connect } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -81,9 +81,15 @@ describe("open server", () => {
   });
 
   it("takes over a socket file a crashed run left behind", async () => {
-    const second = await startOpenServer({ socketPath, onTarget: (t) => { delivered.push(t); } });
+    const stale = join(dir, "stale.sock");
+    writeFileSync(stale, "");
+    const second = await startOpenServer({ socketPath: stale, onTarget: () => {} });
+    second();
+  });
+
+  it("refuses to take the socket from a copy that is still running", async () => {
+    await expect(startOpenServer({ socketPath, onTarget: () => {} })).rejects.toThrow(/already listening/);
     await send(["--repo", "acme/atlas"]);
     expect(delivered).toHaveLength(1);
-    second();
   });
 });

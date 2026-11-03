@@ -60,6 +60,18 @@ planned replacement and current security boundaries.
 See `DEVSTACK.md` for the dev stack, and `docs/STATE.md` for where the project
 stands.
 
+## Several reviews at once
+
+Each window holds one review. On macOS the windows are tabs of one another: **File → New
+Tab** (⌘T) or **New Window** (⇧⌘N), **Window → Merge All Windows**, and dragging a tab out
+puts two reviews side by side. ⌘-click (Ctrl-click elsewhere) a pull request in the list
+to open it in a tab of its own.
+
+`bin/gander` and agents route the way VS Code routes `code <path>`: to the window already
+showing that pull request, then to an empty window, then to a new tab. A new tab opened
+while you are in Gander waits behind yours, marked ● until you look at it; it never
+replaces a review in progress. Every review window comes back at the next launch.
+
 ## Review servers
 
 1. Settings → Connection → Add server accepts a name, service URL and token. Save server checks the connection before keeping it.

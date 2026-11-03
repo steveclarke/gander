@@ -47,6 +47,14 @@ export class GanderApplication {
     ));
   }
 
+  /** Every window's title, in creation order: one review per window. */
+  async windowTitles(): Promise<string[]> {
+    if (!this.electronApp) throw new Error("Gander has not been launched");
+    return this.electronApp.evaluate(({ BrowserWindow }) => (
+      BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id).map((window) => window.getTitle())
+    ));
+  }
+
   async restart(): Promise<void> {
     await this.shutdown(false);
     await this.launch();

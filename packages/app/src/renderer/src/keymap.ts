@@ -80,8 +80,13 @@ export function bindingLabel(command: Command, isMac = /Mac/.test(globalThis.nav
  * only while that prefix is pending, and a plain binding only while none is — so `g` can
  * begin `gg` without `G` or any other key having to know about it.
  */
+/** ⌘ on macOS, Ctrl elsewhere: either counts. */
+export function primaryModifierHeld(event: { metaKey: boolean; ctrlKey: boolean }): boolean {
+  return event.metaKey || event.ctrlKey;
+}
+
 export function bindingFor(event: KeyboardEvent, pending: Prefix | null = null): Binding | null {
-  const held = event.metaKey || event.ctrlKey;
+  const held = primaryModifierHeld(event);
   return BINDINGS.find((binding) => {
     if ((binding.meta === true) !== held) return false;
     if (event.altKey) return false;

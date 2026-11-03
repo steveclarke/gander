@@ -23,6 +23,7 @@ import { createZoomController, type ZoomController } from "./zoom-controller.js"
 import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
 import { loadUpdateController, supportsInPlaceUpdates, type UpdateController } from "./updates.js";
 import { assertRepositoryRegistered, registerFromCheckout, repositoryFromLocalPath } from "./repository-registration.js";
+import { reviewOf, routeOpen, sameReview, windowsToRestore, type WindowReview } from "./window-routing.js";
 
 // In a packaged build the name comes from productName, but in dev Electron falls back to
 // the package name and the macOS app menu reads "@gander/app". Set it before ready so the
@@ -37,6 +38,42 @@ const debugPort = process.env.GANDER_DEBUG_PORT;
 if (debugPort && !app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", debugPort);
 
 let zoomController: ZoomController;
+
+// One review per window. Keyed by the window's webContents id, which is what every IPC
+// handler already has as event.sender.id.
+interface WindowState {
+  win: BrowserWindow;
+  /** What the window opens with: a target named on the command line, routed here, or restored. */
+  initial: OpenTarget | null;
+  review: WindowReview | null;
+  /** On its way in: counts for routing, so nothing lands on top of it, but is not saved. */
+  pending: WindowReview | null;
+  title: string;
+  /** Opened behind the reviewer's back; the tab is marked until they look at it. */
+  unseen: boolean;
+}
+const windowStates = new Map<number, WindowState>();
+let quitting = false;
+
+function showTitle(state: WindowState): void {
+  if (!state.win.isDestroyed()) state.win.setTitle(`${state.unseen ? "● " : ""}${state.title}`);
+}
+
+/** What a window is showing or about to show, for routing. */
+const shown = (state: WindowState): WindowReview | null => state.review ?? state.pending;
+
+function findShowing(repoId: string, prNumber: number): WindowState | undefined {
+  return [...windowStates.values()].find((state) => sameReview(shown(state), repoId, prNumber));
+}
+
+/** Saved in creation order, which is tab order for windows Gander tabs itself. */
+function saveWindows(cfg: GanderConfig): void {
+  const windows = [...windowStates.values()].flatMap((state) => state.review ? [state.review] : []);
+  // Restoring several tabs opens each one; only a list that changed is written.
+  if (JSON.stringify(windows) === JSON.stringify(cfg.windows ?? [])) return;
+  cfg.windows = windows;
+  saveConfig(cfg);
+}
 const localWatchers = new Map<number, LocalViewWatcher>();
 const localViews = new Map<number, LocalView>();
 const localOpenGenerations = new Map<number, number>();
@@ -198,6 +235,14 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     closeLocalView(senderId);
     localWatchers.set(senderId, watcher);
     localViews.set(senderId, view);
+    const state = windowStates.get(senderId);
+    if (state) {
+      state.review = null;
+      state.pending = null;
+      state.title = view.worktree.branch ?? "Gander";
+      showTitle(state);
+      saveWindows(cfg);
+    }
     event.sender.once("destroyed", () => closeLocalView(senderId));
     return view;
   });
@@ -239,19 +284,46 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   ipcMain.handle("gander:retryGithubViewedSync", async () => githubViewedQueue.retryFailed());
   ipcMain.handle("gander:dismissGithubViewedSync", async () => githubViewedQueue.dismissFailed());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
-  ipcMain.handle("gander:initialTarget", async () => launchTarget);
+  ipcMain.handle("gander:initialTarget", async (event) => windowStates.get(event.sender.id)?.initial ?? null);
+  ipcMain.handle("gander:focusOpenReview", async (event, repoId: string, n: number) => {
+    const showing = findShowing(repoId, n);
+    if (!showing || showing.win.webContents.id === event.sender.id) return false;
+    revealWindow(showing.win);
+    return true;
+  });
+  ipcMain.handle("gander:openInNewWindow", async (event, repoId: string, n: number) => {
+    const showing = findShowing(repoId, n);
+    if (showing) { revealWindow(showing.win); return; }
+    const from = BrowserWindow.fromWebContents(event.sender);
+    await createWindow(cfg, { target: { repoId, prNumber: n }, tabWith: from });
+  });
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
     const senderId = event.sender.id;
     const generation = nextLocalOpenGeneration(senderId);
-    const view = await viewOnServer(repoId, (reviewer) => reviewer.openPr(repoId, n));
+    let view: PrView;
+    try {
+      view = await viewOnServer(repoId, (reviewer) => reviewer.openPr(repoId, n));
+    } catch (err) {
+      // A window whose review failed to open is empty again, for the next open to use.
+      const state = windowStates.get(senderId);
+      if (state && sameReview(state.pending, repoId, n)) state.pending = null;
+      throw err;
+    }
     if (localOpenGenerations.get(senderId) !== generation) return view;
     // Preserve the live local view when opening the PR fails. The renderer keeps showing
     // that context, so its watcher and validated file-reading state must remain usable too.
     closeLocalView(senderId);
+    const state = windowStates.get(senderId);
+    if (state) {
+      state.review = { repoId, prNumber: n };
+      state.pending = null;
+      state.title = `#${n} ${view.pr.title}`;
+      showTitle(state);
+    }
     // Recorded only once the open succeeded, so a pull request that fails to open
     // is not the one the app tries again on every launch.
     cfg.lastReview = { repoId, prNumber: n };
-    saveConfig(cfg);
+    saveWindows(cfg);
     return view;
   });
   ipcMain.handle("gander:refreshPr", async (_e, repoId: string, n: number, sessionId?: string) => viewOnServer(repoId, (reviewer) => reviewer.refreshPr(repoId, n), sessionId));
@@ -301,13 +373,15 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   return { cfg, git, githubViewedQueue, repositoryServers };
 }
 
-function installMenu(updates: UpdateController | null): void {
+function installMenu(cfg: GanderConfig, updates: UpdateController | null): void {
   const openSettings = (): void => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     win?.webContents.send("gander:openSettings");
   };
   const template = buildMenuTemplate(process.platform, app.name, {
     openSettings,
+    newWindow: () => newWindow(cfg, false),
+    newTab: () => newWindow(cfg, true),
     setZoom: zoomController.set,
     currentZoom: zoomController.current,
     checkForUpdates: updates?.checkManually,
@@ -352,7 +426,15 @@ async function initializeUpdates(): Promise<UpdateController | null> {
   }
 }
 
-async function createWindow(cfg: GanderConfig): Promise<void> {
+interface WindowOptions {
+  target?: OpenTarget | null;
+  /** On macOS, open as a tab beside this window. */
+  tabWith?: BrowserWindow | null;
+  /** Leave the reviewer on the tab they are reading; the new tab is marked instead. */
+  background?: boolean;
+}
+
+async function createWindow(cfg: GanderConfig, options: WindowOptions = {}): Promise<BrowserWindow> {
   // electron-vite sets this only while its live renderer server is running. Packaged,
   // unsigned, and E2E builds load the built renderer and retain the release identity.
   const isDevelopment = process.env.ELECTRON_RENDERER_URL !== undefined;
@@ -367,8 +449,17 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
   // Lives outside the bundle so it survives electron-vite's build untouched. The path is
   // relative to out/main/, which is where this file runs from in dev and after a build alike.
   const appIcon = nativeImage.createFromPath(join(import.meta.dirname, "../../resources", appearance.iconFilename));
+  const tabWith = process.platform === "darwin" && options.tabWith && !options.tabWith.isDestroyed() ? options.tabWith : null;
+  // A separate window steps down and right from the one in front, so it does not land
+  // exactly on top of it and look like nothing happened.
+  const frontBounds = tabWith ? null : BrowserWindow.getFocusedWindow()?.getBounds();
+  const cascade = frontBounds ? { x: frontBounds.x + 28, y: frontBounds.y + 28 } : {};
   const win = new BrowserWindow({
     width: 1360, height: 860,
+    ...cascade,
+    // macOS groups windows with the same identifier into tabs: Window → Merge All Windows,
+    // and dragging a tab out gives two reviews side by side.
+    ...(process.platform === "darwin" ? { tabbingIdentifier: "gander" } : {}),
     ...appearance.windowOptions,
     ...(hidden ? { show: false, skipTaskbar: true } : {}),
     // Ignored on macOS, where the dock icon comes from the bundle — app.dock.setIcon covers that.
@@ -383,9 +474,41 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
       additionalArguments: appearance.preloadArguments,
     },
   });
+  const id = win.webContents.id;
+  const target = options.target ?? null;
+  const state: WindowState = {
+    win,
+    initial: target,
+    // Claimed before the renderer has opened it, so an open routed meanwhile does not
+    // count this window as empty and land on top of it.
+    review: null,
+    pending: reviewOf(target),
+    title: target?.prNumber ? `#${target.prNumber}` : "Gander",
+    unseen: options.background === true,
+  };
+  windowStates.set(id, state);
+  showTitle(state);
+  // The renderer's <title> would otherwise overwrite the pull request the tab is named for.
+  win.on("page-title-updated", (event) => event.preventDefault());
+  win.on("focus", () => {
+    if (!state.unseen) return;
+    state.unseen = false;
+    showTitle(state);
+  });
+  win.on("closed", () => {
+    windowStates.delete(id);
+    closeLocalView(id);
+    // Quitting, or closing the last window (which quits), keeps the list for next launch.
+    if (!quitting && windowStates.size > 0) saveWindows(cfg);
+  });
   // On macOS the web content paints beneath the traffic lights. Reveal only the themed
   // first frame so the system never exposes its default light backing surface.
-  if (process.platform === "darwin" && !hidden) win.once("ready-to-show", () => win.show());
+  if (process.platform === "darwin" && !hidden) win.once("ready-to-show", () => {
+    const beside = tabWith && !tabWith.isDestroyed() ? tabWith : null;
+    beside?.addTabbedWindow(win);
+    if (beside && options.background) beside.focus();
+    else win.show();
+  });
   if (hidden) app.dock?.hide();
   // Unpackaged runs show Electron's own icon in the dock; this is the only way to override it.
   if (!hidden && !appIcon.isEmpty()) app.dock?.setIcon(appIcon);
@@ -407,6 +530,13 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
 
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
   else win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
+  return win;
+}
+
+/** A new, empty review window: beside the front one as a tab, or on its own. */
+function newWindow(cfg: GanderConfig, asTab: boolean): void {
+  const front = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+  void createWindow(cfg, { tabWith: asTab ? front : null });
 }
 
 function socketPath(): string {
@@ -416,11 +546,26 @@ function socketPath(): string {
   return process.env.GANDER_APP_SOCKET ?? join(app.getPath("userData"), "app.sock");
 }
 
-function deliver(target: OpenTarget): void {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win === undefined) return;
-  revealWindow(win);
-  win.webContents.send("gander:openTarget", target);
+function deliver(cfg: GanderConfig, target: OpenTarget): void {
+  const focused = BrowserWindow.getFocusedWindow();
+  const windows = [...windowStates.entries()].map(([id, state]) => ({ id, review: shown(state), local: localViews.has(id) }));
+  const route = routeOpen(windows, target, focused?.webContents.id ?? null);
+  if (route.kind === "new") {
+    const front = focused ?? BrowserWindow.getAllWindows()[0] ?? null;
+    // When the reviewer is in Gander, the new review waits behind theirs as a marked tab.
+    // When they are elsewhere, it is what they asked to see, so it comes to the front.
+    void createWindow(cfg, { target, tabWith: front, background: focused !== null }).then((win) => {
+      if (focused === null) revealWindow(win);
+    });
+    return;
+  }
+  const state = windowStates.get(route.id);
+  if (!state) return;
+  revealWindow(state.win);
+  if (route.kind === "reuse") {
+    state.pending = reviewOf(target) ?? state.pending;
+    state.win.webContents.send("gander:openTarget", target);
+  }
 }
 
 // What this launch was asked to open. Parsed before anything starts, so a failure is a
@@ -446,9 +591,24 @@ app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  await createWindow(cfg);
+  // Every review window comes back, as tabs of the first, the way VS Code and Zed restore a
+  // session. A target named on the command line is then routed like any other open.
+  const restore = windowsToRestore(cfg.windows, cfg.lastReview).filter((review) => cfg.repos.some((repo) => repo.repoId === review.repoId));
+  if (restore.length === 0) {
+    await createWindow(cfg, { target: launchTarget });
+  } else {
+    const first = await createWindow(cfg, { target: restore[0] });
+    for (const review of restore.slice(1)) await createWindow(cfg, { target: review, tabWith: first, background: true });
+    if (launchTarget !== null) deliver(cfg, launchTarget);
+  }
+  app.on("before-quit", () => {
+    quitting = true;
+    saveWindows(cfg);
+  });
+  // The + at the end of the macOS tab bar.
+  app.on("new-window-for-tab", () => newWindow(cfg, true));
   const updates = await initializeUpdates();
-  installMenu(updates);
+  installMenu(cfg, updates);
   updates?.checkAtStartup();
   app.on("will-quit", () => githubViewedQueue.stop());
 
@@ -463,7 +623,7 @@ app.whenReady().then(async () => {
           Object.assign(entry, await repositoryServers.assign(entry.repoId, entry.url));
         });
         if (added !== null) saveConfig(cfg);
-        deliver(target);
+        deliver(cfg, target);
       },
     });
     app.on("will-quit", stop);

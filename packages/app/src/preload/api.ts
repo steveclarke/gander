@@ -70,6 +70,8 @@ export function createGanderApi(
     listPrs: (repoId) => call("listPrs", repoId),
     lastReview: () => call("lastReview"),
     initialTarget: () => call("initialTarget"),
+    focusOpenReview: (repoId, prNumber) => call("focusOpenReview", repoId, prNumber),
+    openInNewWindow: (repoId, prNumber) => call("openInNewWindow", repoId, prNumber),
     onOpenTarget: (listener) => subscribe("gander:openTarget", (target: OpenTarget) => listener(target)),
     serviceStatus: (repoId) => call("serviceStatus", repoId),
     openPr: (repoId, prNumber) => call("openPr", repoId, prNumber),
