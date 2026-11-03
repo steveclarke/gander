@@ -50,6 +50,21 @@ describe("git engine", () => {
     expect(files.map((f) => f.path)).toContain("c.rb");
   });
 
+  it("skips the network when the clone already holds the SHAs GitHub reports", async () => {
+    const clone = await engine.ensureClone("acme/atlas", fixture.dir);
+    await engine.fetchPr(clone, 1, "main");
+    const headSha = await engine.resolveRef(clone, "refs/gander/pr/1");
+    const baseSha = await engine.resolveRef(clone, "refs/gander/base/main");
+    // With origin gone, any fetch that reaches the network fails.
+    const { execFileSync } = await import("node:child_process");
+    execFileSync("git", ["-C", clone, "remote", "set-url", "origin", join(clonesRoot, "missing")]);
+
+    await engine.fetchPr(clone, 1, "main", { headSha, baseSha });
+    await engine.fetchPrs(clone, [{ number: 1, baseRef: "main", headSha, baseSha }]);
+    await expect(engine.fetchPr(clone, 1, "main", { headSha: "0".repeat(40), baseSha })).rejects.toThrow();
+    await expect(engine.fetchPr(clone, 1, "main")).rejects.toThrow();
+  });
+
   it("concurrent fetches into one clone do not race on the base ref", async () => {
     // Opening a PR while the PR list refreshes ran two fetches at once; the slower one failed
     // with "cannot lock ref" because the other had already moved refs/gander/base/main.
