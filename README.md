@@ -62,15 +62,16 @@ stands.
 
 ## Several reviews at once
 
-Each window holds one review. On macOS the windows are tabs of one another: **File → New
-Tab** (⌘T) or **New Window** (⇧⌘N), **Window → Merge All Windows**, and dragging a tab out
-puts two reviews side by side. ⌘-click (Ctrl-click elsewhere) a pull request in the list
-to open it in a tab of its own.
+Each window holds one review, in separate windows the way VS Code opens them. **File → New
+Window** (⇧⌘N, or the Dock menu) opens an empty one; ⌘-click (Ctrl-click elsewhere) a pull
+request in the list to open it in a window of its own. The **Window** menu lists every
+open review by name, and ⌘` steps through them.
 
 `bin/gander` and agents route the way VS Code routes `code <path>`: to the window already
-showing that pull request, then to an empty window, then to a new tab. A new tab opened
-while you are in Gander waits behind yours, marked ● until you look at it; it never
-replaces a review in progress. Every review window comes back at the next launch.
+showing that pull request, then to an empty window, then to a new window, which comes to
+the front. An outside open never replaces a review in progress. Every review window comes
+back at the next launch where it was, the last one used in front. On macOS, closing the
+last window leaves Gander running; clicking the Dock icon opens a window again.
 
 ## Review servers
 

@@ -7,7 +7,7 @@ to this file, so Claude Code, Codex, and Gemini CLI all read the same text.
 
 A desktop app for reviewing code in the agentic era: agents write the code, the
 human reviews it. Every repo and pull request from one app, one review per window
-(tabs on macOS), a Monaco diff,
+(separate windows, as VS Code opens them), a Monaco diff,
 hierarchical file checkoff, and a note pipeline that carries the reviewer's
 remarks to coding agents over MCP.
 

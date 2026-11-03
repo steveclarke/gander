@@ -114,13 +114,17 @@ when derived content changes.
 
 ## Windows
 
-One review per window; macOS groups them as native tabs (`tabbingIdentifier`). The main
+One review per window, in plain separate windows on VS Code's model: no macOS native tabs
+(VS Code sets `tabbingIdentifier` only with `window.nativeTabs`, off by default). The main
 process keeps each window's review (`windowStates` in `src/main/index.ts`) and routes
 outside opens with `routeOpen` (`src/main/window-routing.ts`): the window showing that
-pull request, then an empty one, then a new tab, marked until seen when the reviewer is
-already in Gander. The list of review windows is saved as `windows` in the config and
-restored at launch. A second copy of the app no longer takes the open socket from a
-running one. Background tabs skip the 30-second poll.
+pull request, then an empty one, then a new window that takes focus. New windows are
+centred and stepped 30px while another window shares their x or y (VS Code's
+`ensureNoOverlap`). Each review window and its bounds are saved as `windows` in the
+config, last active last, and restored at launch; a window whose review failed to open
+stays in the list. On macOS the app keeps running with no windows, and the Dock offers
+New Window. A second copy of the app no longer takes the open socket from a running one.
+Hidden windows skip the 30-second poll.
 
 ## Still open
 

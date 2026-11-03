@@ -4,7 +4,6 @@ import { DEFAULT_ZOOM_LEVEL, ZOOM_LEVEL_STEP } from "../zoom.js";
 interface MenuActions {
   openSettings(): void;
   newWindow(): void;
-  newTab(): void;
   setZoom(level: number): void;
   currentZoom(): number;
   checkForUpdates?: () => void;
@@ -25,10 +24,8 @@ export function buildMenuTemplate(
   const newWindowItem: MenuItemConstructorOptions = {
     label: "New Window", accelerator: "CommandOrControl+Shift+N", click: actions.newWindow,
   };
-  // Tabs are the macOS window tabs; elsewhere a new window is the whole story.
-  const newItems: MenuItemConstructorOptions[] = platform === "darwin"
-    ? [{ label: "New Tab", accelerator: "Command+T", click: actions.newTab }, newWindowItem]
-    : [newWindowItem];
+  // One review per window, as VS Code's File → New Window (windowActions.ts, newWindow).
+  const newItems: MenuItemConstructorOptions[] = [newWindowItem];
 
   const applicationMenu: MenuItemConstructorOptions = platform === "darwin"
     ? {

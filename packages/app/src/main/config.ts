@@ -26,11 +26,13 @@ export const ServerSchema = z.object({
 }).strict();
 export type ReviewServer = z.infer<typeof ServerSchema>;
 const ReviewRefSchema = z.object({ repoId: RepoIdSchema, prNumber: z.number().int().positive() }).strict();
+const WindowBoundsSchema = z.object({ x: z.number().int(), y: z.number().int(), width: z.number().int().positive(), height: z.number().int().positive() }).strict();
+const SavedWindowSchema = ReviewRefSchema.extend({ bounds: WindowBoundsSchema.optional() }).strict();
 const common = {
   githubToken: z.string().min(1).optional(),
   lastReview: ReviewRefSchema.optional(),
-  /** The pull request in each review window, in tab order, brought back at launch. */
-  windows: z.array(ReviewRefSchema).optional(),
+  /** Each review window and where it sat, last active last, brought back at launch. */
+  windows: z.array(SavedWindowSchema).optional(),
   settings: AppSettingsSchema,
 };
 export const ConfigSchema = z.object({
@@ -62,6 +64,8 @@ const OwnerDefaultsSchema = z.object({
 export type GanderConfig = z.infer<typeof ConfigSchema>;
 /** One pull request: what a window shows, and what the app reopens at launch. */
 export type ReviewRef = z.infer<typeof ReviewRefSchema>;
+export type WindowBounds = z.infer<typeof WindowBoundsSchema>;
+export type SavedWindow = z.infer<typeof SavedWindowSchema>;
 
 const defaultPath = (): string => process.env.GANDER_CONFIG ?? join(homedir(), ".config", "gander", "config.json");
 

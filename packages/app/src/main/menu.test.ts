@@ -10,7 +10,6 @@ describe("application menu", () => {
   const actions = () => ({
     openSettings: vi.fn(),
     newWindow: vi.fn(),
-    newTab: vi.fn(),
     setZoom: vi.fn(),
     currentZoom: vi.fn(() => 0),
   });
@@ -81,11 +80,11 @@ describe("application menu", () => {
     expect(template.some((item) => item.label === "Help")).toBe(false);
   });
 
-  it("offers New Tab and New Window on macOS, and New Window elsewhere", () => {
+  it("offers New Window on every platform and no window tabs", () => {
     const callbacks = actions();
     const file = (platform: NodeJS.Platform) => submenu(buildMenuTemplate(platform, "Gander", callbacks).find((item) => item.label === "File")!);
     const mac = file("darwin");
-    expect(mac.find((item) => item.label === "New Tab")?.accelerator).toBe("Command+T");
+    expect(mac.some((item) => item.label === "New Tab")).toBe(false);
     expect(mac.find((item) => item.label === "New Window")?.accelerator).toBe("CommandOrControl+Shift+N");
     const linux = file("linux");
     expect(linux.some((item) => item.label === "New Tab")).toBe(false);

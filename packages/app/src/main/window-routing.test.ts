@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeOpen, windowsToRestore, type RoutableWindow } from "./window-routing.js";
+import { boundsOnScreen, ensureNoOverlap, routeOpen, windowsToRestore, type RoutableWindow } from "./window-routing.js";
 
 const pr = (id: number, prNumber: number, repoId = "acme/atlas"): RoutableWindow => ({ id, review: { repoId, prNumber }, local: false });
 const empty = (id: number): RoutableWindow => ({ id, review: null, local: false });
@@ -26,8 +26,12 @@ describe("routeOpen", () => {
     expect(routeOpen([{ id: 1, review: null, local: true }], { repoId: "acme/atlas", prNumber: 11 }, 1)).toEqual({ kind: "new" });
   });
 
-  it("a repository alone selects it in the front window", () => {
-    expect(routeOpen([pr(1, 10), pr(2, 11)], { repoId: "acme/atlas", prNumber: null }, 2)).toEqual({ kind: "reuse", id: 2 });
+  it("a repository alone never replaces a review: it opens a window when every window holds one", () => {
+    expect(routeOpen([pr(1, 10), pr(2, 11)], { repoId: "acme/atlas", prNumber: null }, 2)).toEqual({ kind: "new" });
+  });
+
+  it("a repository alone still fills an empty window", () => {
+    expect(routeOpen([pr(1, 10), empty(2)], { repoId: "acme/atlas", prNumber: null }, 1)).toEqual({ kind: "reuse", id: 2 });
   });
 
   it("opens a window when there is none", () => {
@@ -46,5 +50,25 @@ describe("windowsToRestore", () => {
     const a = { repoId: "acme/atlas", prNumber: 1 };
     expect(windowsToRestore(undefined, a)).toEqual([a]);
     expect(windowsToRestore([], undefined)).toEqual([]);
+  });
+});
+
+describe("ensureNoOverlap", () => {
+  it("steps 30px down and right while a window shares the x or y", () => {
+    const open = [{ x: 100, y: 100, width: 800, height: 600 }, { x: 130, y: 500, width: 800, height: 600 }];
+    expect(ensureNoOverlap({ x: 100, y: 100 }, open)).toEqual({ x: 160, y: 160 });
+    expect(ensureNoOverlap({ x: 40, y: 40 }, open)).toEqual({ x: 40, y: 40 });
+  });
+});
+
+describe("boundsOnScreen", () => {
+  const display = { x: 0, y: 0, width: 1440, height: 900 };
+  it("keeps saved bounds on an attached display", () => {
+    const bounds = { x: 200, y: 100, width: 1000, height: 700 };
+    expect(boundsOnScreen(bounds, [display])).toEqual(bounds);
+  });
+  it("drops bounds left on a display that is gone", () => {
+    expect(boundsOnScreen({ x: 3000, y: 100, width: 1000, height: 700 }, [display])).toBeUndefined();
+    expect(boundsOnScreen(undefined, [display])).toBeUndefined();
   });
 });

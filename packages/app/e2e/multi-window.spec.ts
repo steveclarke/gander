@@ -16,21 +16,31 @@ test("an outside open never replaces the review in progress, and every review wi
 
   await expect(open(world, first)).resolves.toBe(`Opened ${first.repoId}#${first.number}`);
   await expect(app.page.locator(".context-toolbar").filter({ hasText: first.title })).toBeVisible();
-  await expect.poll(() => app.windowTitles()).toEqual([`#${first.number} ${first.title}`]);
+  const title = (repository: RepositoryFixture) => `#${repository.number} ${repository.title} — ${repository.repoId.split("/")[1]}`;
+  await expect.poll(() => app.windowTitles()).toEqual([title(first)]);
 
   // A second pull request opens in a window of its own; the first window keeps its review.
   await expect(open(world, second)).resolves.toBe(`Opened ${second.repoId}#${second.number}`);
   await expect.poll(async () => (await app.windowTitles()).length).toBe(2);
-  await expect.poll(async () => (await app.windowTitles())[1]).toContain(second.title);
+  await expect.poll(async () => (await app.windowTitles())[1]).toBe(title(second));
   await expect(app.page.locator(".context-toolbar").filter({ hasText: first.title })).toBeVisible();
+  // Plain separate windows, stepped apart so the new one never hides the first exactly.
+  const [a, b] = await app.windowBounds();
+  expect(b!.x).not.toBe(a!.x);
+  expect(b!.y).not.toBe(a!.y);
 
   // Asking again for a review that is already open opens nothing new.
   await expect(open(world, first)).resolves.toBe(`Opened ${first.repoId}#${first.number}`);
   expect(await app.windowTitles()).toHaveLength(2);
 
   await app.restart();
-  await expect.poll(async () => (await app.windowTitles()).map((title) => title.replace(/^● /, ""))).toEqual([
-    `#${first.number} ${first.title}`,
-    `#${second.number} ${second.title}`,
-  ]);
+  await expect.poll(() => app.windowTitles()).toEqual([title(first), title(second)]);
+
+  // With the review service down at launch, neither window is dropped from the session.
+  await world.stopService();
+  await app.restart();
+  await expect.poll(async () => (await app.windowTitles()).length).toBe(2);
+  await world.startService();
+  await app.restart();
+  await expect.poll(() => app.windowTitles()).toEqual([title(first), title(second)]);
 });
