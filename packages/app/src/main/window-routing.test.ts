@@ -51,6 +51,10 @@ describe("windowsToRestore", () => {
     expect(windowsToRestore(undefined, a)).toEqual([a]);
     expect(windowsToRestore([], undefined)).toEqual([]);
   });
+
+  it("an empty saved list is the session: the review the reviewer left does not come back", () => {
+    expect(windowsToRestore([], { repoId: "acme/atlas", prNumber: 1 })).toEqual([]);
+  });
 });
 
 describe("ensureNoOverlap", () => {

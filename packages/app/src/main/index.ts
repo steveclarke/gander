@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell } from "electron";
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell } from "electron";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
@@ -77,6 +77,27 @@ function findShowing(repoId: string, prNumber: number): WindowState | undefined 
   return [...windowStates.values()].find((state) => sameReview(shown(state), repoId, prNumber));
 }
 
+/**
+ * Hands a window a target to open. Also its initial target, which a renderer still
+ * mounting reads on start, so a target sent before the window loaded is not lost.
+ */
+function sendTarget(state: WindowState, target: OpenTarget): void {
+  const review = reviewOf(target);
+  if (review) {
+    state.pending = review;
+    state.title = reviewTitle(review.repoId, review.prNumber);
+    showTitle(state);
+  }
+  state.initial = target;
+  state.win.webContents.send("gander:openTarget", target);
+}
+
+/** Brings forward the window showing a review; one whose open never finished tries again. */
+function revealReview(state: WindowState): void {
+  revealWindow(state.win);
+  if (state.review === null && state.pending) sendTarget(state, state.pending);
+}
+
 function roundBounds(bounds: Electron.Rectangle): WindowBounds {
   return { x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.round(bounds.width), height: Math.round(bounds.height) };
 }
@@ -91,7 +112,7 @@ function saveWindows(cfg: GanderConfig): boolean {
     return [state.win.isDestroyed() ? review : { ...review, bounds: roundBounds(state.win.getNormalBounds()) }];
   });
   // Restoring several windows opens each one; only a list that changed is written.
-  if (JSON.stringify(windows) === JSON.stringify(cfg.windows ?? [])) return false;
+  if (cfg.windows !== undefined && JSON.stringify(windows) === JSON.stringify(cfg.windows)) return false;
   cfg.windows = windows;
   saveConfig(cfg);
   return true;
@@ -322,12 +343,12 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   ipcMain.handle("gander:focusOpenReview", async (event, repoId: string, n: number) => {
     const showing = findShowing(repoId, n);
     if (!showing || showing.win.webContents.id === event.sender.id) return false;
-    revealWindow(showing.win);
+    revealReview(showing);
     return true;
   });
   ipcMain.handle("gander:openInNewWindow", async (_event, repoId: string, n: number) => {
     const showing = findShowing(repoId, n);
-    if (showing) { revealWindow(showing.win); return; }
+    if (showing) { revealReview(showing); return; }
     await createWindow(cfg, { target: { repoId, prNumber: n } });
   });
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
@@ -597,15 +618,12 @@ function deliver(cfg: GanderConfig, target: OpenTarget): void {
   }
   const state = windowStates.get(route.id);
   if (!state) return;
-  revealWindow(state.win);
-  // Reusing an empty window, or focusing one whose review never finished opening (it
-  // failed, or the renderer had not mounted when it was sent): send it the target. It is
-  // also the window's initial target, which a renderer still mounting reads on start.
-  if (route.kind === "reuse" || state.review === null) {
-    state.pending = reviewOf(target) ?? state.pending;
-    state.initial = target;
-    state.win.webContents.send("gander:openTarget", target);
+  if (route.kind === "focus") {
+    revealReview(state);
+    return;
   }
+  revealWindow(state.win);
+  sendTarget(state, target);
 }
 
 // What this launch was asked to open. Parsed before anything starts, so a failure is a
@@ -644,11 +662,16 @@ app.whenReady().then(async () => {
     }
     if (launchTarget !== null) deliver(cfg, launchTarget);
   }
-  app.on("before-quit", () => {
+  const keepSession = (): void => {
+    if (quitting) return;
     quitting = true;
     // After the last window closed on macOS there is nothing open; the list it left stays.
     if (windowStates.size > 0) saveWindows(cfg);
-  });
+  };
+  app.on("before-quit", keepSession);
+  // Restarting to install an update on macOS closes every window before before-quit fires,
+  // so the session is kept here first, or the update would bring back only one window.
+  autoUpdater.on("before-quit-for-update", keepSession);
   // macOS keeps the app running with no windows, as VS Code does; the Dock icon then opens
   // one where the last one was, and the Dock menu offers New Window.
   app.on("activate", () => {

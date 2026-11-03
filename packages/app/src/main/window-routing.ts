@@ -45,9 +45,13 @@ export function routeOpen(windows: RoutableWindow[], target: OpenTarget, focused
   return { kind: "new" };
 }
 
-/** The windows to bring back at launch, in saved order; duplicates collapse to the first. */
+/**
+ * The windows to bring back at launch, in saved order; duplicates collapse to the first.
+ * A saved list is the session, even when empty; lastReview stands in only for a config
+ * written before windows were saved.
+ */
 export function windowsToRestore(saved: SavedWindow[] | undefined, lastReview: WindowReview | undefined): SavedWindow[] {
-  const list: SavedWindow[] = saved && saved.length > 0 ? saved : lastReview ? [lastReview] : [];
+  const list: SavedWindow[] = saved ?? (lastReview ? [lastReview] : []);
   const seen = new Set<string>();
   return list.filter((window) => {
     const key = `${window.repoId}#${window.prNumber}`;
