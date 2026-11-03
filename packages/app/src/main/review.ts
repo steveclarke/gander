@@ -146,7 +146,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
     if (!pr) throw new Error(`PR #${prNumber} not open on ${repoId}`);
 
     const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
-    await deps.git.fetchPr(clone, prNumber, pr.baseRef);
+    await deps.git.fetchPr(clone, prNumber, pr.baseRef, { headSha: pr.headSha, baseSha: pr.baseSha });
     await recordContext(repoId, prNumber, pr, all);
     const head = await deps.git.resolveRef(clone, `refs/gander/pr/${prNumber}`);
     return { pr, clone, head };
@@ -261,7 +261,7 @@ export function createReviewer(deps: ReviewerDeps): Reviewer {
         const clone = await deps.git.ensureClone(repoId, deps.repoUrl(repoId));
         // Pull request rows are a repository-level view. Fetch all reviewed heads in one
         // operation instead of opening each pull request (and fetching it) in series.
-        await deps.git.fetchPrs(clone, started.map(({ number, baseRef }) => ({ number, baseRef })));
+        await deps.git.fetchPrs(clone, started.map(({ number, baseRef, headSha, baseSha }) => ({ number, baseRef, headSha, baseSha })));
         await Promise.all(started.map(async (pr) => {
           const head = await deps.git.resolveRef(clone, `refs/gander/pr/${pr.number}`);
           const base = await deps.git.resolveRef(clone, `refs/gander/base/${pr.baseRef}`);

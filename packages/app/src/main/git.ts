@@ -51,11 +51,20 @@ export interface ShowFileResult {
 
 export interface DiffPath { path: string; status: FileStatus; basePath: string; }
 
+/** What GitHub reports for a pull request: its head commit and the base commit it targets. */
+export interface KnownShas { headSha: string; baseSha: string; }
+
+export type FetchTarget = { number: number; baseRef: string } & Partial<KnownShas>;
+
 export interface GitEngine {
   ensureClone(repoId: string, url: string): Promise<string>;
-  fetchPr(cloneDir: string, prNumber: number, baseRef: string): Promise<void>;
-  /** Fetch several pull request heads and their base branches in one network operation. */
-  fetchPrs(cloneDir: string, prs: Array<{ number: number; baseRef: string }>): Promise<void>;
+  fetchPr(cloneDir: string, prNumber: number, baseRef: string, known?: KnownShas): Promise<void>;
+  /**
+   * Fetch several pull request heads and their base branches in one network operation.
+   * A pull request whose GitHub SHAs are given and already present is left out, and when
+   * every one is present nothing touches the network.
+   */
+  fetchPrs(cloneDir: string, prs: FetchTarget[]): Promise<void>;
   mergeBase(cloneDir: string, a: string, b: string): Promise<string>;
   /** `basePath` is the path at `base`, which differs from `path` only for a rename. */
   diffFiles(cloneDir: string, base: string, head: string): Promise<DiffPath[]>;
@@ -288,12 +297,31 @@ export function createGitEngine(clonesRoot: string): GitEngine {
     return dir;
   }
 
-  function fetchPrs(cloneDir: string, prs: Array<{ number: number; baseRef: string }>): Promise<void> {
-    const bases = [...new Set(prs.map((pr) => pr.baseRef))];
+  // True when the clone already holds this pull request at the SHAs GitHub reports: the
+  // head ref points at the head commit and the base ref contains the base commit.
+  async function alreadyFetched(cloneDir: string, pr: FetchTarget): Promise<boolean> {
+    if (!pr.headSha || !pr.baseSha) return false;
+    try {
+      const head = (await git(cloneDir, ["rev-parse", "--verify", "--quiet", `refs/gander/pr/${pr.number}`])).trim();
+      if (head !== pr.headSha) return false;
+      await git(cloneDir, ["merge-base", "--is-ancestor", pr.baseSha, `refs/gander/base/${pr.baseRef}`]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function fetchPrs(cloneDir: string, prs: FetchTarget[]): Promise<void> {
     const run = async () => {
+      // Checked inside the queue, so a fetch that ran just before this one counts. Each
+      // fetch from GitHub costs several seconds; a refresh where nothing moved costs none.
+      const present = await Promise.all(prs.map((pr) => alreadyFetched(cloneDir, pr)));
+      const needed = prs.filter((_, i) => !present[i]);
+      if (needed.length === 0) return;
+      const bases = [...new Set(needed.map((pr) => pr.baseRef))];
       await git(cloneDir, [
         "fetch", "--force", "origin",
-        ...prs.map((pr) => `+refs/pull/${pr.number}/head:refs/gander/pr/${pr.number}`),
+        ...needed.map((pr) => `+refs/pull/${pr.number}/head:refs/gander/pr/${pr.number}`),
         ...bases.map((baseRef) => `+refs/heads/${baseRef}:refs/gander/base/${baseRef}`),
       ], FETCH_TIMEOUT_MS);
     };
@@ -318,8 +346,8 @@ export function createGitEngine(clonesRoot: string): GitEngine {
       return attempt;
     },
 
-    async fetchPr(cloneDir, prNumber, baseRef) {
-      await fetchPrs(cloneDir, [{ number: prNumber, baseRef }]);
+    async fetchPr(cloneDir, prNumber, baseRef, known) {
+      await fetchPrs(cloneDir, [{ number: prNumber, baseRef, ...known }]);
     },
 
     fetchPrs,
