@@ -9,6 +9,7 @@ function submenu(item: MenuItemConstructorOptions): MenuItemConstructorOptions[]
 describe("application menu", () => {
   const actions = () => ({
     openSettings: vi.fn(),
+    newWindow: vi.fn(),
     setZoom: vi.fn(),
     currentZoom: vi.fn(() => 0),
   });
@@ -77,5 +78,17 @@ describe("application menu", () => {
 
     expect(submenu(template[0]!).some((item) => item.label === "Check for Updates…")).toBe(false);
     expect(template.some((item) => item.label === "Help")).toBe(false);
+  });
+
+  it("offers New Window on every platform and no window tabs", () => {
+    const callbacks = actions();
+    const file = (platform: NodeJS.Platform) => submenu(buildMenuTemplate(platform, "Gander", callbacks).find((item) => item.label === "File")!);
+    const mac = file("darwin");
+    expect(mac.some((item) => item.label === "New Tab")).toBe(false);
+    expect(mac.find((item) => item.label === "New Window")?.accelerator).toBe("CommandOrControl+Shift+N");
+    const linux = file("linux");
+    expect(linux.some((item) => item.label === "New Tab")).toBe(false);
+    (linux.find((item) => item.label === "New Window")!.click as () => void)();
+    expect(callbacks.newWindow).toHaveBeenCalledOnce();
   });
 });

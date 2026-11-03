@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { primaryModifierHeld } from "../keymap.js";
 import { computed } from "vue";
 import type { PrListItem } from "@gander/shared";
 import { Layers3 } from "@lucide/vue";
@@ -6,7 +7,7 @@ import StackPosition from "./StackPosition.vue";
 import ReviewProgress from "./ReviewProgress.vue";
 
 const props = defineProps<{ prs: PrListItem[]; selectedPrNumber?: number | null }>();
-const emit = defineEmits<{ select: [prNumber: number] }>();
+const emit = defineEmits<{ select: [prNumber: number, inNewWindow: boolean] }>();
 
 type ReviewGroup =
   | { kind: "standalone"; pr: PrListItem }
@@ -37,8 +38,9 @@ const groups = computed<ReviewGroup[]>(() => {
   return result;
 });
 
-function select(prNumber: number): void {
-  emit("select", prNumber);
+// ⌘-click or ⌘↵ (Ctrl elsewhere) opens the pull request in a tab of its own.
+function select(prNumber: number, event?: MouseEvent | KeyboardEvent): void {
+  emit("select", prNumber, event !== undefined && primaryModifierHeld(event));
 }
 </script>
 
@@ -63,8 +65,8 @@ function select(prNumber: number): void {
           role="option"
           :aria-selected="pr.number === selectedPrNumber"
           tabindex="0"
-          @click="select(pr.number)"
-          @keydown.enter.space.prevent="select(pr.number)"
+          @click="select(pr.number, $event)"
+          @keydown.enter.space.prevent="select(pr.number, $event)"
         >
           <StackPosition
             v-if="pr.stack"
@@ -84,8 +86,8 @@ function select(prNumber: number): void {
         role="option"
         :aria-selected="group.pr.number === selectedPrNumber"
         tabindex="0"
-        @click="select(group.pr.number)"
-        @keydown.enter.space.prevent="select(group.pr.number)"
+        @click="select(group.pr.number, $event)"
+        @keydown.enter.space.prevent="select(group.pr.number, $event)"
       >
         <span class="dot" :class="group.pr.draft ? 'draft' : 'open'" />
         <span class="num">#{{ group.pr.number }}</span>

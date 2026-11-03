@@ -1,4 +1,4 @@
-import { createServer, type Server, type Socket } from "node:net";
+import { connect, createServer, type Server, type Socket } from "node:net";
 import { unlinkSync } from "node:fs";
 import type { OpenTarget } from "@gander/shared";
 import { parseOpenTarget } from "./cli.js";
@@ -70,7 +70,21 @@ function handle(socket: Socket, onTarget: OpenServerOptions["onTarget"]): void {
 }
 
 /** Starts listening, and returns a function that stops and cleans up. */
-export function startOpenServer(opts: OpenServerOptions): Promise<() => void> {
+/** True when a running app answers on the socket, as opposed to a file a crash left behind. */
+function socketIsLive(socketPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = connect(socketPath);
+    probe.once("connect", () => { probe.destroy(); resolve(true); });
+    probe.once("error", () => resolve(false));
+  });
+}
+
+export async function startOpenServer(opts: OpenServerOptions): Promise<() => void> {
+  // A second copy of the app must not take the channel from the first: removing a live
+  // socket sends every later `bin/gander` to whichever copy started last.
+  if (await socketIsLive(opts.socketPath)) {
+    throw new Error(`another Gander is already listening on ${opts.socketPath}`);
+  }
   return new Promise((resolve, reject) => {
     // A crash leaves the socket file behind; without this every launch after one would
     // fail to listen with EADDRINUSE.

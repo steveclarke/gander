@@ -42,6 +42,8 @@ function fakeApi(overrides: Partial<GanderApi> = {}): GanderApi {
     refreshPr: async () => prView(),
     lastReview: async () => null,
     initialTarget: async () => null,
+    focusOpenReview: async () => false,
+    openInNewWindow: async () => {},
     onServersChanged: () => () => {},
     getServers: async () => ({ servers: [{ id: "one", name: "One", url: "http://service", token: "t" }], repos: [], githubToken: "", fromEnvironment: false }),
     removeServer: async () => {}, setRepoServer: async () => {}, changeRepoServer: async () => false,

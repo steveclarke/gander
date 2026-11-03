@@ -6,7 +6,8 @@ to this file, so Claude Code, Codex, and Gemini CLI all read the same text.
 ## What Gander is
 
 A desktop app for reviewing code in the agentic era: agents write the code, the
-human reviews it. One window over every repo and pull request, a Monaco diff,
+human reviews it. Every repo and pull request from one app, one review per window
+(separate windows, as VS Code opens them), a Monaco diff,
 hierarchical file checkoff, and a note pipeline that carries the reviewer's
 remarks to coding agents over MCP.
 

@@ -47,6 +47,21 @@ export class GanderApplication {
     ));
   }
 
+  /** Every window's title, in creation order: one review per window. */
+  async windowTitles(): Promise<string[]> {
+    if (!this.electronApp) throw new Error("Gander has not been launched");
+    return this.electronApp.evaluate(({ BrowserWindow }) => (
+      BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id).map((window) => window.getTitle())
+    ));
+  }
+
+  async windowBounds(): Promise<Array<{ x: number; y: number; width: number; height: number }>> {
+    if (!this.electronApp) throw new Error("Gander has not been launched");
+    return this.electronApp.evaluate(({ BrowserWindow }) => (
+      BrowserWindow.getAllWindows().sort((a, b) => a.id - b.id).map((window) => window.getBounds())
+    ));
+  }
+
   async restart(): Promise<void> {
     await this.shutdown(false);
     await this.launch();

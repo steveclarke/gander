@@ -40,6 +40,10 @@ export interface GanderApi {
   lastReview(): Promise<{ repoId: string; prNumber: number } | null>;
   /** What this launch was asked to open, from the command line. Null for an ordinary launch. */
   initialTarget(): Promise<OpenTarget | null>;
+  /** Brings forward another window already showing this pull request; false when there is none. */
+  focusOpenReview(repoId: string, prNumber: number): Promise<boolean>;
+  /** Opens this pull request in a window of its own (a tab beside this one on macOS). */
+  openInNewWindow(repoId: string, prNumber: number): Promise<void>;
   /** Fires when an already-running app is handed a target by a later `gander` command. */
   onOpenTarget(listener: (target: OpenTarget) => void): () => void;
   /** Where the review service is, and whether the environment is deciding that. */

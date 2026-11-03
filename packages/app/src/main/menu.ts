@@ -3,6 +3,7 @@ import { DEFAULT_ZOOM_LEVEL, ZOOM_LEVEL_STEP } from "../zoom.js";
 
 interface MenuActions {
   openSettings(): void;
+  newWindow(): void;
   setZoom(level: number): void;
   currentZoom(): number;
   checkForUpdates?: () => void;
@@ -19,6 +20,12 @@ export function buildMenuTemplate(
     accelerator: platform === "darwin" ? "Command+," : "Control+,",
     click: actions.openSettings,
   };
+
+  const newWindowItem: MenuItemConstructorOptions = {
+    label: "New Window", accelerator: "CommandOrControl+Shift+N", click: actions.newWindow,
+  };
+  // One review per window, as VS Code's File → New Window (windowActions.ts, newWindow).
+  const newItems: MenuItemConstructorOptions[] = [newWindowItem];
 
   const applicationMenu: MenuItemConstructorOptions = platform === "darwin"
     ? {
@@ -43,6 +50,8 @@ export function buildMenuTemplate(
     : {
         label: "File",
         submenu: [
+          ...newItems,
+          { type: "separator" },
           { label: "Preferences", submenu: [settingsItem] },
           { type: "separator" },
           { role: "quit" },
@@ -55,6 +64,7 @@ export function buildMenuTemplate(
 
   return [
     applicationMenu,
+    ...(platform === "darwin" ? [{ label: "File", submenu: [...newItems, { type: "separator" }, { role: "close" }] } satisfies MenuItemConstructorOptions] : []),
     { role: "editMenu" },
     {
       label: "View",

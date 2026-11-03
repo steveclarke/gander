@@ -23,7 +23,7 @@ const props = defineProps<{
   typography: EffectiveTreeTypography;
   jumpTargets?: ReadonlyMap<string, JumpTarget>;
 }>();
-defineEmits<{ selectPr: [prNumber: number]; scroll: [] }>();
+defineEmits<{ selectPr: [prNumber: number, inNewWindow: boolean]; scroll: [] }>();
 
 const reloading = ref(false);
 const remainingCount = computed(() => props.store.view?.files.filter((file) => !file.checked).length ?? 0);
@@ -64,7 +64,7 @@ async function reload(): Promise<void> {
         v-if="store.prs.length"
         :prs="store.prs"
         :selected-pr-number="store.selectedPrNumber"
-        @select="$emit('selectPr', $event)"
+        @select="(prNumber, inNewWindow) => $emit('selectPr', prNumber, inNewWindow)"
       />
       <p v-else-if="store.prsError" class="empty failed" role="status">
         Could not list pull requests. {{ store.prsError }}

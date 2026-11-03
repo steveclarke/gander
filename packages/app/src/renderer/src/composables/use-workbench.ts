@@ -28,7 +28,7 @@ export interface Workbench {
   selectRepo(repoId: string): Promise<void>;
   selectWorktree(path: string): Promise<void>;
   selectMode(mode: WorkbenchMode): Promise<void>;
-  openPr(prNumber: number): Promise<void>;
+  openPr(prNumber: number, inNewWindow?: boolean): Promise<void>;
 }
 
 /**
@@ -156,7 +156,18 @@ export function useWorkbench(store: Store, api: GanderApi): Workbench {
     if (!store.error) store.showLocalSurface(mode);
   }
 
-  async function openPr(prNumber: number): Promise<void> {
+  async function openPr(prNumber: number, inNewWindow = false): Promise<void> {
+    const repoId = store.targetRepoId;
+    if (repoId !== null) {
+      if (inNewWindow) {
+        await api.openInNewWindow(repoId, prNumber);
+        return;
+      }
+      // One review per window: a pull request already open elsewhere is brought forward
+      // rather than opened a second time here.
+      const showingHere = store.currentRepoId === repoId && store.view?.pr.number === prNumber;
+      if (!showingHere && await api.focusOpenReview(repoId, prNumber)) return;
+    }
     activeMode.value = "pulls";
     await store.openPr(prNumber);
   }

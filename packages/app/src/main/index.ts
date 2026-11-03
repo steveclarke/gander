@@ -1,9 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from "electron";
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell } from "electron";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { type LocalView, type OpenTarget, type RepoEntry, type PrView, type UpdateNote } from "@gander/shared";
-import { connectionIsFromEnvironment, loadConfig, saveConfig, type GanderConfig } from "./config.js";
+import { connectionIsFromEnvironment, loadConfig, saveConfig, type GanderConfig, type SavedWindow, type WindowBounds } from "./config.js";
 import { parseOpenTarget } from "./cli.js";
 import { createGitEngine, type GitEngine } from "./git.js";
 import { checkGithubToken, getGithubAccount, githubApiUrl, isPullRequestOpen, isRetryableGithubError, listOpenPrs, resolveGithubToken, setFileViewed } from "./github.js";
@@ -23,6 +23,7 @@ import { createZoomController, type ZoomController } from "./zoom-controller.js"
 import { watchLocalView, type LocalViewWatcher } from "./local-viewer.js";
 import { loadUpdateController, supportsInPlaceUpdates, type UpdateController } from "./updates.js";
 import { assertRepositoryRegistered, registerFromCheckout, repositoryFromLocalPath } from "./repository-registration.js";
+import { boundsOnScreen, ensureNoOverlap, reviewOf, routeOpen, sameReview, windowsToRestore, type WindowReview } from "./window-routing.js";
 
 // In a packaged build the name comes from productName, but in dev Electron falls back to
 // the package name and the macOS app menu reads "@gander/app". Set it before ready so the
@@ -37,6 +38,85 @@ const debugPort = process.env.GANDER_DEBUG_PORT;
 if (debugPort && !app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", debugPort);
 
 let zoomController: ZoomController;
+
+// One review per window. Keyed by the window's webContents id, which is what every IPC
+// handler already has as event.sender.id.
+interface WindowState {
+  win: BrowserWindow;
+  /** What the window opens with: a target named on the command line, routed here, or restored. */
+  initial: OpenTarget | null;
+  review: WindowReview | null;
+  /**
+   * On its way in, or failed to open: counts for routing and is saved, so a restart with
+   * the service down brings the window back to try again rather than dropping it.
+   */
+  pending: WindowReview | null;
+  title: string;
+}
+const windowStates = new Map<number, WindowState>();
+/** The window the reviewer was last in, the way VS Code tracks its last active window. */
+let lastActive: WindowState | null = null;
+let quitting = false;
+/** Where the last window sat when it closed, for the window a Dock click opens. */
+let lastClosedBounds: WindowBounds | undefined;
+
+function showTitle(state: WindowState): void {
+  if (!state.win.isDestroyed()) state.win.setTitle(state.title);
+}
+
+/** "#12 Fix the parser — atlas": the review first, then its repository, as VS Code names a window. */
+function reviewTitle(repoId: string, prNumber: number, prTitle?: string): string {
+  const repoName = repoId.split("/").pop() ?? repoId;
+  return `#${prNumber}${prTitle ? ` ${prTitle}` : ""} — ${repoName}`;
+}
+
+/** What a window is showing or about to show, for routing. */
+const shown = (state: WindowState): WindowReview | null => state.review ?? state.pending;
+
+function findShowing(repoId: string, prNumber: number): WindowState | undefined {
+  return [...windowStates.values()].find((state) => sameReview(shown(state), repoId, prNumber));
+}
+
+/**
+ * Hands a window a target to open. Also its initial target, which a renderer still
+ * mounting reads on start, so a target sent before the window loaded is not lost.
+ */
+function sendTarget(state: WindowState, target: OpenTarget): void {
+  const review = reviewOf(target);
+  if (review) {
+    state.pending = review;
+    state.title = reviewTitle(review.repoId, review.prNumber);
+    showTitle(state);
+  }
+  state.initial = target;
+  state.win.webContents.send("gander:openTarget", target);
+}
+
+/** Brings forward the window showing a review; one whose open never finished tries again. */
+function revealReview(state: WindowState): void {
+  revealWindow(state.win);
+  if (state.review === null && state.pending) sendTarget(state, state.pending);
+}
+
+function roundBounds(bounds: Electron.Rectangle): WindowBounds {
+  return { x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.round(bounds.width), height: Math.round(bounds.height) };
+}
+
+/** Saved in opening order with the last active window last, as VS Code saves its session. */
+function saveWindows(cfg: GanderConfig): boolean {
+  const states = [...windowStates.values()];
+  const ordered = lastActive && states.includes(lastActive) ? [...states.filter((state) => state !== lastActive), lastActive] : states;
+  const windows: SavedWindow[] = ordered.flatMap((state) => {
+    const review = shown(state);
+    if (!review) return [];
+    return [state.win.isDestroyed() ? review : { ...review, bounds: roundBounds(state.win.getNormalBounds()) }];
+  });
+  // Restoring several windows opens each one; only a list that changed is written.
+  if (cfg.windows !== undefined && JSON.stringify(windows) === JSON.stringify(cfg.windows)) return false;
+  cfg.windows = windows;
+  saveConfig(cfg);
+  return true;
+}
 const localWatchers = new Map<number, LocalViewWatcher>();
 const localViews = new Map<number, LocalView>();
 const localOpenGenerations = new Map<number, number>();
@@ -198,6 +278,14 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
     closeLocalView(senderId);
     localWatchers.set(senderId, watcher);
     localViews.set(senderId, view);
+    const state = windowStates.get(senderId);
+    if (state) {
+      state.review = null;
+      state.pending = null;
+      state.title = view.worktree.branch ? `${view.worktree.branch} — local` : "Gander";
+      showTitle(state);
+      saveWindows(cfg);
+    }
     event.sender.once("destroyed", () => closeLocalView(senderId));
     return view;
   });
@@ -225,6 +313,18 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   ipcMain.handle("gander:closeLocal", async (event) => {
     nextLocalOpenGeneration(event.sender.id);
     closeLocalView(event.sender.id);
+    // The renderer calls this when the reviewer switches repository: whatever review the
+    // window showed is gone, so routing may use the window and restore must not bring it back.
+    // A pull request on its way in stays claimed.
+    const state = windowStates.get(event.sender.id);
+    if (state?.review) {
+      state.review = null;
+      if (!state.pending) {
+        state.title = "Gander";
+        showTitle(state);
+      }
+      saveWindows(cfg);
+    }
   });
   ipcMain.handle("gander:listPrs", async (_e, repoId: string) => (await withReviewSession(routing, repoId, (reviewer) => reviewer.listPrsWithProgress(repoId))).result);
   ipcMain.handle("gander:serviceStatus", async (_e, repoId?: string) => {
@@ -239,19 +339,41 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   ipcMain.handle("gander:retryGithubViewedSync", async () => githubViewedQueue.retryFailed());
   ipcMain.handle("gander:dismissGithubViewedSync", async () => githubViewedQueue.dismissFailed());
   ipcMain.handle("gander:lastReview", async () => cfg.lastReview ?? null);
-  ipcMain.handle("gander:initialTarget", async () => launchTarget);
+  ipcMain.handle("gander:initialTarget", async (event) => windowStates.get(event.sender.id)?.initial ?? null);
+  ipcMain.handle("gander:focusOpenReview", async (event, repoId: string, n: number) => {
+    const showing = findShowing(repoId, n);
+    if (!showing || showing.win.webContents.id === event.sender.id) return false;
+    revealReview(showing);
+    return true;
+  });
+  ipcMain.handle("gander:openInNewWindow", async (_event, repoId: string, n: number) => {
+    const showing = findShowing(repoId, n);
+    if (showing) { revealReview(showing); return; }
+    await createWindow(cfg, { target: { repoId, prNumber: n } });
+  });
   ipcMain.handle("gander:openPr", async (event, repoId: string, n: number) => {
     const senderId = event.sender.id;
     const generation = nextLocalOpenGeneration(senderId);
-    const view = await viewOnServer(repoId, (reviewer) => reviewer.openPr(repoId, n));
+    // A failed open throws past here and leaves the window's pending review in place: the
+    // window still shows that pull request's error, an open of it focuses the window to try
+    // again, and a restart with the service down does not lose it.
+    const view: PrView = await viewOnServer(repoId, (reviewer) => reviewer.openPr(repoId, n));
     if (localOpenGenerations.get(senderId) !== generation) return view;
     // Preserve the live local view when opening the PR fails. The renderer keeps showing
     // that context, so its watcher and validated file-reading state must remain usable too.
     closeLocalView(senderId);
+    const state = windowStates.get(senderId);
+    if (state) {
+      state.review = { repoId, prNumber: n };
+      state.pending = null;
+      state.title = reviewTitle(repoId, n, view.pr.title);
+      showTitle(state);
+    }
     // Recorded only once the open succeeded, so a pull request that fails to open
     // is not the one the app tries again on every launch.
+    const lastReviewChanged = !sameReview(cfg.lastReview ?? null, repoId, n);
     cfg.lastReview = { repoId, prNumber: n };
-    saveConfig(cfg);
+    if (!saveWindows(cfg) && lastReviewChanged) saveConfig(cfg);
     return view;
   });
   ipcMain.handle("gander:refreshPr", async (_e, repoId: string, n: number, sessionId?: string) => viewOnServer(repoId, (reviewer) => reviewer.refreshPr(repoId, n), sessionId));
@@ -301,13 +423,14 @@ async function bootstrap(): Promise<{ cfg: GanderConfig; git: GitEngine; githubV
   return { cfg, git, githubViewedQueue, repositoryServers };
 }
 
-function installMenu(updates: UpdateController | null): void {
+function installMenu(cfg: GanderConfig, updates: UpdateController | null): void {
   const openSettings = (): void => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     win?.webContents.send("gander:openSettings");
   };
   const template = buildMenuTemplate(process.platform, app.name, {
     openSettings,
+    newWindow: () => newWindow(cfg),
     setZoom: zoomController.set,
     currentZoom: zoomController.current,
     checkForUpdates: updates?.checkManually,
@@ -352,7 +475,40 @@ async function initializeUpdates(): Promise<UpdateController | null> {
   }
 }
 
-async function createWindow(cfg: GanderConfig): Promise<void> {
+interface WindowOptions {
+  target?: OpenTarget | null;
+  /** Where the window sat last time, when it is being restored. */
+  bounds?: WindowBounds;
+  /** Take focus once shown. Restored windows other than the last active one do not. */
+  focus?: boolean;
+}
+
+const DEFAULT_WIDTH = 1360;
+const DEFAULT_HEIGHT = 860;
+
+/**
+ * Where a new window goes, as VS Code places one (windowsStateHandler.ts): saved bounds
+ * when they are still on a display; otherwise centred on the display under the cursor on
+ * macOS, or the last active window's display elsewhere, stepped 30px down and right while
+ * another window sits at the same x or y.
+ */
+function placeWindow(saved: WindowBounds | undefined): WindowBounds {
+  const displays = screen.getAllDisplays();
+  const restored = boundsOnScreen(saved, displays.map((display) => display.workArea));
+  if (restored) return restored;
+  const reference = lastActive && !lastActive.win.isDestroyed() ? lastActive.win.getBounds() : null;
+  const display = process.platform === "darwin" || !reference
+    ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    : screen.getDisplayMatching(reference);
+  const area = display.workArea;
+  const width = Math.min(DEFAULT_WIDTH, area.width);
+  const height = Math.min(DEFAULT_HEIGHT, area.height);
+  const centred = { x: Math.round(area.x + (area.width - width) / 2), y: Math.round(area.y + (area.height - height) / 2) };
+  const open = [...windowStates.values()].filter((state) => !state.win.isDestroyed()).map((state) => state.win.getBounds());
+  return { ...ensureNoOverlap(centred, open), width, height };
+}
+
+async function createWindow(cfg: GanderConfig, options: WindowOptions = {}): Promise<BrowserWindow> {
   // electron-vite sets this only while its live renderer server is running. Packaged,
   // unsigned, and E2E builds load the built renderer and retain the release identity.
   const isDevelopment = process.env.ELECTRON_RENDERER_URL !== undefined;
@@ -367,8 +523,10 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
   // Lives outside the bundle so it survives electron-vite's build untouched. The path is
   // relative to out/main/, which is where this file runs from in dev and after a build alike.
   const appIcon = nativeImage.createFromPath(join(import.meta.dirname, "../../resources", appearance.iconFilename));
+  // A plain window of its own, as VS Code opens one: no macOS window tabs (VS Code sets a
+  // tabbingIdentifier only when window.nativeTabs is on, and it is off by default).
   const win = new BrowserWindow({
-    width: 1360, height: 860,
+    ...placeWindow(options.bounds),
     ...appearance.windowOptions,
     ...(hidden ? { show: false, skipTaskbar: true } : {}),
     // Ignored on macOS, where the dock icon comes from the bundle — app.dock.setIcon covers that.
@@ -383,9 +541,36 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
       additionalArguments: appearance.preloadArguments,
     },
   });
+  const id = win.webContents.id;
+  const target = options.target ?? null;
+  const state: WindowState = {
+    win,
+    initial: target,
+    // Claimed before the renderer has opened it, so an open routed meanwhile does not
+    // count this window as empty and land on top of it.
+    review: null,
+    pending: reviewOf(target),
+    title: target?.prNumber ? reviewTitle(target.repoId, target.prNumber) : "Gander",
+  };
+  windowStates.set(id, state);
+  showTitle(state);
+  // The renderer's <title> would otherwise overwrite the pull request the window is named for.
+  win.on("page-title-updated", (event) => event.preventDefault());
+  win.on("focus", () => { lastActive = state; });
+  win.on("close", () => { lastClosedBounds = roundBounds(win.getNormalBounds()); });
+  win.on("closed", () => {
+    windowStates.delete(id);
+    if (lastActive === state) lastActive = null;
+    closeLocalView(id);
+    // Closing the last window keeps the list as it was, so the next launch brings it back.
+    if (!quitting && windowStates.size > 0) saveWindows(cfg);
+  });
   // On macOS the web content paints beneath the traffic lights. Reveal only the themed
   // first frame so the system never exposes its default light backing surface.
-  if (process.platform === "darwin" && !hidden) win.once("ready-to-show", () => win.show());
+  if (process.platform === "darwin" && !hidden) win.once("ready-to-show", () => {
+    if (options.focus === false) win.showInactive();
+    else revealWindow(win);
+  });
   if (hidden) app.dock?.hide();
   // Unpackaged runs show Electron's own icon in the dock; this is the only way to override it.
   if (!hidden && !appIcon.isEmpty()) app.dock?.setIcon(appIcon);
@@ -407,6 +592,12 @@ async function createWindow(cfg: GanderConfig): Promise<void> {
 
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
   else win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
+  return win;
+}
+
+/** File → New Window (⇧⌘N), and the Dock menu's New Window: an empty review window. */
+function newWindow(cfg: GanderConfig): void {
+  void createWindow(cfg);
 }
 
 function socketPath(): string {
@@ -416,11 +607,23 @@ function socketPath(): string {
   return process.env.GANDER_APP_SOCKET ?? join(app.getPath("userData"), "app.sock");
 }
 
-function deliver(target: OpenTarget): void {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win === undefined) return;
-  revealWindow(win);
-  win.webContents.send("gander:openTarget", target);
+function deliver(cfg: GanderConfig, target: OpenTarget): void {
+  const focused = BrowserWindow.getFocusedWindow();
+  const windows = [...windowStates.entries()].map(([id, state]) => ({ id, review: shown(state), local: localViews.has(id) }));
+  const route = routeOpen(windows, target, focused?.webContents.id ?? null);
+  // A new window comes to the front and takes focus, as VS Code's does for `code <path>`.
+  if (route.kind === "new") {
+    void createWindow(cfg, { target });
+    return;
+  }
+  const state = windowStates.get(route.id);
+  if (!state) return;
+  if (route.kind === "focus") {
+    revealReview(state);
+    return;
+  }
+  revealWindow(state.win);
+  sendTarget(state, target);
 }
 
 // What this launch was asked to open. Parsed before anything starts, so a failure is a
@@ -446,9 +649,37 @@ app.whenReady().then(async () => {
     app.exit(1);
     return;
   }
-  await createWindow(cfg);
+  // Every review window comes back where it was, the last active one in front, the way VS
+  // Code restores a session (window.restoreWindows: all). A target named on the command line
+  // is then routed like any other open, so an agent's launch never costs the open reviews.
+  const restore = windowsToRestore(cfg.windows, cfg.lastReview).filter((review) => cfg.repos.some((repo) => repo.repoId === review.repoId));
+  if (restore.length === 0) {
+    await createWindow(cfg, { target: launchTarget });
+  } else {
+    for (const [index, saved] of restore.entries()) {
+      const front = index === restore.length - 1 && launchTarget === null;
+      await createWindow(cfg, { target: { repoId: saved.repoId, prNumber: saved.prNumber }, bounds: saved.bounds, focus: front });
+    }
+    if (launchTarget !== null) deliver(cfg, launchTarget);
+  }
+  const keepSession = (): void => {
+    if (quitting) return;
+    quitting = true;
+    // After the last window closed on macOS there is nothing open; the list it left stays.
+    if (windowStates.size > 0) saveWindows(cfg);
+  };
+  app.on("before-quit", keepSession);
+  // Restarting to install an update on macOS closes every window before before-quit fires,
+  // so the session is kept here first, or the update would bring back only one window.
+  autoUpdater.on("before-quit-for-update", keepSession);
+  // macOS keeps the app running with no windows, as VS Code does; the Dock icon then opens
+  // one where the last one was, and the Dock menu offers New Window.
+  app.on("activate", () => {
+    if (windowStates.size === 0) void createWindow(cfg, { bounds: lastClosedBounds });
+  });
+  app.dock?.setMenu(Menu.buildFromTemplate([{ label: "New Window", click: () => newWindow(cfg) }]));
   const updates = await initializeUpdates();
-  installMenu(updates);
+  installMenu(cfg, updates);
   updates?.checkAtStartup();
   app.on("will-quit", () => githubViewedQueue.stop());
 
@@ -463,7 +694,7 @@ app.whenReady().then(async () => {
           Object.assign(entry, await repositoryServers.assign(entry.repoId, entry.url));
         });
         if (added !== null) saveConfig(cfg);
-        deliver(target);
+        deliver(cfg, target);
       },
     });
     app.on("will-quit", stop);
@@ -472,4 +703,6 @@ app.whenReady().then(async () => {
     console.error(`Could not listen for open requests: ${(err as Error).message}`);
   }
 });
-app.on("window-all-closed", () => app.quit());
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
